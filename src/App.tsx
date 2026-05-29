@@ -469,8 +469,8 @@ function Overview({ customer }) {
   }).length;
 
   const stats = [
-    { label: "Sent Today", value: mL ? "--" : todayOut, color: CYAN, icon: "📨" },
-    { label: "Contacts", value: cL ? "--" : (contacts?.length || 0), color: INDIGO, icon: "👥" },
+    { label: "Sent Today", value: mL ? "—" : todayOut, color: CYAN, icon: "📨" },
+    { label: "Contacts", value: cL ? "—" : (contacts?.length || 0), color: INDIGO, icon: "👥" },
     { label: "Active Keywords", value: (automations || []).filter(a => a.is_active && a.trigger_type === "keyword").length, color: "#A78BFA", icon: "🤖" },
     { label: "Scheduled", value: (broadcasts || []).filter(b => b.status === "pending").length, color: SUCCESS, icon: "📅" },
   ];
@@ -652,7 +652,7 @@ function MessageLog() {
               <div style={{ fontSize: 12, color: TEXT1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from_number || m.to_number}</div>
               <div style={{ fontSize: 12, color: TEXT2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.message_body}</div>
               <div className={`badge ${m.direction === "inbound" ? "badge-blue" : "badge-green"}`}>{m.direction === "inbound" ? "In" : "Out"}</div>
-              <div className="table-hide-mobile" style={{ fontSize: 11, color: TEXT2 }}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--"}</div>
+              <div className="table-hide-mobile" style={{ fontSize: 11, color: TEXT2 }}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</div>
             </div>
           ))
         }
@@ -754,7 +754,7 @@ function Settings({ user, customer }) {
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────
 export default function App() {
-  const [authView, setAuthView] = useState("login");
+  const [authView, setAuthView] = useState(window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [active, setActive] = useState("overview");
