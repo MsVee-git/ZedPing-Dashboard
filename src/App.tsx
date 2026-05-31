@@ -439,7 +439,7 @@ function Topbar({ title, user, customer }) {
 }
 
 // ── MOBILE TOPBAR ──────────────────────────────────────────────────────────
-function MobileTopbar({ title, onMenuOpen }) {
+function MobileTopbar({ title, onMenuOpen, onLogout }) {
   return (
     <div className="mobile-topbar">
       <button onClick={onMenuOpen} style={{ background: "none", border: "none", cursor: "pointer", color: TEXT1, padding: 4 }}>
@@ -451,7 +451,9 @@ function MobileTopbar({ title, onMenuOpen }) {
         </div>
         <span style={{ fontWeight: 800, fontSize: 15, color: TEXT1 }}>Zed<span style={{ color: CYAN }}>Ping</span></span>
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: TEXT2 }}>{title}</div>
+      <button onClick={onLogout} style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: "#FCA5A5", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+        Sign Out
+      </button>
     </div>
   );
 }
@@ -759,6 +761,11 @@ function Settings({ user, customer }) {
 // ── APP ROOT ───────────────────────────────────────────────────────────────
 export default function App() {
   const [authView, setAuthView] = useState(window.location.search.includes("signup") ? "signup" : "login");
+  const [isResetMode, setIsResetMode] = useState(() => {
+    // Detect password recovery from URL hash
+    const hash = window.location.hash;
+    return hash.includes("type=recovery") || hash.includes("type=signup");
+  });
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [active, setActive] = useState("overview");
@@ -775,6 +782,11 @@ export default function App() {
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsResetMode(true);
+        setUser(null);
+        return;
+      }
       if (session?.user) {
         setUser(session.user);
         const { data: cust } = await supabase.from("customers").select("*").eq("auth_user_id", session.user.id).single();
@@ -808,6 +820,13 @@ export default function App() {
     </div>
   );
 
+  if (isResetMode) return (
+    <>
+      <style>{css}</style>
+      <ResetPassword onDone={() => { setIsResetMode(false); }} />
+    </>
+  );
+
   if (!user) return (
     <>
       <style>{css}</style>
@@ -824,7 +843,7 @@ export default function App() {
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={handleLogout} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         <div className="main-content">
-          <MobileTopbar title={current.title} onMenuOpen={() => setSidebarOpen(true)} />
+          <MobileTopbar title={current.title} onMenuOpen={() => setSidebarOpen(true)} onLogout={handleLogout} />
           <Topbar title={current.title} user={user} customer={customer} />
           <div style={{ flex: 1, overflowY: "auto" }}>
             {current.component}
