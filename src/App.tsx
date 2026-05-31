@@ -396,7 +396,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
               <div style={{ fontSize: 13, fontWeight: 700, color: TEXT1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{customer?.business_name || "My Business"}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: SUCCESS, display: "inline-block" }} />
-                <span style={{ fontSize: 10, color: TEXT2, textTransform: "capitalize" }}>{customer?.subscription_plan || "Starter"} Plan</span>
+                <span style={{ fontSize: 10, color: TEXT2, textTransform: "capitalize" }}>{(customer?.subscription_plan || "starter").charAt(0).toUpperCase() + (customer?.subscription_plan || "starter").slice(1)} Plan</span>
               </div>
             </div>
           </div>
@@ -481,18 +481,18 @@ function Overview({ customer }) {
     <div className="page-content" style={{ padding: 24 }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 20, fontWeight: 800, color: TEXT1, letterSpacing: -0.5, marginBottom: 4 }}>
-          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {customer?.business_name || "there"} 👋
+          Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, {customer?.business_name || user?.email?.split("@")[0] || "there"} 👋
         </h1>
         <p style={{ color: TEXT2, fontSize: 13 }}>Here's what's happening with your WhatsApp automation.</p>
       </div>
 
-      <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 18 }}>📱</span>
+      <div style={{ background: "rgba(91,91,214,0.08)", border: "1px solid rgba(91,91,214,0.25)", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 22 }}>📱</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ color: TEXT1, fontSize: 13, fontWeight: 600 }}>WhatsApp Connected</span>
-          <span style={{ color: TEXT2, fontSize: 13 }}> · Receiving messages</span>
+          <div style={{ color: TEXT1, fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Activate your WhatsApp number</div>
+          <div style={{ color: TEXT2, fontSize: 13 }}>You're exploring ZedPing for free. Pay to connect your WhatsApp number and go live.</div>
         </div>
-        <div className="badge badge-green">● Live</div>
+        <button className="btn btn-primary" style={{ width: "auto", padding: "9px 16px", fontSize: 13, flexShrink: 0 }}>Pay to Activate →</button>
       </div>
 
       <div className="stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 24 }}>
@@ -728,7 +728,7 @@ function Settings({ user, customer }) {
       <div style={{ background: "rgba(91,91,214,0.06)", border: "1px solid rgba(91,91,214,0.2)", borderRadius: 14, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: TEXT1, marginBottom: 3, textTransform: "capitalize" }}>{customer?.subscription_plan || "Starter"} Plan</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: TEXT1, marginBottom: 3, textTransform: "capitalize" }}>{(customer?.subscription_plan || "starter").charAt(0).toUpperCase() + (customer?.subscription_plan || "starter").slice(1)} Plan</div>
             <div style={{ fontSize: 12, color: TEXT2 }}>
               {customer?.subscription_status === "trial" ? `Trial ends ${customer?.trial_ends_at ? new Date(customer.trial_ends_at).toLocaleDateString() : "soon"}` : "Active subscription"}
             </div>
