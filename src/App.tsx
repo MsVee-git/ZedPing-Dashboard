@@ -458,10 +458,10 @@ function MobileTopbar({ title, onMenuOpen }) {
 
 // ── OVERVIEW ───────────────────────────────────────────────────────────────
 function Overview({ customer }) {
-  const { data: messages, loading: mL } = useAPI("/messages");
-  const { data: contacts, loading: cL } = useAPI("/contacts");
-  const { data: automations } = useAPI("/automations");
-  const { data: broadcasts } = useAPI("/broadcasts/scheduled");
+  const { data: messages, loading: mL } = useAPI(`/messages${customer?.id ? "?customer_id=" + customer.id : ""}`);
+  const { data: contacts, loading: cL } = useAPI(`/contacts${customer?.id ? "?customer_id=" + customer.id : ""}`);
+  const { data: automations } = useAPI(`/automations${customer?.id ? "?customer_id=" + customer.id : ""}`);
+  const { data: broadcasts } = useAPI(`/broadcasts/scheduled${customer?.id ? "?customer_id=" + customer.id : ""}`);
 
   const todayOut = (messages || []).filter(m => {
     const d = new Date(m.created_at);
@@ -527,8 +527,9 @@ function Overview({ customer }) {
 }
 
 // ── BROADCASTS ─────────────────────────────────────────────────────────────
-function Broadcasts() {
-  const { data, loading, refetch } = useAPI("/broadcasts/scheduled");
+function Broadcasts({ customer = {} }) {
+  const cid = customer?.id ? "?customer_id=" + customer.id : "";
+  const { data, loading, refetch } = useAPI(`/broadcasts/scheduled${cid}`);
   const [form, setForm] = useState({ message: "", phone: "" });
   const [sending, setSending] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -584,8 +585,9 @@ function Broadcasts() {
 }
 
 // ── CONTACTS ───────────────────────────────────────────────────────────────
-function Contacts() {
-  const { data, loading, refetch } = useAPI("/contacts");
+function Contacts({ customer = {} }) {
+  const cid = customer?.id ? "?customer_id=" + customer.id : "";
+  const { data, loading, refetch } = useAPI(`/contacts${cid}`);
   const [search, setSearch] = useState("");
   const filtered = (data || []).filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()) || (c.phone_number || "").includes(search));
 
@@ -625,8 +627,9 @@ function Contacts() {
 }
 
 // ── MESSAGE LOG ────────────────────────────────────────────────────────────
-function MessageLog() {
-  const { data, loading, refetch } = useAPI("/messages");
+function MessageLog({ customer = {} }) {
+  const cid = customer?.id ? "?customer_id=" + customer.id : "";
+  const { data, loading, refetch } = useAPI(`/messages${cid}`);
   const [search, setSearch] = useState("");
   const filtered = (data || []).filter(m => (m.message_body || "").toLowerCase().includes(search.toLowerCase()) || (m.from_number || m.to_number || "").includes(search));
 
@@ -662,8 +665,9 @@ function MessageLog() {
 }
 
 // ── AUTOMATIONS ────────────────────────────────────────────────────────────
-function Automations() {
-  const { data, loading, refetch } = useAPI("/automations");
+function Automations({ customer = {} }) {
+  const cid = customer?.id ? "?customer_id=" + customer.id : "";
+  const { data, loading, refetch } = useAPI(`/automations${cid}`);
   const [form, setForm] = useState({ keyword: "", reply: "" });
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -787,11 +791,11 @@ export default function App() {
   const handleLogout = async () => { await supabase.auth.signOut(); setUser(null); setCustomer(null); setActive("overview"); };
 
   const pages = {
-    overview:    { title: "Overview",        component: <Overview customer={customer} /> },
-    broadcasts:  { title: "Broadcasts",      component: <Broadcasts /> },
-    contacts:    { title: "Contacts",        component: <Contacts /> },
-    messages:    { title: "Message Log",     component: <MessageLog /> },
-    automations: { title: "Automations",     component: <Automations /> },
+    overview:    { title: "Overview",        component: <Overview customer={customer} user={user} /> },
+    broadcasts:  { title: "Broadcasts",      component: <Broadcasts customer={customer} /> },
+    contacts:    { title: "Contacts",        component: <Contacts customer={customer} /> },
+    messages:    { title: "Message Log",     component: <MessageLog customer={customer} /> },
+    automations: { title: "Automations",     component: <Automations customer={customer} /> },
     settings:    { title: "Account",         component: <Settings user={user} customer={customer} /> },
   };
 
