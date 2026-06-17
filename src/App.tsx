@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
 const API = "https://zedping-backend-production.up.railway.app";
-const ZEDPING_WA = "260XXXXXXXXX"; // ← Replace with real number
+const ZEDPING_WA = "260978748066";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const css = `
