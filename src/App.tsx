@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -631,11 +631,12 @@ function Contacts({ customer }) {
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
-  const fileRef = React.useRef();
+  const fileRef = useRef();
   const filtered = (data||[]).filter(c=>(c.name||"").toLowerCase().includes(search.toLowerCase())||(c.phone_number||"").includes(search));
 
   const handleFile = async (e) => {
     const file = e.target.files[0];
+    const input = e.target;
     if (!file) return;
     setUploading(true);
     setUploadMsg("");
@@ -681,7 +682,7 @@ function Contacts({ customer }) {
       setUploadMsg("❌ Error: " + e.message);
     } finally {
       setUploading(false);
-      e.target.value = "";
+      input.value = "";
     }
   };
 
