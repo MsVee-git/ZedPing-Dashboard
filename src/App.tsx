@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
 const API = "https://zedping-backend-production.up.railway.app";
+const ZEDPING_WA = "260XXXXXXXXX"; // ← Replace with real number
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const css = `
@@ -536,7 +537,7 @@ function Overview({ customer, user }) {
           <div style={{ color: "var(--mist)", fontSize: 13 }}>You're exploring ZedPing free. Pay to connect your WhatsApp number and go live.</div>
         </div>
         <a
-          href={`https://wa.me/260XXXXXXXXX?text=${encodeURIComponent(`Hi ZedPing! I'd like to activate my account. Business: ${customer?.business_name || ""} | Plan: ${(customer?.subscription_plan || "starter").charAt(0).toUpperCase() + (customer?.subscription_plan || "starter").slice(1)} | Email: ${user?.email || ""}`)}`}
+          href={"https://wa.me/" + ZEDPING_WA + "?text=" + encodeURIComponent("Hi ZedPing! I'd like to activate my account. Business: " + (customer?.business_name||"") + " | Plan: " + (customer?.subscription_plan||"Starter") + " | Email: " + (user?.email||""))}
           target="_blank"
           rel="noopener noreferrer"
           className="btn btn-gold"
@@ -853,7 +854,7 @@ function Settings({ user, customer }) {
             <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600, letterSpacing: -0.3 }}>{(customer?.subscription_plan||"Starter").charAt(0).toUpperCase()+(customer?.subscription_plan||"starter").slice(1)}</div>
             <div style={{ fontSize: 12, color: "var(--mist)", marginTop: 3 }}>{customer?.subscription_status==="trial"?"Free trial":"Active subscription"}</div>
           </div>
-          <button className="btn btn-gold" style={{ padding: "9px 18px", fontSize: 10 }}>Upgrade →</button>
+          <a href={"https://wa.me/" + ZEDPING_WA + "?text=" + encodeURIComponent("Hi ZedPing! I'd like to upgrade my plan. Business: " + (customer?.business_name||"") + " | Current Plan: " + (customer?.subscription_plan||"Starter") + " | Email: " + (user?.email||""))} target="_blank" rel="noopener noreferrer" className="btn btn-gold" style={{ padding: "9px 18px", fontSize: 10, textDecoration: "none" }}>Upgrade →</a>
         </div>
       </div>
       <div className="card" style={{ padding: 24 }}>
