@@ -310,7 +310,7 @@ function Login({ onSwitch, onAuth }) {
 
   const sendReset = async () => {
     if (!f.email) { setErr("Please enter your email first."); return; }
-    await supabase.auth.resetPasswordForEmail(f.email, { redirectTo: window.location.origin });
+    await supabase.auth.resetPasswordForEmail(f.email, { redirectTo: 'https://app.zedping.app' });
     setReset(true);
   };
 
@@ -535,7 +535,13 @@ function Overview({ customer, user }) {
           <div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 500, marginBottom: 2 }}>Activate your WhatsApp number</div>
           <div style={{ color: "var(--mist)", fontSize: 13 }}>You're exploring ZedPing free. Pay to connect your WhatsApp number and go live.</div>
         </div>
-        <button className="btn btn-gold" style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10 }}>Pay to Activate →</button>
+        <a
+          href={`https://wa.me/260XXXXXXXXX?text=${encodeURIComponent(`Hi ZedPing! I'd like to activate my account. Business: ${customer?.business_name || ""} | Plan: ${(customer?.subscription_plan || "starter").charAt(0).toUpperCase() + (customer?.subscription_plan || "starter").slice(1)} | Email: ${user?.email || ""}`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-gold"
+          style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10, textDecoration: "none" }}
+        >Pay to Activate →</a>
       </div>
 
       {/* Stats */}
@@ -621,15 +627,96 @@ function Broadcasts({ customer }) {
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 function Contacts({ customer }) {
   const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data, loading } = useAPI(`/contacts${cid}`);
+  const { data, loading, refetch } = useAPI(`/contacts${cid}`);
   const [search, setSearch] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState("");
+  const fileRef = React.useRef();
   const filtered = (data||[]).filter(c=>(c.name||"").toLowerCase().includes(search.toLowerCase())||(c.phone_number||"").includes(search));
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadMsg("");
+    try {
+      const text = await file.text();
+      const lines = text.trim().split("\n");
+      const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g,""));
+      const nameIdx = headers.findIndex(h => h.includes("name"));
+      const phoneIdx = headers.findIndex(h => h.includes("phone") || h.includes("number") || h.includes("mobile"));
+      const tagIdx = headers.findIndex(h => h.includes("tag") || h.includes("group") || h.includes("type"));
+
+      if (nameIdx === -1 || phoneIdx === -1) {
+        setUploadMsg("❌ CSV must have 'Name' and 'Phone' columns.");
+        setUploading(false);
+        return;
+      }
+
+      const contacts = lines.slice(1).filter(l => l.trim()).map(line => {
+        const cols = line.split(",").map(c => c.trim().replace(/"/g,""));
+        return {
+          name: cols[nameIdx] || "",
+          phone_number: cols[phoneIdx] || "",
+          tag: tagIdx > -1 ? cols[tagIdx] : "Contact",
+          customer_id: customer?.id
+        };
+      }).filter(c => c.name && c.phone_number);
+
+      if (contacts.length === 0) {
+        setUploadMsg("❌ No valid contacts found in file.");
+        setUploading(false);
+        return;
+      }
+
+      const r = await fetch(`${API}/contacts/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contacts })
+      });
+      const d = await r.json();
+      setUploadMsg(`✓ ${contacts.length} contacts uploaded successfully.`);
+      refetch();
+    } catch(e) {
+      setUploadMsg("❌ Error: " + e.message);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const downloadTemplate = () => {
+    const csv = "Name,Phone Number,Tag\nMrs Mwanza,+260971234567,VIP\nJohn Banda,+260962345678,Regular";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "zedping-contacts-template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="pad" style={{ padding: 28 }}>
       <PageHead label="Database" title="Contacts." sub={loading ? "Loading..." : `${data?.length||0} contacts`}
-        action={<button className="btn btn-wire"><Ic n="upload" s={12} c="var(--mist)" />Import CSV</button>}
+        action={
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn-wire" onClick={downloadTemplate}>
+              <Ic n="upload" s={12} c="var(--mist)" />Download Template
+            </button>
+            <button className="btn btn-gold" onClick={() => fileRef.current.click()} disabled={uploading}>
+              <Ic n="upload" s={12} c="var(--ink)" />{uploading ? "Uploading..." : "Import CSV"}
+            </button>
+            <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleFile} />
+          </div>
+        }
       />
+      {uploadMsg && (
+        <div className="mono" style={{ fontSize: 11, color: uploadMsg.startsWith("✓") ? "#86EFAC" : "#FCA5A5", marginBottom: 16, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--wire)" }}>
+          {uploadMsg}
+        </div>
+      )}
+      <div style={{ marginBottom: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--wire)" }}>
+        <span className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>CSV format: Name, Phone Number, Tag (optional) · Download the template above for the correct format</span>
+      </div>
       <div style={{ position: "relative", marginBottom: 16 }}>
         <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Ic n="search" s={13} c="var(--mist)" /></div>
         <input className="input" placeholder="Search contacts..." style={{ paddingLeft: 36 }} value={search} onChange={e=>setSearch(e.target.value)} />
@@ -791,9 +878,27 @@ export default function App() {
   const [active, setActive] = useState("overview");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [reset, setReset] = useState(() => window.location.hash.includes("type=recovery"));
+  const [reset, setReset] = useState(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    return hash.includes("type=recovery") || search.includes("type=recovery") || (hash.includes("access_token") && hash.includes("recovery"));
+  });
 
   useEffect(() => {
+    // Handle PKCE password recovery flow - exchange code for session
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const type = params.get("type");
+    if (code || type === "recovery") {
+      supabase.auth.exchangeCodeForSession(window.location.href).then(({ data, error }) => {
+        if (data?.session && type === "recovery") {
+          setReset(true);
+          setUser(null);
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }).catch(() => {});
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
@@ -803,7 +908,13 @@ export default function App() {
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event==="PASSWORD_RECOVERY") { setReset(true); setUser(null); return; }
+      if (event==="PASSWORD_RECOVERY") { 
+        setReset(true); 
+        setUser(null);
+        // Clear the URL hash so it looks clean
+        window.history.replaceState(null, "", window.location.pathname);
+        return; 
+      }
       if (session?.user) {
         setUser(session.user);
         const { data: c } = await supabase.from("customers").select("*").eq("auth_user_id", session.user.id).single();
