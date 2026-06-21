@@ -437,8 +437,8 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
         {/* Usage */}
         <div style={{ padding: "12px 20px", borderTop: "1px solid var(--wire)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1, textTransform: "uppercase" }}>Messages</span>
-            <span className="mono" style={{ fontSize: 8, color: "var(--gold2)" }}>3,000/mo</span>
+            <span className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1, textTransform: "uppercase" }}>Broadcast limit</span>
+            <span className="mono" style={{ fontSize: 8, color: "var(--gold2)" }}>800 contacts</span>
           </div>
           <div className="progress"><div className="progress-fill" style={{ width: "28%" }} /></div>
         </div>
