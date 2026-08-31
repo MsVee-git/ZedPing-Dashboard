@@ -1,0 +1,14 @@
+{
+  "short_name": "ZedPing",
+  "name": "ZedPing — WhatsApp Automation for Zambian SMEs",
+  "icons": [
+    { "src": "favicon-16.png", "type": "image/png", "sizes": "16x16" },
+    { "src": "favicon-32.png", "type": "image/png", "sizes": "32x32" },
+    { "src": "logo192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "logo512.png", "type": "image/png", "sizes": "512x512" }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1A3A2A",
+  "background_color": "#F8F5F0"
+}
