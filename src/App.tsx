@@ -7,6 +7,13 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const API = "https://zedping-backend-production.up.railway.app";
 const ZEDPING_WA = "260778621167";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+const nativeRequest = window.fetch.bind(window);
+const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = new Headers(init.headers || {});
+  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
+  return nativeRequest(input, { ...init, headers });
+};
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
@@ -184,7 +191,7 @@ function useAPI(endpoint, deps = []) {
   const run = async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${API}${endpoint}`);
+      const r = await apiFetch(`${API}${endpoint}`);
       setData(await r.json());
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -563,7 +570,7 @@ function Broadcasts({ customer }) {
     if (!form.message||!form.phone) return;
     setSending(true);
     try {
-      const r = await fetch(`${API}/broadcasts/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contacts:[{name:"Contact",phone_number:form.phone}],message:form.message})});
+      const r = await apiFetch(`${API}/broadcasts/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contacts:[{name:"Contact",phone_number:form.phone}],message:form.message})});
       const d = await r.json();
       alert(`Sent: ${d.sent} · Failed: ${d.failed}`);
       setForm({message:"",phone:""});
@@ -704,7 +711,7 @@ function Contacts({ customer }) {
         return { name: cols[nameIdx] || "", phone_number: cols[phoneIdx] || "", tag: tagIdx > -1 ? cols[tagIdx] : "Contact", customer_id: customer?.id };
       }).filter(c => c.name && c.phone_number);
       if (contacts.length === 0) { setUploadMsg("❌ No valid contacts found in file."); setUploading(false); return; }
-      const r = await fetch(`${API}/contacts/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) });
+      const r = await apiFetch(`${API}/contacts/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) });
       await r.json();
       setUploadMsg(`✓ ${contacts.length} contacts uploaded successfully.`);
       refetch();
@@ -967,7 +974,7 @@ function Automations({ customer }) {
     if (!form.keyword||!form.reply) return;
     setSaving(true);
     try {
-      await fetch(`${API}/automations`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trigger_type:"keyword",trigger_value:form.keyword.toUpperCase().trim(),message_template:form.reply})});
+      await apiFetch(`${API}/automations`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trigger_type:"keyword",trigger_value:form.keyword.toUpperCase().trim(),message_template:form.reply})});
       setForm({keyword:"",reply:""});
       refetch();
     } catch(e) { alert("Error: "+e.message); }
@@ -975,7 +982,7 @@ function Automations({ customer }) {
   };
 
   const toggle = async (id,cur) => {
-    await fetch(`${API}/automations/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:!cur})});
+    await apiFetch(`${API}/automations/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:!cur})});
     refetch();
   };
 
