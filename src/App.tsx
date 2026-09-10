@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { WhatsAppConnection } from "./WhatsAppConnection";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
@@ -1290,8 +1291,10 @@ function Settings({ user, customer, onWorkspaceUpdated }) {
             </div>
           ))}
         </div>
-        {!onboarding.whatsapp_connected && <div style={{ marginTop: 14, fontSize: 12, color: "var(--mist)" }}>WhatsApp connection setup is the next onboarding step and will be available here soon.</div>}
+        
       </div>
+
+      <WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={workspace} onWorkspaceUpdated={onWorkspaceUpdated} />
 
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 6 }}>
