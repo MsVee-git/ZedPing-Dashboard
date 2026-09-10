@@ -15,18 +15,26 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   return nativeRequest(input, { ...init, headers });
 };
 async function provisionWorkspace(user, details: any = {}) {
-  const { data: existing, error: lookupError } = await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle();
-  if (lookupError) throw lookupError;
-  if (existing) return existing;
-  const metadata = user.user_metadata || {};
-  const business_name = details.business_name || metadata.business_name;
-  if (!business_name) throw new Error("Your account is missing a business name. Please contact support.");
-  const { data: customer, error: customerError } = await supabase.from("customers").insert({
-    auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
-    subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
-  }).select().single();
-  if (customerError) throw customerError;
-  const { error: memberError } = await supabase.from("workspace_members").insert({ customer_id: customer.id, user_id: user.id, role: "owner" });
+  const findExisting = async () => {
+    const { data, error } = await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle();
+    if (error) throw error;
+    return data;
+  };
+  let customer = await findExisting();
+  if (!customer) {
+    const metadata = user.user_metadata || {};
+    const business_name = details.business_name || metadata.business_name;
+    if (!business_name) throw new Error("Your account is missing a business name. Please contact support.");
+    const { data, error } = await supabase.from("customers").insert({
+      auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
+      subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
+    }).select().single();
+    if (error && error.code !== "23505") throw error;
+    customer = data || await findExisting();
+    if (!customer) throw new Error("We could not create your workspace. Please try again.");
+  }
+  const { error: memberError } = await supabase.from("workspace_members")
+    .upsert({ customer_id: customer.id, user_id: user.id, role: "owner" }, { onConflict: "customer_id,user_id", ignoreDuplicates: true });
   if (memberError) throw memberError;
   return customer;
 }
@@ -1079,6 +1087,7 @@ export default function App() {
   const [active, setActive] = useState("overview");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState("");
   const [reset, setReset] = useState(() => {
     const hash = window.location.hash || "";
     const search = window.location.search || "";
@@ -1099,12 +1108,26 @@ export default function App() {
       }).catch(() => {});
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        const c = await provisionWorkspace(session.user);
+    const loadSessionUser = async (sessionUser) => {
+      try {
+        const c = await provisionWorkspace(sessionUser);
+        setUser(sessionUser);
         setCustomer(c);
+        setAuthError("");
+      } catch (error) {
+        console.error("Workspace provisioning failed", error);
+        setUser(null);
+        setCustomer(null);
+        setAuthError(error?.message || "We could not finish setting up your workspace. Please sign in again or contact support.");
       }
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) await loadSessionUser(session.user);
+      setLoading(false);
+    }).catch((error) => {
+      console.error("Session lookup failed", error);
+      setAuthError("We could not restore your session. Please sign in again.");
       setLoading(false);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -1115,9 +1138,7 @@ export default function App() {
         return;
       }
       if (session?.user) {
-        setUser(session.user);
-        const c = await provisionWorkspace(session.user);
-        setCustomer(c);
+        await loadSessionUser(session.user);
       } else { setUser(null); setCustomer(null); }
     });
     return () => subscription.unsubscribe();
@@ -1147,6 +1168,7 @@ export default function App() {
   if (!user) return (
     <>
       <style>{css}</style>
+      {authError && <div className="mono" role="alert" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, maxWidth: 520, padding: "10px 14px", background: "var(--panel)", border: "1px solid rgba(239,68,68,0.35)", color: "#FCA5A5", fontSize: 10, letterSpacing: 0.5, textAlign: "center" }}>{authError}</div>}
       {view==="signup" ? <SignUp onSwitch={()=>setView("login")} onAuth={onAuth} /> : <Login onSwitch={()=>setView("signup")} onAuth={onAuth} />}
     </>
   );
