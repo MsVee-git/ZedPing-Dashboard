@@ -22,37 +22,49 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
 
   const response = await nativeRequest(input, { ...init, headers });
   if (!response.ok) {
+    if (response.status === 403) window.dispatchEvent(new Event("zedping:workspace-forbidden"));
     const body = await response.json().catch(() => null);
     throw new Error(body?.error || `Request failed (${response.status})`);
   }
   return response;
 };
 async function provisionWorkspace(user, details: any = {}) {
-  const findExisting = async () => {
-    const { data, error } = await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle();
-    if (error) throw error;
-    return data;
-  };
-  let customer = await findExisting();
-  if (!customer) {
-    const metadata = user.user_metadata || {};
-    const business_name = details.business_name || metadata.business_name;
+  const { data: existing, error: existingError } = await supabase
+    .from("customers")
+    .select("*")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return existing;
 
-    // Invited members have no owner workspace and must never receive one
-    // automatically. A signup carries a business name in its Auth metadata.
-    if (!business_name) return null;
+  // Check membership before interpreting signup metadata. An invited member
+  // must never receive a separate owner workspace just because metadata exists.
+  const { data: existingMemberships, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("customer_id")
+    .eq("user_id", user.id);
+  if (membershipError) throw membershipError;
+  if (existingMemberships?.length) return null;
 
-    const { data, error } = await supabase.from("customers").insert({
-      auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
-      subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
-    }).select().single();
-    if (error && error.code !== "23505") throw error;
-    customer = data || await findExisting();
-    if (!customer) throw new Error("We could not create your workspace. Please try again.");
-  }
-  const { error: memberError } = await supabase.from("workspace_members")
+  const metadata = user.user_metadata || {};
+  const business_name = details.business_name || metadata.business_name;
+  if (!business_name) return null;
+
+  const { data, error } = await supabase.from("customers").insert({
+    auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
+    subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
+  }).select().single();
+  if (error && error.code !== "23505") throw error;
+
+  const customer = data || await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle().then(({ data: fallback, error: fallbackError }) => {
+    if (fallbackError) throw fallbackError;
+    return fallback;
+  });
+  if (!customer) throw new Error("We could not create your workspace. Please try again.");
+
+  const { error: ownerError } = await supabase.from("workspace_members")
     .upsert({ customer_id: customer.id, user_id: user.id, role: "owner" }, { onConflict: "customer_id,user_id", ignoreDuplicates: true });
-  if (memberError) throw memberError;
+  if (ownerError) throw ownerError;
   return customer;
 }
 
@@ -84,6 +96,29 @@ async function getAuthorizedWorkspaces(user) {
     workspaces: (customers || []).map(customer => ({ ...customer, role: roles.get(customer.id) })),
     ownedWorkspace
   };
+}
+
+async function verifyWorkspaceSelection(workspaces, preferredId) {
+  const preferred = workspaces.find((workspace) => workspace.id === preferredId);
+  const candidates = preferred ? [preferred, ...workspaces.filter((workspace) => workspace.id !== preferred.id)] : workspaces;
+  let lastError;
+
+  for (const candidate of candidates) {
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, candidate.id);
+    try {
+      const response = await apiFetch(`${API}/workspace`);
+      const context = await response.json();
+      return {
+        workspace: { ...candidate, ...context.workspace, role: context.role },
+        context
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  throw lastError || new Error("No authorized workspace is available for this account.");
 }
 
 const css = `
@@ -593,7 +628,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
 }
 
 // ── TOPBAR ────────────────────────────────────────────────────────────────────
-function Topbar({ title, user, customer, workspaces, onWorkspaceChange }) {
+function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWorkspaceId, switching }) {
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
   return (
     <div className="desk-bar" style={{ height: 56, alignItems: "center", justifyContent: "space-between", padding: "0 32px", borderBottom: "1px solid var(--wire)", background: "rgba(9,9,9,0.9)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 10 }}>
@@ -602,11 +637,11 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange }) {
         <span className="mono" style={{ fontSize: 10, color: "var(--cream2)", letterSpacing: 2, textTransform: "uppercase" }}>{title}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        {workspaces.length > 1 && <select aria-label="Active workspace" value={customer?.id || ""} onChange={event => onWorkspaceChange(event.target.value)} className="input" style={{ width: 190, padding: "7px 10px", fontSize: 12 }}>
+        {workspaces.length > 1 && <select aria-label="Active workspace" value={activeWorkspaceId || ""} onChange={event => onWorkspaceChange(event.target.value)} disabled={switching} className="input" style={{ width: 190, padding: "7px 10px", fontSize: 12, opacity: switching ? 0.6 : 1 }}>
           {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
         </select>}
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--cream)" }}>{customer?.business_name || "My Business"}</div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--cream)" }}>{switching ? "Switching workspace…" : (customer?.business_name || "My Business")}</div>
           <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{user?.email}</div>
         </div>
         <div style={{ width: 32, height: 32, background: "var(--green)", border: "1px solid var(--wire2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -617,11 +652,13 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange }) {
   );
 }
 
-function MobTopbar({ onMenu, onLogout }) {
+function MobTopbar({ onMenu, onLogout, workspaces, activeWorkspaceId, onWorkspaceChange, switching }) {
   return (
     <div className="mob-bar">
       <button onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--cream)", padding: 4 }}><Ic n="menu" s={20} c="var(--cream)" /></button>
-      <Logo size="sm" />
+      {workspaces.length > 1 ? <select aria-label="Active workspace" value={activeWorkspaceId || ""} onChange={event => onWorkspaceChange(event.target.value)} disabled={switching} className="input" style={{ width: "42%", padding: "6px 8px", fontSize: 11, opacity: switching ? 0.6 : 1 }}>
+        {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
+      </select> : <Logo size="sm" />}
       <button onClick={onLogout} className="btn btn-danger" style={{ fontSize: 9, padding: "6px 12px" }}>Exit</button>
     </div>
   );
@@ -1316,6 +1353,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceChanging, setWorkspaceChanging] = useState(false);
+  const [workspaceSwitchTarget, setWorkspaceSwitchTarget] = useState(null);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [active, setActive] = useState("overview");
   const [open, setOpen] = useState(false);
@@ -1347,17 +1386,23 @@ export default function App() {
         || authorizedWorkspaces.find(workspace => workspace.id === ownedWorkspace?.id)
         || authorizedWorkspaces[0];
 
-      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, selected.id);
       setWorkspaces(authorizedWorkspaces);
-      setCustomer(selected);
+      setWorkspaceChanging(true);
+      const verified = await verifyWorkspaceSelection(authorizedWorkspaces, selected.id);
+      setWorkspaces((current) => current.map((item) => item.id === verified.workspace.id ? verified.workspace : item));
+      setCustomer(verified.workspace);
       setNeedsVerification(false);
       setActive("overview");
+      setWorkspaceSwitchTarget(null);
+      setWorkspaceChanging(false);
     } catch (error) {
       console.error("Workspace loading failed", error);
       setUser(null);
       setCustomer(null);
       setWorkspaces([]);
       setNeedsVerification(false);
+      setWorkspaceSwitchTarget(null);
+      setWorkspaceChanging(false);
       setAuthError(error?.message || "We could not load your workspace. Please sign in again or contact support.");
     }
   }, []);
@@ -1410,15 +1455,43 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, [loadAuthenticatedContext]);
 
-  const onWorkspaceChange = (workspaceId) => {
+  const onWorkspaceChange = async (workspaceId) => {
+    if (workspaceChanging || workspaceId === customer?.id) return;
     const nextWorkspace = workspaces.find(workspace => workspace.id === workspaceId);
     if (!nextWorkspace) {
       setAuthError("That workspace is not available to this account.");
       return;
     }
-    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspace.id);
-    setCustomer(nextWorkspace);
+
+    setAuthError("");
+    setWorkspaceChanging(true);
+    setWorkspaceSwitchTarget(nextWorkspace.id);
+    setCustomer(null);
     setActive("overview");
+    setOpen(false);
+
+    try {
+      const verified = await verifyWorkspaceSelection(workspaces, nextWorkspace.id);
+      setWorkspaces((current) => current.map((item) => item.id === verified.workspace.id ? verified.workspace : item));
+      setCustomer(verified.workspace);
+    } catch (switchError) {
+      try {
+        const { workspaces: refreshed } = await getAuthorizedWorkspaces(user);
+        if (!refreshed.length) throw switchError;
+        const verified = await verifyWorkspaceSelection(refreshed, refreshed[0].id);
+        setWorkspaces(refreshed.map((item) => item.id === verified.workspace.id ? verified.workspace : item));
+        setCustomer(verified.workspace);
+        setAuthError("Your previous workspace access changed, so we selected an available workspace.");
+      } catch (refreshError) {
+        window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+        setWorkspaces([]);
+        setCustomer(null);
+        setAuthError("Your workspace access could not be verified. Please sign in again or contact support.");
+      }
+    } finally {
+      setWorkspaceSwitchTarget(null);
+      setWorkspaceChanging(false);
+    }
   };
 
   const onWorkspaceUpdated = (workspace) => {
@@ -1430,7 +1503,7 @@ export default function App() {
   const onLogout = async () => {
     await supabase.auth.signOut();
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
-    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setActive("overview");
+    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); setActive("overview");
   };
 
   const pages = {
@@ -1469,9 +1542,9 @@ export default function App() {
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
         <div className="main">
-          <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} />
-          <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} />
-          <div key={customer?.id} style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>
+          <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
+          <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
+          {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>}
         </div>
       </div>
     </>
