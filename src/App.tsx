@@ -1162,30 +1162,148 @@ function Automations({ customer }) {
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-function Settings({ user, customer }) {
+function Settings({ user, customer, onWorkspaceUpdated }) {
+  const { data, loading, error, refetch } = useAPI("/workspace", [customer?.id]);
+  const workspace = data?.workspace || customer || {};
+  const role = data?.role || customer?.role || "member";
+  const canEdit = ["owner", "admin"].includes(role);
+  const onboarding = data?.onboarding || {
+    account_complete: Boolean(user),
+    email_verified: Boolean(user?.email_confirmed_at),
+    business_profile_complete: Boolean(workspace.profile_completed_at),
+    whatsapp_connected: Boolean(workspace.whatsapp_connected_at),
+    onboarding_complete: workspace.onboarding_status === "complete",
+    status: workspace.onboarding_status || "profile_incomplete"
+  };
+  const [form, setForm] = useState({
+    business_name: "", contact_person: "", phone: "", country: "", industry: "", email: ""
+  });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setForm({
+      business_name: workspace.business_name || "",
+      contact_person: workspace.contact_person || "",
+      phone: workspace.phone || "",
+      country: workspace.country || "",
+      industry: workspace.industry || "",
+      email: workspace.email || user?.email || ""
+    });
+  }, [workspace.id, workspace.business_name, workspace.contact_person, workspace.phone, workspace.country, workspace.industry, workspace.email, user?.email]);
+
+  const updateField = (field, value) => {
+    setSaved(false);
+    setSaveError("");
+    setForm(current => ({ ...current, [field]: value }));
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    if (!canEdit) return;
+    setSaving(true);
+    setSaved(false);
+    setSaveError("");
+    try {
+      const response = await apiFetch(`${API}/workspace/profile`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const result = await response.json();
+      onWorkspaceUpdated?.(result.workspace);
+      await refetch();
+      setSaved(true);
+    } catch (saveFailure) {
+      setSaveError(saveFailure?.message || "We could not save the business profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const stages = [
+    ["Account created", onboarding.account_complete],
+    ["Email verified", onboarding.email_verified],
+    ["Business profile complete", onboarding.business_profile_complete],
+    [onboarding.whatsapp_connected ? "WhatsApp connected" : "WhatsApp not connected", onboarding.whatsapp_connected],
+    ["Onboarding complete", onboarding.onboarding_complete]
+  ];
+
+  const fields = [
+    ["business_name", "Business Name", "text", "Your registered business or trading name"],
+    ["contact_person", "Contact Person", "text", "Who should ZedPing contact?"],
+    ["phone", "Business Phone", "tel", "Business/support phone — separate from your WhatsApp API number"],
+    ["country", "Country", "text", "e.g. Zambia"],
+    ["industry", "Industry", "text", "e.g. Retail, Services, Hospitality"],
+    ["email", "Business/Support Email", "email", "The email customers can use to contact your business"]
+  ];
+
   return (
-    <div className="pad" style={{ padding: 28, maxWidth: 580 }}>
-      <PageHead label="Config" title="Account." sub="Manage your ZedPing subscription" />
-      <div className="card-gold" style={{ padding: 24, marginBottom: 16, position: "relative" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.5 }} />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-          <div>
-            <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Current Plan</div>
-            <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600, letterSpacing: -0.3 }}>{(customer?.subscription_plan||"Starter").charAt(0).toUpperCase()+(customer?.subscription_plan||"starter").slice(1)}</div>
-            <div style={{ fontSize: 12, color: "var(--mist)", marginTop: 3 }}>{customer?.subscription_status==="trial"?"Free trial":"Active subscription"}</div>
-          </div>
-          <a href={"https://wa.me/" + ZEDPING_WA + "?text=" + encodeURIComponent("Hi ZedPing! I'd like to upgrade my plan. Business: " + (customer?.business_name||"") + " | Current Plan: " + (customer?.subscription_plan||"Starter") + " | Email: " + (user?.email||""))} target="_blank" rel="noopener noreferrer" className="btn btn-gold" style={{ padding: "9px 18px", fontSize: 10, textDecoration: "none" }}>Upgrade →</a>
-        </div>
-      </div>
-      <div className="card" style={{ padding: 24 }}>
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 18 }}>Business Details</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {[["Business Name", customer?.business_name||""], ["Email Address", user?.email||""], ["Phone Number", customer?.phone||""]].map(([label,val]) => (
-            <div key={label}>
-              <label className="label">{label}</label>
-              <input className="input" defaultValue={val} readOnly style={{ opacity: 0.5 }} />
+    <div className="pad" style={{ padding: 28, maxWidth: 720 }}>
+      <PageHead label="Config" title="Business profile." sub="Keep your workspace details and onboarding progress up to date." />
+
+      <div className="card-gold" style={{ padding: 22, marginBottom: 16 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 14 }}>Onboarding progress</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+          {stages.map(([label, complete]) => (
+            <div key={label} style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 12, color: complete ? "var(--cream)" : "var(--mist)" }}>
+              <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", background: complete ? "var(--gold)" : "rgba(255,255,255,0.08)", color: complete ? "var(--ink)" : "var(--mist)", fontSize: 10 }}>{complete ? "✓" : "○"}</span>
+              {label}
             </div>
           ))}
+        </div>
+        {!onboarding.whatsapp_connected && <div style={{ marginTop: 14, fontSize: 12, color: "var(--mist)" }}>WhatsApp connection setup is the next onboarding step and will be available here soon.</div>}
+      </div>
+
+      <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 6 }}>
+          <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>Business details</div>
+          <div className="mono" style={{ fontSize: 9, color: canEdit ? "var(--gold2)" : "var(--mist)", letterSpacing: 1, textTransform: "uppercase" }}>{role}</div>
+        </div>
+        <p style={{ color: "var(--mist)", fontSize: 12, lineHeight: 1.6, margin: "0 0 20px" }}>
+          {canEdit ? "Complete these details to prepare this workspace for WhatsApp connection." : "You can view this workspace profile. Only owners and admins can make changes."}
+        </p>
+
+        {loading ? <Loader /> : error ? <div role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>We could not load the latest profile: {error}</div> : (
+          <form onSubmit={saveProfile}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+              {fields.map(([field, label, type, hint]) => (
+                <div key={field}>
+                  <label className="label" htmlFor={`profile-${field}`}>{label}</label>
+                  <input
+                    id={`profile-${field}`}
+                    className="input"
+                    type={type}
+                    value={form[field]}
+                    onChange={(event) => updateField(field, event.target.value)}
+                    disabled={!canEdit || saving}
+                    required
+                    maxLength={field === "email" ? 254 : 160}
+                    aria-describedby={`profile-${field}-hint`}
+                    style={!canEdit ? { opacity: 0.7, cursor: "not-allowed" } : undefined}
+                  />
+                  <div id={`profile-${field}-hint`} style={{ color: "var(--mist)", fontSize: 10, marginTop: 5, lineHeight: 1.35 }}>{hint}</div>
+                </div>
+              ))}
+            </div>
+            {canEdit && <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <button className="btn btn-gold" type="submit" disabled={saving}>{saving ? "Saving…" : "Save business profile"}</button>
+              {saved && <span role="status" style={{ color: "#86EFAC", fontSize: 12 }}>Business profile saved.</span>}
+              {saveError && <span role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>{saveError}</span>}
+            </div>}
+          </form>
+        )}
+      </div>
+
+      <div className="card-gold" style={{ padding: 24 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Current plan</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div className="editorial" style={{ fontSize: 26, color: "var(--cream)", fontWeight: 600 }}>{(workspace.subscription_plan || "Starter").charAt(0).toUpperCase() + (workspace.subscription_plan || "starter").slice(1)}</div>
+            <div style={{ fontSize: 12, color: "var(--mist)", marginTop: 3 }}>{workspace.subscription_status === "trial" ? "Free trial" : "Active subscription"}</div>
+          </div>
+          <a href={"https://wa.me/" + ZEDPING_WA + "?text=" + encodeURIComponent("Hi ZedPing! I'd like to upgrade my plan. Business: " + (workspace.business_name || "") + " | Current Plan: " + (workspace.subscription_plan || "Starter") + " | Email: " + (user?.email || ""))} target="_blank" rel="noopener noreferrer" className="btn btn-gold" style={{ padding: "9px 18px", fontSize: 10, textDecoration: "none" }}>Upgrade →</a>
         </div>
       </div>
     </div>
@@ -1303,6 +1421,12 @@ export default function App() {
     setActive("overview");
   };
 
+  const onWorkspaceUpdated = (workspace) => {
+    if (!workspace?.id) return;
+    setCustomer((current) => current?.id === workspace.id ? { ...current, ...workspace } : current);
+    setWorkspaces((current) => current.map((item) => item.id === workspace.id ? { ...item, ...workspace } : item));
+  };
+
   const onLogout = async () => {
     await supabase.auth.signOut();
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
@@ -1315,7 +1439,7 @@ export default function App() {
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Message Log",  comp: <MessageLog customer={customer} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    settings:    { title: "Account",      comp: <Settings user={user} customer={customer} /> },
+    settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} /> },
   };
 
   if (loading) return (
