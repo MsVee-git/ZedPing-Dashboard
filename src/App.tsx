@@ -1375,6 +1375,8 @@ export default function App() {
         setCustomer(null);
         setWorkspaces([]);
         setNeedsVerification(true);
+        setWorkspaceChanging(false);
+        setWorkspaceSwitchTarget(null);
         return;
       }
 
@@ -1450,9 +1452,22 @@ export default function App() {
         setCustomer(null);
         setWorkspaces([]);
         setNeedsVerification(false);
+        setWorkspaceChanging(false);
+        setWorkspaceSwitchTarget(null);
       }
     });
     return () => subscription.unsubscribe();
+  }, [loadAuthenticatedContext]);
+
+  useEffect(() => {
+    const handleWorkspaceForbidden = async () => {
+      setWorkspaceChanging(true);
+      setCustomer(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) await loadAuthenticatedContext(session.user);
+    };
+    window.addEventListener("zedping:workspace-forbidden", handleWorkspaceForbidden);
+    return () => window.removeEventListener("zedping:workspace-forbidden", handleWorkspaceForbidden);
   }, [loadAuthenticatedContext]);
 
   const onWorkspaceChange = async (workspaceId) => {
