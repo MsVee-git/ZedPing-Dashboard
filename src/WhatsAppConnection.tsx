@@ -75,7 +75,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
     return () => {
       mounted.current = false;
     };
-  }, [refresh, customer?.id]);
+  }, [refresh, customer?.id, customer?.profile_completed_at, customer?.whatsapp_connected_at, customer?.onboarding_status]);
 
   const finishConnection = useCallback(async () => {
     const current = pending.current;
