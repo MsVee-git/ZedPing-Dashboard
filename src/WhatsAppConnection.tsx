@@ -40,6 +40,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
   const [message, setMessage] = useState("");
   const pending = useRef({ session: null, code: null, phoneNumberId: null });
   const mounted = useRef(true);
+  const onWorkspaceUpdatedRef = useRef(onWorkspaceUpdated);
 
   const metaAppId = import.meta.env.VITE_META_APP_ID;
   const embeddedSignupConfigId = import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID;
@@ -51,6 +52,8 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
   const emailVerified = Boolean(onboarding.email_verified ?? user?.email_confirmed_at);
   const profileComplete = Boolean(onboarding.business_profile_complete);
 
+  useEffect(() => { onWorkspaceUpdatedRef.current = onWorkspaceUpdated; }, [onWorkspaceUpdated]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,13 +61,13 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       const latest = await response.json();
       if (!mounted.current) return;
       setContext(latest);
-      onWorkspaceUpdated?.(latest.workspace);
+      onWorkspaceUpdatedRef.current?.(latest.workspace);
     } catch (error) {
       if (mounted.current) setMessage(error?.message || "We could not load the WhatsApp connection.");
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [API, apiFetch, onWorkspaceUpdated]);
+  }, [API, apiFetch]);
 
   useEffect(() => {
     mounted.current = true;
