@@ -14,6 +14,22 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
   return nativeRequest(input, { ...init, headers });
 };
+async function provisionWorkspace(user, details: any = {}) {
+  const { data: existing, error: lookupError } = await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return existing;
+  const metadata = user.user_metadata || {};
+  const business_name = details.business_name || metadata.business_name;
+  if (!business_name) throw new Error("Your account is missing a business name. Please contact support.");
+  const { data: customer, error: customerError } = await supabase.from("customers").insert({
+    auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
+    subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
+  }).select().single();
+  if (customerError) throw customerError;
+  const { error: memberError } = await supabase.from("workspace_members").insert({ customer_id: customer.id, user_id: user.id, role: "owner" });
+  if (memberError) throw memberError;
+  return customer;
+}
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
@@ -231,10 +247,13 @@ function SignUp({ onSwitch, onAuth }) {
     try {
       const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password, options: { data: { name: f.name, business_name: f.business_name, phone: f.phone, subscription_plan: plan } } });
       if (error) throw error;
-      if (data.user) {
-        await supabase.from("customers").insert({ auth_user_id: data.user.id, business_name: f.business_name, email: f.email, phone: f.phone, subscription_plan: plan, subscription_status: "trial" });
-        onAuth(data.user, { business_name: f.business_name, name: f.name, subscription_plan: plan });
+      if (!data.user) throw new Error("Sign up did not return a user.");
+      if (!data.session) {
+        setErr("Account created. Please check your email to confirm your account, then sign in.");
+        return;
       }
+      const customer = await provisionWorkspace(data.user, { business_name: f.business_name, phone: f.phone, subscription_plan: plan });
+      onAuth(data.user, customer);
     } catch (e) { setErr(e.message || "Sign up failed."); }
     finally { setLoading(false); }
   };
@@ -1083,8 +1102,8 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        const { data: c } = await supabase.from("customers").select("*").eq("auth_user_id", session.user.id).single();
-        setCustomer(c||{});
+        const c = await provisionWorkspace(session.user);
+        setCustomer(c);
       }
       setLoading(false);
     });
@@ -1104,7 +1123,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const onAuth = (u, c) => { setUser(u); setCustomer(c); };
+  const onAuth = (u, c) => { setUser(u); setCustomer(c); setActive("overview"); };
   const onLogout = async () => { await supabase.auth.signOut(); setUser(null); setCustomer(null); setActive("overview"); };
 
   const pages = {
