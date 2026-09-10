@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -7,12 +7,25 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const API = "https://zedping-backend-production.up.railway.app";
 const ZEDPING_WA = "260778621167";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+const WORKSPACE_STORAGE_KEY = "zedping.activeWorkspaceId";
 const nativeRequest = window.fetch.bind(window);
+
 const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(init.headers || {});
   if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
-  return nativeRequest(input, { ...init, headers });
+
+  // This local value is only a convenience hint. The backend independently
+  // verifies that the signed-in user belongs to the requested workspace.
+  const workspaceId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+  if (workspaceId) headers.set("x-zedping-workspace-id", workspaceId);
+
+  const response = await nativeRequest(input, { ...init, headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error || `Request failed (${response.status})`);
+  }
+  return response;
 };
 async function provisionWorkspace(user, details: any = {}) {
   const findExisting = async () => {
@@ -24,7 +37,11 @@ async function provisionWorkspace(user, details: any = {}) {
   if (!customer) {
     const metadata = user.user_metadata || {};
     const business_name = details.business_name || metadata.business_name;
-    if (!business_name) throw new Error("Your account is missing a business name. Please contact support.");
+
+    // Invited members have no owner workspace and must never receive one
+    // automatically. A signup carries a business name in its Auth metadata.
+    if (!business_name) return null;
+
     const { data, error } = await supabase.from("customers").insert({
       auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
       subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
@@ -37,6 +54,36 @@ async function provisionWorkspace(user, details: any = {}) {
     .upsert({ customer_id: customer.id, user_id: user.id, role: "owner" }, { onConflict: "customer_id,user_id", ignoreDuplicates: true });
   if (memberError) throw memberError;
   return customer;
+}
+
+async function getAuthorizedWorkspaces(user) {
+  const ownedWorkspace = await provisionWorkspace(user);
+  const { data: memberships, error: membershipError } = await supabase
+    .from("workspace_members")
+    .select("customer_id, role")
+    .eq("user_id", user.id);
+  if (membershipError) throw membershipError;
+
+  const roles = new Map();
+  if (ownedWorkspace) roles.set(ownedWorkspace.id, "owner");
+  for (const membership of memberships || []) {
+    if (!roles.has(membership.customer_id) || membership.role === "owner") {
+      roles.set(membership.customer_id, membership.role);
+    }
+  }
+
+  const ids = [...roles.keys()];
+  if (!ids.length) return { workspaces: [], ownedWorkspace };
+  const { data: customers, error: customerError } = await supabase
+    .from("customers")
+    .select("*")
+    .in("id", ids);
+  if (customerError) throw customerError;
+
+  return {
+    workspaces: (customers || []).map(customer => ({ ...customer, role: roles.get(customer.id) })),
+    ownedWorkspace
+  };
 }
 
 const css = `
@@ -246,7 +293,26 @@ function SignUp({ onSwitch, onAuth }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [showP, setShowP] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState("");
   const set = (k,v) => setF(p => ({ ...p, [k]: v }));
+
+  const resendVerification = async () => {
+    if (!verificationEmail) return;
+    setResending(true); setResendStatus("");
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: verificationEmail,
+        options: { emailRedirectTo: window.location.origin }
+      });
+      if (error) throw error;
+      setResendStatus("Verification email resent. Check your inbox.");
+    } catch (error) {
+      setResendStatus(error?.message || "We could not resend the verification email.");
+    } finally { setResending(false); }
+  };
 
   const submit = async () => {
     if (!f.name||!f.business_name||!f.email||!f.password) { setErr("Please fill in all required fields."); return; }
@@ -257,11 +323,10 @@ function SignUp({ onSwitch, onAuth }) {
       if (error) throw error;
       if (!data.user) throw new Error("Sign up did not return a user.");
       if (!data.session) {
-        setErr("Account created. Please check your email to confirm your account, then sign in.");
+        setVerificationEmail(f.email);
         return;
       }
-      const customer = await provisionWorkspace(data.user, { business_name: f.business_name, phone: f.phone, subscription_plan: plan });
-      onAuth(data.user, customer);
+      await onAuth(data.user);
     } catch (e) { setErr(e.message || "Sign up failed."); }
     finally { setLoading(false); }
   };
@@ -306,7 +371,14 @@ function SignUp({ onSwitch, onAuth }) {
               ))}
             </div>
           </div>
-          {err && <div className="mono" style={{ color: "#FCA5A5", fontSize: 11, letterSpacing: 0.5 }}>{err}</div>}
+          {verificationEmail && <div className="mono" role="status" style={{ color: "#86EFAC", fontSize: 11, lineHeight: 1.6 }}>
+            Account created. Verify <strong>{verificationEmail}</strong> before signing in.
+            <button type="button" onClick={resendVerification} disabled={resending} style={{ display: "block", marginTop: 8, padding: 0, border: 0, background: "transparent", color: "var(--gold2)", cursor: "pointer", fontFamily: "inherit", fontSize: 10 }}>
+              {resending ? "Resending…" : "Resend verification email"}
+            </button>
+            {resendStatus && <span style={{ display: "block", marginTop: 6, color: resendStatus.includes("resent") ? "#86EFAC" : "#FCA5A5" }}>{resendStatus}</span>}
+          </div>}
+          {err && <div className="mono" role="alert" style={{ color: "#FCA5A5", fontSize: 11, letterSpacing: 0.5 }}>{err}</div>}
           <button className="btn btn-gold" onClick={submit} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 11, marginTop: 4 }}>
             {loading ? <div className="spin" /> : "Start Exploring Free →"}
           </button>
@@ -335,16 +407,21 @@ function Login({ onSwitch, onAuth }) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: f.email, password: f.password });
       if (error) throw error;
-      const { data: cust } = await supabase.from("customers").select("*").eq("auth_user_id", data.user.id).single();
-      onAuth(data.user, cust || {});
+      await onAuth(data.user);
     } catch (e) { setErr(e.message === "Invalid login credentials" ? "Incorrect email or password." : e.message); }
     finally { setLoading(false); }
   };
 
   const sendReset = async () => {
     if (!f.email) { setErr("Please enter your email first."); return; }
-    await supabase.auth.resetPasswordForEmail(f.email, { redirectTo: 'https://app.zedping.app' });
-    setReset(true);
+    setLoading(true); setErr("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(f.email, { redirectTo: window.location.origin });
+      if (error) throw error;
+      setReset(true);
+    } catch (error) {
+      setErr(error?.message || "We could not send the password reset email.");
+    } finally { setLoading(false); }
   };
 
   return (
@@ -420,6 +497,44 @@ function ResetPass({ onDone }) {
   );
 }
 
+// ── EMAIL VERIFICATION ────────────────────────────────────────────────────────
+function VerifyEmail({ user, onLogout }) {
+  const [status, setStatus] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const resend = async () => {
+    setSending(true); setStatus("");
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: user.email,
+        options: { emailRedirectTo: window.location.origin }
+      });
+      if (error) throw error;
+      setStatus("Verification email resent. Check your inbox.");
+    } catch (error) {
+      setStatus(error?.message || "We could not resend the verification email.");
+    } finally { setSending(false); }
+  };
+
+  return (
+    <AuthWrap>
+      <div className="auth-card">
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>Verify your email</div>
+        <h2 className="editorial" style={{ fontSize: 36, color: "var(--cream)", marginBottom: 12, fontWeight: 600 }}>One more step.</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
+          Verify <strong style={{ color: "var(--cream)" }}>{user.email}</strong> before completing setup or connecting WhatsApp.
+        </p>
+        {status && <div className="mono" role="status" style={{ color: status.includes("resent") ? "#86EFAC" : "#FCA5A5", fontSize: 11, marginBottom: 16 }}>{status}</div>}
+        <button className="btn btn-gold" onClick={resend} disabled={sending} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
+          {sending ? <div className="spin" /> : "Resend Verification Email"}
+        </button>
+        <button className="btn btn-wire" onClick={onLogout} style={{ width: "100%", padding: "12px", fontSize: 10, marginTop: 10 }}>Sign Out</button>
+      </div>
+    </AuthWrap>
+  );
+}
+
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function Sidebar({ active, setActive, user, customer, onLogout, open, onClose }) {
   const links = [
@@ -478,7 +593,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
 }
 
 // ── TOPBAR ────────────────────────────────────────────────────────────────────
-function Topbar({ title, user, customer }) {
+function Topbar({ title, user, customer, workspaces, onWorkspaceChange }) {
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
   return (
     <div className="desk-bar" style={{ height: 56, alignItems: "center", justifyContent: "space-between", padding: "0 32px", borderBottom: "1px solid var(--wire)", background: "rgba(9,9,9,0.9)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 10 }}>
@@ -487,6 +602,9 @@ function Topbar({ title, user, customer }) {
         <span className="mono" style={{ fontSize: 10, color: "var(--cream2)", letterSpacing: 2, textTransform: "uppercase" }}>{title}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {workspaces.length > 1 && <select aria-label="Active workspace" value={customer?.id || ""} onChange={event => onWorkspaceChange(event.target.value)} className="input" style={{ width: 190, padding: "7px 10px", fontSize: 12 }}>
+          {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
+        </select>}
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--cream)" }}>{customer?.business_name || "My Business"}</div>
           <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{user?.email}</div>
@@ -525,10 +643,9 @@ function PageHead({ label, title, sub, action }) {
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
 function Overview({ customer, user }) {
-  const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data: msgs, loading: mL } = useAPI(`/messages${cid}`);
-  const { data: contacts, loading: cL } = useAPI(`/contacts${cid}`);
-  const { data: autos } = useAPI(`/automations${cid}`);
+  const { data: msgs, loading: mL } = useAPI("/messages");
+  const { data: contacts, loading: cL } = useAPI("/contacts");
+  const { data: autos } = useAPI("/automations");
   const todayOut = (msgs||[]).filter(m => new Date(m.created_at).toDateString()===new Date().toDateString()&&m.direction==="outbound").length;
   const h = new Date().getHours();
   const greet = h<12 ? "Good morning" : h<17 ? "Good afternoon" : "Good evening";
@@ -587,8 +704,7 @@ function Overview({ customer, user }) {
 
 // ── BROADCASTS ────────────────────────────────────────────────────────────────
 function Broadcasts({ customer }) {
-  const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data, loading, refetch } = useAPI(`/broadcasts/scheduled${cid}`);
+  const { data, loading, refetch } = useAPI("/broadcasts/scheduled");
   const [form, setForm] = useState({ message: "", phone: "" });
   const [sending, setSending] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -637,8 +753,7 @@ function Broadcasts({ customer }) {
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 function Contacts({ customer }) {
-  const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data, loading, refetch } = useAPI(`/contacts${cid}`);
+  const { data, loading, refetch } = useAPI("/contacts");
   const [tab, setTab] = useState("contacts");
   const [search, setSearch] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -956,8 +1071,7 @@ function Contacts({ customer }) {
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
 function MessageLog({ customer }) {
-  const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data, loading, refetch } = useAPI(`/messages${cid}`);
+  const { data, loading, refetch } = useAPI("/messages");
   const [search, setSearch] = useState("");
   const filtered = (data||[]).filter(m=>(m.message_body||"").toLowerCase().includes(search.toLowerCase())||(m.from_number||m.to_number||"").includes(search));
 
@@ -991,8 +1105,7 @@ function MessageLog({ customer }) {
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
 function Automations({ customer }) {
-  const cid = customer?.id ? "?customer_id=" + customer.id : "";
-  const { data, loading, refetch } = useAPI(`/automations${cid}`);
+  const { data, loading, refetch } = useAPI("/automations");
   const [form, setForm] = useState({ keyword: "", reply: "" });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1084,6 +1197,8 @@ export default function App() {
   const [view, setView] = useState(window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [active, setActive] = useState("overview");
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1094,58 +1209,105 @@ export default function App() {
     return hash.includes("type=recovery") || search.includes("type=recovery") || (hash.includes("access_token") && hash.includes("recovery"));
   });
 
+  const loadAuthenticatedContext = useCallback(async (sessionUser) => {
+    try {
+      setAuthError("");
+      setUser(sessionUser);
+
+      if (!sessionUser.email_confirmed_at) {
+        setCustomer(null);
+        setWorkspaces([]);
+        setNeedsVerification(true);
+        return;
+      }
+
+      const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
+      if (!authorizedWorkspaces.length) throw new Error("No workspace is available for this account. Please contact support.");
+
+      const storedId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+      const selected = authorizedWorkspaces.find(workspace => workspace.id === storedId)
+        || authorizedWorkspaces.find(workspace => workspace.id === ownedWorkspace?.id)
+        || authorizedWorkspaces[0];
+
+      window.localStorage.setItem(WORKSPACE_STORAGE_KEY, selected.id);
+      setWorkspaces(authorizedWorkspaces);
+      setCustomer(selected);
+      setNeedsVerification(false);
+      setActive("overview");
+    } catch (error) {
+      console.error("Workspace loading failed", error);
+      setUser(null);
+      setCustomer(null);
+      setWorkspaces([]);
+      setNeedsVerification(false);
+      setAuthError(error?.message || "We could not load your workspace. Please sign in again or contact support.");
+    }
+  }, []);
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const type = params.get("type");
-    if (code || type === "recovery") {
-      supabase.auth.exchangeCodeForSession(window.location.href).then(({ data, error }) => {
-        if (data?.session && type === "recovery") {
+    const restoreSession = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("code");
+      const type = params.get("type");
+
+      if (code || type === "recovery") {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          setAuthError(error.message || "We could not verify this link.");
+        } else if (data?.session && type === "recovery") {
           setReset(true);
           setUser(null);
           window.history.replaceState(null, "", window.location.pathname);
         }
-      }).catch(() => {});
-    }
-
-    const loadSessionUser = async (sessionUser) => {
-      try {
-        const c = await provisionWorkspace(sessionUser);
-        setUser(sessionUser);
-        setCustomer(c);
-        setAuthError("");
-      } catch (error) {
-        console.error("Workspace provisioning failed", error);
-        setUser(null);
-        setCustomer(null);
-        setAuthError(error?.message || "We could not finish setting up your workspace. Please sign in again or contact support.");
       }
+
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      if (session?.user) await loadAuthenticatedContext(session.user);
+      setLoading(false);
     };
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) await loadSessionUser(session.user);
-      setLoading(false);
-    }).catch((error) => {
+    restoreSession().catch((error) => {
       console.error("Session lookup failed", error);
       setAuthError("We could not restore your session. Please sign in again.");
       setLoading(false);
     });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event==="PASSWORD_RECOVERY") {
+      if (event === "PASSWORD_RECOVERY") {
         setReset(true);
         setUser(null);
         window.history.replaceState(null, "", window.location.pathname);
         return;
       }
       if (session?.user) {
-        await loadSessionUser(session.user);
-      } else { setUser(null); setCustomer(null); }
+        await loadAuthenticatedContext(session.user);
+      } else {
+        setUser(null);
+        setCustomer(null);
+        setWorkspaces([]);
+        setNeedsVerification(false);
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [loadAuthenticatedContext]);
 
-  const onAuth = (u, c) => { setUser(u); setCustomer(c); setActive("overview"); };
-  const onLogout = async () => { await supabase.auth.signOut(); setUser(null); setCustomer(null); setActive("overview"); };
+  const onWorkspaceChange = (workspaceId) => {
+    const nextWorkspace = workspaces.find(workspace => workspace.id === workspaceId);
+    if (!nextWorkspace) {
+      setAuthError("That workspace is not available to this account.");
+      return;
+    }
+    window.localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspace.id);
+    setCustomer(nextWorkspace);
+    setActive("overview");
+  };
+
+  const onLogout = async () => {
+    await supabase.auth.signOut();
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setActive("overview");
+  };
 
   const pages = {
     overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} /> },
@@ -1164,12 +1326,14 @@ export default function App() {
     </div>
   );
 
-  if (reset) return <><style>{css}</style><ResetPass onDone={()=>setReset(false)} /></>;
+  if (reset) return <><style>{css}</style><ResetPass onDone={() => setReset(false)} /></>;
+  if (needsVerification && user) return <><style>{css}</style><VerifyEmail user={user} onLogout={onLogout} /></>;
+
   if (!user) return (
     <>
       <style>{css}</style>
       {authError && <div className="mono" role="alert" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, maxWidth: 520, padding: "10px 14px", background: "var(--panel)", border: "1px solid rgba(239,68,68,0.35)", color: "#FCA5A5", fontSize: 10, letterSpacing: 0.5, textAlign: "center" }}>{authError}</div>}
-      {view==="signup" ? <SignUp onSwitch={()=>setView("login")} onAuth={onAuth} /> : <Login onSwitch={()=>setView("signup")} onAuth={onAuth} />}
+      {view === "signup" ? <SignUp onSwitch={() => setView("login")} onAuth={loadAuthenticatedContext} /> : <Login onSwitch={() => setView("signup")} onAuth={loadAuthenticatedContext} />}
     </>
   );
 
@@ -1179,11 +1343,11 @@ export default function App() {
     <>
       <style>{css}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
-        <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={onLogout} open={open} onClose={()=>setOpen(false)} />
+        <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
         <div className="main">
-          <MobTopbar onMenu={()=>setOpen(true)} onLogout={onLogout} />
-          <Topbar title={cur.title} user={user} customer={customer} />
-          <div style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>
+          <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} />
+          <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} />
+          <div key={customer?.id} style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>
         </div>
       </div>
     </>
