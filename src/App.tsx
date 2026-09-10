@@ -1116,8 +1116,8 @@ export default function App() {
       }
       if (session?.user) {
         setUser(session.user);
-        const { data: c } = await supabase.from("customers").select("*").eq("auth_user_id", session.user.id).single();
-        setCustomer(c||{});
+        const c = await provisionWorkspace(session.user);
+        setCustomer(c);
       } else { setUser(null); setCustomer(null); }
     });
     return () => subscription.unsubscribe();
