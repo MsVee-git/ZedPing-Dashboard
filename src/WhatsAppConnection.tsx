@@ -55,6 +55,10 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
   useEffect(() => { onWorkspaceUpdatedRef.current = onWorkspaceUpdated; }, [onWorkspaceUpdated]);
 
+  useEffect(() => {
+    onConnectionStateChange?.({ phase, message });
+  }, [message, onConnectionStateChange, phase]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
