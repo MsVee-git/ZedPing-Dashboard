@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { WhatsAppConnection } from "./WhatsAppConnection";
+import { WhatsAppConnection } from "./WhatsAppConnection";\nimport { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
@@ -30,43 +30,45 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   return response;
 };
 async function provisionWorkspace(user, details: any = {}) {
-  const { data: existing, error: existingError } = await supabase
-    .from("customers")
-    .select("*")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-  if (existingError) throw existingError;
-  if (existing) return existing;
+  const gateway = {
+    async findOwnedWorkspace(userId) {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    async findMemberships(userId) {
+      const { data, error } = await supabase
+        .from("workspace_members")
+        .select("customer_id")
+        .eq("user_id", userId);
+      if (error) throw error;
+      return data || [];
+    },
+    async createWorkspace(seed) {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert(seed)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    async ensureOwnerMembership(customerId, userId) {
+      const { error } = await supabase
+        .from("workspace_members")
+        .upsert(
+          { customer_id: customerId, user_id: userId, role: "owner" },
+          { onConflict: "customer_id,user_id", ignoreDuplicates: true }
+        );
+      if (error) throw error;
+    }
+  };
 
-  // Check membership before interpreting signup metadata. An invited member
-  // must never receive a separate owner workspace just because metadata exists.
-  const { data: existingMemberships, error: membershipError } = await supabase
-    .from("workspace_members")
-    .select("customer_id")
-    .eq("user_id", user.id);
-  if (membershipError) throw membershipError;
-  if (existingMemberships?.length) return null;
-
-  const metadata = user.user_metadata || {};
-  const business_name = details.business_name || metadata.business_name;
-  if (!business_name) return null;
-
-  const { data, error } = await supabase.from("customers").insert({
-    auth_user_id: user.id, business_name, email: user.email, phone: details.phone || metadata.phone || null,
-    subscription_plan: details.subscription_plan || metadata.subscription_plan || "business", subscription_status: "trial"
-  }).select().single();
-  if (error && error.code !== "23505") throw error;
-
-  const customer = data || await supabase.from("customers").select("*").eq("auth_user_id", user.id).maybeSingle().then(({ data: fallback, error: fallbackError }) => {
-    if (fallbackError) throw fallbackError;
-    return fallback;
-  });
-  if (!customer) throw new Error("We could not create your workspace. Please try again.");
-
-  const { error: ownerError } = await supabase.from("workspace_members")
-    .upsert({ customer_id: customer.id, user_id: user.id, role: "owner" }, { onConflict: "customer_id,user_id", ignoreDuplicates: true });
-  if (ownerError) throw ownerError;
-  return customer;
+  return provisionWorkspaceWithGateway(gateway, user, details);
 }
 
 async function getAuthorizedWorkspaces(user) {
