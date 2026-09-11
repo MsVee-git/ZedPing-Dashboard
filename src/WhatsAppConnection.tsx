@@ -11,7 +11,7 @@ function loadFacebookSdk(appId) {
     const existing = document.getElementById("facebook-jssdk");
     const initialise = () => {
       if (!window.FB) return reject(new Error("Facebook login could not be loaded."));
-      window.FB.init({ appId, cookie: true, xfbml: false, version: "v18.0" });
+      window.FB.init({ appId, cookie: true, xfbml: false, version: "v21.0" });
       resolve(window.FB);
     };
 
@@ -33,12 +33,13 @@ function loadFacebookSdk(appId) {
   return facebookSdkPromise;
 }
 
-export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceUpdated }) {
+export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceUpdated, onConnectionStateChange }) {
   const [context, setContext] = useState(null);
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState("idle");
   const [message, setMessage] = useState("");
   const pending = useRef({ session: null, code: null, phoneNumberId: null });
+  const completionStarted = useRef(false);
   const mounted = useRef(true);
   const onWorkspaceUpdatedRef = useRef(onWorkspaceUpdated);
 
@@ -79,8 +80,9 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
   const finishConnection = useCallback(async () => {
     const current = pending.current;
-    if (!current.session || !current.code || !current.phoneNumberId) return;
+    if (!current.session || !current.code || !current.phoneNumberId || completionStarted.current) return;
 
+    completionStarted.current = true;
     setPhase("validating");
     setMessage("ZedPing is securely confirming your WhatsApp number.");
     try {
@@ -100,6 +102,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       setMessage("WhatsApp is connected to this workspace.");
       await refresh();
     } catch (error) {
+      completionStarted.current = false;
       pending.current = { session: null, code: null, phoneNumberId: null };
       setPhase("error");
       setMessage(error?.message || "We could not validate this WhatsApp connection. Please try again.");
@@ -107,22 +110,48 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
   }, [API, apiFetch, refresh]);
 
   useEffect(() => {
-    const onMetaMessage = (event) => {
-      if (event.origin !== "https://www.facebook.com") return;
-      const payload = event.data;
-      if (!payload || payload.type !== "WA_EMBEDDED_SIGNUP") return;
+    const isTrustedMetaOrigin = (origin) => {
+      try {
+        const url = new URL(origin);
+        return url.protocol === "https:" && (url.hostname === "facebook.com" || url.hostname.endsWith(".facebook.com"));
+      } catch {
+        return false;
+      }
+    };
 
-      if (payload.event === "FINISH" && /^[0-9]{5,32}$/.test(String(payload.data?.phone_number_id || ""))) {
-        pending.current.phoneNumberId = String(payload.data.phone_number_id);
+    const onMetaMessage = (event) => {
+      if (!isTrustedMetaOrigin(event.origin)) return;
+
+      let payload = event.data;
+      if (typeof payload === "string") {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          return;
+        }
+      }
+      if (!payload || typeof payload !== "object" || payload.type !== "WA_EMBEDDED_SIGNUP") return;
+
+      const phoneNumberId = String(payload.data?.phone_number_id || "");
+      if (["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", "FINISH_ONLY_WABA"].includes(payload.event)) {
+        if (!/^[0-9]{5,32}$/.test(phoneNumberId)) {
+          pending.current = { session: null, code: null, phoneNumberId: null };
+          setPhase("error");
+          setMessage("Meta finished setup, but ZedPing did not receive the WhatsApp phone identifier. No connection was created. Please try again.");
+          return;
+        }
+        pending.current.phoneNumberId = phoneNumberId;
         finishConnection();
       } else if (payload.event === "CANCEL") {
+        completionStarted.current = false;
         pending.current = { session: null, code: null, phoneNumberId: null };
         setPhase("idle");
         setMessage("WhatsApp setup was cancelled. You can try again whenever you are ready.");
       } else if (payload.event === "ERROR") {
+        completionStarted.current = false;
         pending.current = { session: null, code: null, phoneNumberId: null };
         setPhase("error");
-        setMessage("Meta could not complete the WhatsApp setup. Please try again.");
+        setMessage("Meta could not complete the WhatsApp setup. No connection was created. Please try again.");
       }
     };
     window.addEventListener("message", onMetaMessage);
@@ -135,6 +164,8 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
     setPhase("preparing");
 
     try {
+      completionStarted.current = false;
+      pending.current = { session: null, code: null, phoneNumberId: null };
       const prepared = await apiFetch(`${API}/whatsapp-connections/embedded-signup/prepare`, { method: "POST" });
       pending.current.session = await prepared.json();
 
@@ -143,20 +174,25 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       setMessage("Continue in the Meta window to select or create your WhatsApp Business account.");
       FB.login((response) => {
         const code = response?.authResponse?.code;
-        if (!code) {
-          if (!pending.current.phoneNumberId) {
-            pending.current = { session: null, code: null, phoneNumberId: null };
-            setPhase("idle");
-            setMessage("WhatsApp setup was not completed. No changes were made.");
-          }
+        if (code) {
+          pending.current.code = code;
+          finishConnection();
           return;
         }
-        pending.current.code = code;
-        finishConnection();
+
+        // Meta can deliver the postMessage event just after its login callback.
+        // Wait briefly so the event handler can capture the phone number first.
+        window.setTimeout(() => {
+          if (!pending.current.session || pending.current.code || completionStarted.current) return;
+          pending.current = { session: null, code: null, phoneNumberId: null };
+          setPhase("error");
+          setMessage("Meta finished setup, but ZedPing did not receive the authorization result. No connection was created. Please try again.");
+        }, 1000);
       }, {
         config_id: embeddedSignupConfigId,
         response_type: "code",
-        override_default_response_type: true
+        override_default_response_type: true,
+        extras: { sessionInfoVersion: 2, feature: "whatsapp_embedded_signup" }
       });
     } catch (error) {
       pending.current = { session: null, code: null, phoneNumberId: null };
