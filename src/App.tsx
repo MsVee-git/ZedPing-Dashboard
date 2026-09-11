@@ -683,13 +683,23 @@ function PageHead({ label, title, sub, action }) {
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-function Overview({ customer, user }) {
+function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
   const { data: msgs, loading: mL } = useAPI("/messages");
   const { data: contacts, loading: cL } = useAPI("/contacts");
   const { data: autos } = useAPI("/automations");
   const todayOut = (msgs||[]).filter(m => new Date(m.created_at).toDateString()===new Date().toDateString()&&m.direction==="outbound").length;
   const h = new Date().getHours();
   const greet = h<12 ? "Good morning" : h<17 ? "Good afternoon" : "Good evening";
+  const whatsappConnected = Boolean(customer?.whatsapp_connected_at);
+  const profileComplete = Boolean(customer?.profile_completed_at);
+  const connectionFailed = whatsappConnectionState?.phase === "error";
+  const activation = whatsappConnected
+    ? { title: "WhatsApp is connected", detail: "This workspace is ready to send and receive WhatsApp messages.", action: "Manage connection →", tone: "#86EFAC" }
+    : connectionFailed
+      ? { title: "WhatsApp connection needs attention", detail: whatsappConnectionState.message || "No connection was created. Review the connection details and try again.", action: "Review connection →", tone: "#FCA5A5" }
+      : profileComplete
+        ? { title: "Connect your WhatsApp number", detail: "Securely connect the WhatsApp Business account your team uses to speak with customers.", action: "Connect WhatsApp →", tone: "var(--gold2)" }
+        : { title: "Complete your business profile", detail: "Add your workspace details before connecting WhatsApp.", action: "Complete profile →", tone: "var(--gold2)" };
   const stats = [
     { label: "Sent Today", value: mL ? "—" : todayOut, sub: "Outbound messages", color: "var(--gold2)" },
     { label: "Contacts", value: cL ? "—" : (contacts?.length||0), sub: "In your list", color: "var(--cream2)" },
@@ -707,14 +717,14 @@ function Overview({ customer, user }) {
         <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{customer?.business_name || user?.email?.split("@")[0] || "Welcome"}</h1>
         <p style={{ color: "var(--mist)", fontSize: 14 }}>Your WhatsApp automation dashboard.</p>
       </div>
-      <div style={{ background: "rgba(26,58,42,0.4)", border: "1px solid var(--wire2)", padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
+      <div style={{ background: connectionFailed ? "rgba(127,29,29,0.22)" : whatsappConnected ? "rgba(26,58,42,0.4)" : "rgba(26,58,42,0.22)", border: `1px solid ${connectionFailed ? "rgba(239,68,68,0.35)" : "var(--wire2)"}`, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
-        <span style={{ fontSize: 18 }}>📱</span>
+        <span aria-hidden="true" style={{ fontSize: 18 }}>{whatsappConnected ? "✓" : connectionFailed ? "!" : "📱"}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 500, marginBottom: 2 }}>Activate your WhatsApp number</div>
-          <div style={{ color: "var(--mist)", fontSize: 13 }}>You're exploring ZedPing free. Pay to connect your WhatsApp number and go live.</div>
+          <div style={{ color: activation.tone, fontSize: 14, fontWeight: 500, marginBottom: 2 }}>{activation.title}</div>
+          <div style={{ color: "var(--mist)", fontSize: 13 }}>{activation.detail}</div>
         </div>
-        <a href={"https://wa.me/" + ZEDPING_WA + "?text=" + encodeURIComponent("Hi ZedPing! I'd like to activate my account. Business: " + (customer?.business_name||"") + " | Plan: " + (customer?.subscription_plan||"Starter") + " | Email: " + (user?.email||""))} target="_blank" rel="noopener noreferrer" className="btn btn-gold" style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10, textDecoration: "none" }}>Pay to Activate →</a>
+        <button type="button" onClick={() => onNavigate?.("settings")} className={connectionFailed ? "btn btn-wire" : "btn btn-gold"} style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10 }}>{activation.action}</button>
       </div>
       <div className="stat-g" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
         {stats.map((s,i) => (
@@ -1203,7 +1213,7 @@ function Automations({ customer }) {
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-function Settings({ user, customer, onWorkspaceUpdated }) {
+function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange }) {
   const { data, loading, error, refetch } = useAPI("/workspace", [customer?.id]);
   const workspace = data?.workspace || customer || {};
   const role = data?.role || customer?.role || "member";
@@ -1297,7 +1307,7 @@ function Settings({ user, customer, onWorkspaceUpdated }) {
         
       </div>
 
-      <WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={workspace} onWorkspaceUpdated={onWorkspaceUpdated} />
+      <WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={workspace} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={onConnectionStateChange} />
 
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 6 }}>
@@ -1366,6 +1376,7 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [whatsappConnectionState, setWhatsAppConnectionState] = useState(null);
   const [reset, setReset] = useState(() => {
     const hash = window.location.hash || "";
     const search = window.location.search || "";
@@ -1527,13 +1538,22 @@ export default function App() {
     setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); setActive("overview");
   };
 
+  const updateWhatsAppConnectionState = (nextState) => {
+    const next = { workspaceId: customer?.id, ...nextState };
+    setWhatsAppConnectionState((current) =>
+      current?.workspaceId === next.workspaceId && current?.phase === next.phase && current?.message === next.message
+        ? current
+        : next
+    );
+  };
+
   const pages = {
-    overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} /> },
+    overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={setActive} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
     broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Message Log",  comp: <MessageLog customer={customer} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} /> },
+    settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
   if (loading) return (
