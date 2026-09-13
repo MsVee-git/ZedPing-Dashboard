@@ -1367,7 +1367,27 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
 
 // ── WHATSAPP TEMPLATES ───────────────────────────────────────────────────────
 function WhatsAppTemplates() {
-  const { data, loading, error, refetch } = useApi(`${API}/templates`, []);
+  // This page mounts only after the user chooses it, so Meta is never queried
+  // during dashboard/session restoration or while other pages are open.
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(`${API}/templates`);
+      setData(await response.json());
+    } catch (fetchError) {
+      setError(fetchError?.message || "We could not load WhatsApp templates.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
   const [selectedId, setSelectedId] = useState("");
   const [recipient, setRecipient] = useState("");
   const [sending, setSending] = useState(false);
