@@ -762,28 +762,6 @@ function Broadcasts({ customer }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
 
-  const deleteTemplate = async () => {
-    if (!deleteTarget || deleting) return;
-    setDeleting(true);
-    setResult(null);
-    try {
-      const response = await apiFetch(`${API}/templates`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template_id: String(deleteTarget.id) })
-      });
-      const removed = await response.json();
-      setDeleteTarget(null);
-      setSelectedId("");
-      setResult({ ok: true, message: `Meta deleted “${removed.template?.name || deleteTarget.name}”. The live list was refreshed.` });
-      await refetch();
-    } catch (deleteError) {
-      setResult({ ok: false, message: deleteError?.message || "Meta could not delete this template." });
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const send = async () => {
     if (!form.message||!form.phone) return;
     setSending(true);
@@ -1548,6 +1526,28 @@ function WhatsAppTemplates({ customer }) {
   const onTemplateSubmitted = async (created) => {
     setResult({ ok: true, message: `Meta received “${created.template?.name || "your template"}”. The live list below is refreshed from Meta.` });
     await refetch();
+  };
+
+  const deleteTemplate = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setResult(null);
+    try {
+      const response = await apiFetch(`${API}/templates`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_id: String(deleteTarget.id) })
+      });
+      const removed = await response.json();
+      setDeleteTarget(null);
+      setSelectedId("");
+      setResult({ ok: true, message: `Meta deleted “${removed.template?.name || deleteTarget.name}”. The live list was refreshed.` });
+      await refetch();
+    } catch (deleteError) {
+      setResult({ ok: false, message: deleteError?.message || "Meta could not delete this template." });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const send = async () => {
