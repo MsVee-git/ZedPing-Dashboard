@@ -582,6 +582,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "contacts", label: "Contacts", icon: "contacts" },
     { id: "messages", label: "Message Log", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
+    { id: "templates", label: "WhatsApp Templates", icon: "messages" },
     { id: "settings", label: "Account", icon: "settings" },
   ];
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
@@ -1363,6 +1364,108 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
   );
 }
 
+
+// ── WHATSAPP TEMPLATES ───────────────────────────────────────────────────────
+function WhatsAppTemplates() {
+  const { data, loading, error, refetch } = useApi(`${API}/templates`, []);
+  const [selectedId, setSelectedId] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const templates = data?.templates || [];
+  const selected = templates.find((template) => String(template.id) === selectedId) || templates[0] || null;
+  const approved = selected && String(selected.status || "").toUpperCase() === "APPROVED";
+  const hasVariables = selected && /{{\s*\d+\s*}}/.test(JSON.stringify(selected.components || []));
+  const body = selected?.components?.find((component) => String(component.type || "").toUpperCase() === "BODY")?.text;
+
+  useEffect(() => {
+    if (templates.length && !templates.some((template) => String(template.id) === selectedId)) {
+      setSelectedId(String(templates[0].id));
+    }
+  }, [templates, selectedId]);
+
+  const refresh = async () => {
+    setResult(null);
+    await refetch();
+  };
+
+  const send = async () => {
+    if (!selected || !approved || hasVariables || !recipient.trim()) return;
+    if (!window.confirm(`Send the approved template “${selected.name}” to ${recipient.trim()}? This sends a real WhatsApp message.`)) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const response = await apiFetch(`${API}/templates/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_id: String(selected.id), to: recipient.trim() })
+      });
+      const sent = await response.json();
+      setResult({ ok: true, message: `WhatsApp accepted “${sent.template?.name || selected.name}”.${sent.meta_message_id ? " Message ID recorded." : ""}` });
+    } catch (sendError) {
+      setResult({ ok: false, message: sendError?.message || "We could not send this template." });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="pad" style={{ padding: 28 }}>
+      <PageHead label="WhatsApp" title="Message templates." sub="Live templates retrieved securely from your connected WhatsApp Business Account." />
+      <div className="card" style={{ padding: 20, marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div>
+          <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase", marginBottom: 5 }}>Live Meta data</div>
+          <div style={{ color: "var(--mist)", fontSize: 12 }}>{data?.connection?.display_name ? `Connected number: ${data.connection.display_name}` : "Templates are read directly from Meta."}</div>
+        </div>
+        <button className="btn btn-wire" onClick={refresh} disabled={loading} aria-label="Refresh WhatsApp templates">{loading ? "Refreshing…" : "Refresh templates"}</button>
+      </div>
+
+      {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "#FCA5A5" }}>We could not load templates: {error}</div> : !templates.length ? (
+        <div className="card" style={{ padding: 24, color: "var(--mist)" }}>No WhatsApp templates were returned for this workspace’s connected account.</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(250px, 0.9fr) minmax(0, 1.4fr)", gap: 16, alignItems: "start" }}>
+          <div className="card" style={{ padding: 10 }}>
+            {templates.map((template) => (
+              <button key={template.id} onClick={() => { setSelectedId(String(template.id)); setResult(null); }} style={{ width: "100%", textAlign: "left", border: selected?.id === template.id ? "1px solid rgba(184,146,42,0.65)" : "1px solid transparent", background: selected?.id === template.id ? "rgba(184,146,42,0.08)" : "transparent", color: "var(--cream)", padding: 13, cursor: "pointer", marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{template.name}</div>
+                <div className="mono" style={{ color: "var(--mist)", fontSize: 9, letterSpacing: 1, marginTop: 5 }}>{template.category || "—"} · {template.language || "—"} · {template.status || "—"}</div>
+              </button>
+            ))}
+          </div>
+
+          {selected && <div className="card" style={{ padding: 22 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 18 }}>
+              <div>
+                <div className="editorial" style={{ color: "var(--cream)", fontSize: 28, fontWeight: 600 }}>{selected.name}</div>
+                <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 1.5, marginTop: 6 }}>{selected.category || "—"} · {selected.language || "—"} · {selected.status || "—"}</div>
+              </div>
+              <span className="mono" style={{ fontSize: 9, color: "var(--mist)" }}>Meta ID: {selected.id}</span>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.025)", border: "1px solid var(--wire)", padding: 14, color: "var(--mist)", fontSize: 12, lineHeight: 1.65, marginBottom: 18, whiteSpace: "pre-wrap" }}>
+              {body || "This template has no text body. Its Meta components are shown below."}
+            </div>
+            <details style={{ marginBottom: 20 }}>
+              <summary style={{ cursor: "pointer", color: "var(--mist)", fontSize: 11 }}>View Meta components</summary>
+              <pre style={{ color: "var(--mist)", fontSize: 10, overflowX: "auto", whiteSpace: "pre-wrap", marginTop: 10 }}>{JSON.stringify(selected.components || [], null, 2)}</pre>
+            </details>
+
+            {!approved ? <div role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>Only Meta-approved templates can be sent.</div> : hasVariables ? <div role="alert" style={{ color: "#FDE68A", fontSize: 12 }}>This template requires variables. This first review-ready version supports approved templates with no variables only.</div> : (
+              <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 18 }}>
+                <label className="label" htmlFor="template-recipient">Test recipient number</label>
+                <input id="template-recipient" className="input" placeholder="+260971234567" value={recipient} onChange={(event) => setRecipient(event.target.value)} disabled={sending} />
+                <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 7 }}>This sends a real WhatsApp template message after confirmation.</div>
+                <button className="btn btn-gold" onClick={send} disabled={sending || !recipient.trim()} style={{ marginTop: 14 }}>{sending ? "Sending…" : "Send approved template"}</button>
+              </div>
+            )}
+            {result && <div role={result.ok ? "status" : "alert"} style={{ color: result.ok ? "#86EFAC" : "#FCA5A5", fontSize: 12, marginTop: 16 }}>{result.message}</div>}
+          </div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [view, setView] = useState(window.location.search.includes("signup") ? "signup" : "login");
@@ -1553,6 +1656,7 @@ export default function App() {
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Message Log",  comp: <MessageLog customer={customer} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
+    templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
