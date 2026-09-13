@@ -761,6 +761,29 @@ function Broadcasts({ customer }) {
   const [sending, setSending] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
+
+  const deleteTemplate = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setResult(null);
+    try {
+      const response = await apiFetch(`${API}/templates`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_id: String(deleteTarget.id) })
+      });
+      const removed = await response.json();
+      setDeleteTarget(null);
+      setSelectedId("");
+      setResult({ ok: true, message: `Meta deleted “${removed.template?.name || deleteTarget.name}”. The live list was refreshed.` });
+      await refetch();
+    } catch (deleteError) {
+      setResult({ ok: false, message: deleteError?.message || "Meta could not delete this template." });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const send = async () => {
     if (!form.message||!form.phone) return;
     setSending(true);
@@ -1501,6 +1524,8 @@ function WhatsAppTemplates({ customer }) {
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
   const [showComposer, setShowComposer] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const canManageTemplates = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
 
   const templates = data?.templates || [];
@@ -1590,6 +1615,11 @@ function WhatsAppTemplates({ customer }) {
               <pre style={{ color: "var(--mist)", fontSize: 10, overflowX: "auto", whiteSpace: "pre-wrap", marginTop: 10 }}>{JSON.stringify(selected.components || [], null, 2)}</pre>
             </details>
 
+            {canManageTemplates && <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 16, marginBottom: 18 }}>
+              <button className="btn btn-wire" onClick={() => setDeleteTarget(selected)} style={{ color: "#FCA5A5", borderColor: "rgba(239,68,68,0.45)" }}>Delete template</button>
+              <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 7 }}>This permanently removes the template from Meta after confirmation.</div>
+            </div>}
+
             {!approved ? <div role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>Only Meta-approved templates can be sent.</div> : hasVariables ? <div role="alert" style={{ color: "#FDE68A", fontSize: 12 }}>This template requires variables. This first review-ready version supports approved templates with no variables only.</div> : (
               <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 18 }}>
                 <label className="label" htmlFor="template-recipient">Test recipient number</label>
@@ -1602,6 +1632,17 @@ function WhatsAppTemplates({ customer }) {
           </div>}
         </div>
       )}
+
+      {deleteTarget && <div role="dialog" aria-modal="true" aria-labelledby="delete-template-title" style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,0.72)" }}>
+        <div className="card" style={{ width: "min(460px, 100%)", padding: 24, border: "1px solid rgba(239,68,68,0.36)" }}>
+          <div id="delete-template-title" className="editorial" style={{ color: "var(--cream)", fontSize: 28, fontWeight: 600 }}>Delete template?</div>
+          <p style={{ color: "var(--mist)", fontSize: 12, lineHeight: 1.6, marginTop: 12 }}>This will permanently remove <strong style={{ color: "var(--cream)" }}>{deleteTarget.name}</strong> from your WhatsApp Business Account in Meta. This cannot be undone.</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 22 }}>
+            <button className="btn btn-wire" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</button>
+            <button className="btn btn-gold" onClick={deleteTemplate} disabled={deleting} style={{ background: "#B91C1C", borderColor: "#B91C1C" }}>{deleting ? "Deleting…" : `Delete “${deleteTarget.name}”`}</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }
