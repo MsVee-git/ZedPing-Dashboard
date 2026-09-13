@@ -1369,7 +1369,7 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
 function TemplateComposer({ onSubmitted, onClose }) {
   const [draft, setDraft] = useState({ name: "", category: "UTILITY", language: "en_US", body: "", variable_examples: [] });
   const [submission, setSubmission] = useState({ phase: "draft", message: "" });
-  const rawVariables = [...draft.body.matchAll(/{{(\d+)}}/g)].map((match) => Number(match[1]));
+  const rawVariables = [...new Set([...draft.body.matchAll(/{{(\d+)}}/g)].map((match) => Number(match[1])))];
   const variableKey = rawVariables.join(",");
   const malformedVariables = /{{|}}/.test(draft.body.replace(/{{\d+}}/g, "")) || rawVariables.some((number, index) => number !== index + 1);
 
