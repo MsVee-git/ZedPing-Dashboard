@@ -1366,7 +1366,115 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
 
 
 // ── WHATSAPP TEMPLATES ───────────────────────────────────────────────────────
-function WhatsAppTemplates() {
+function TemplateComposer({ onSubmitted, onClose }) {
+  const [draft, setDraft] = useState({ name: "", category: "UTILITY", language: "en_US", body: "", variable_examples: [] });
+  const [submission, setSubmission] = useState({ phase: "draft", message: "" });
+  const rawVariables = [...draft.body.matchAll(/{{(\d+)}}/g)].map((match) => Number(match[1]));
+  const variableKey = rawVariables.join(",");
+  const malformedVariables = /{{|}}/.test(draft.body.replace(/{{\d+}}/g, "")) || rawVariables.some((number, index) => number !== index + 1);
+
+  useEffect(() => {
+    setDraft((current) => ({
+      ...current,
+      variable_examples: rawVariables.map((_, index) => current.variable_examples[index] || "")
+    }));
+  }, [variableKey]);
+
+  const update = (field, value) => {
+    setDraft((current) => ({ ...current, [field]: value }));
+    if (submission.phase !== "draft") setSubmission({ phase: "draft", message: "" });
+  };
+
+  const preview = draft.body.replace(/{{(\d+)}}/g, (_, number) => draft.variable_examples[Number(number) - 1] || "{{" + number + "}}");
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (malformedVariables) {
+      setSubmission({ phase: "error", message: "Use consecutive placeholders only: {{1}}, {{2}}, and so on." });
+      return;
+    }
+    setSubmission({ phase: "submitting", message: "" });
+    try {
+      const response = await apiFetch(`${API}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft)
+      });
+      const created = await response.json();
+      const status = String(created.template?.status || "PENDING").toUpperCase();
+      const phase = status === "APPROVED" ? "approved" : status === "REJECTED" ? "rejected" : "pending";
+      setSubmission({ phase, message: phase === "approved" ? "Meta approved this template." : phase === "rejected" ? "Meta rejected this template." : "Submitted to Meta. It is pending review." });
+      await onSubmitted(created);
+    } catch (submitError) {
+      setSubmission({ phase: "error", message: submitError?.message || "Meta could not accept this template." });
+    }
+  };
+
+  const stateColor = submission.phase === "error" || submission.phase === "rejected" ? "#FCA5A5" : submission.phase === "approved" ? "#86EFAC" : submission.phase === "pending" ? "#FDE68A" : "var(--mist)";
+
+  return (
+    <div className="card" style={{ padding: 22, marginBottom: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        <div>
+          <div className="editorial" style={{ color: "var(--cream)", fontSize: 25, fontWeight: 600 }}>Create WhatsApp template</div>
+          <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 5 }}>Create a body-only template and submit it securely to Meta for review.</div>
+        </div>
+        <button type="button" className="btn btn-wire" onClick={onClose}>Close</button>
+      </div>
+      <form onSubmit={submit}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(150px, 0.7fr) minmax(130px, 0.55fr)", gap: 12 }}>
+          <div>
+            <label className="label" htmlFor="template-name">Template name</label>
+            <input id="template-name" className="input" value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="booking_reminder" maxLength={100} required disabled={submission.phase === "submitting"} />
+            <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>Lowercase letters, numbers and underscores only.</div>
+          </div>
+          <div>
+            <label className="label" htmlFor="template-category">Category</label>
+            <select id="template-category" className="input" value={draft.category} onChange={(event) => update("category", event.target.value)} disabled={submission.phase === "submitting"}>
+              <option value="UTILITY">Utility</option>
+              <option value="MARKETING">Marketing</option>
+            </select>
+          </div>
+          <div>
+            <label className="label" htmlFor="template-language">Language</label>
+            <select id="template-language" className="input" value={draft.language} onChange={(event) => update("language", event.target.value)} disabled={submission.phase === "submitting"}>
+              <option value="en_US">English (US)</option>
+              <option value="en_GB">English (UK)</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <label className="label" htmlFor="template-body">Message body</label>
+          <textarea id="template-body" className="input" value={draft.body} onChange={(event) => update("body", event.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required disabled={submission.phase === "submitting"} style={{ minHeight: 120, resize: "vertical", paddingTop: 12 }} />
+          <div style={{ color: malformedVariables ? "#FCA5A5" : "var(--mist)", fontSize: 10, marginTop: 6 }}>{malformedVariables ? "Placeholders must be consecutive: {{1}}, {{2}}, and so on." : "Optional placeholders must use numbered format: {{1}}, {{2}}, and so on."}</div>
+        </div>
+        {!!rawVariables.length && !malformedVariables && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
+          {rawVariables.map((number, index) => <div key={number}>
+            <label className="label" htmlFor={"template-example-" + number}>Example for {"{{" + number + "}}"}</label>
+            <input id={"template-example-" + number} className="input" value={draft.variable_examples[index] || ""} onChange={(event) => {
+              const examples = [...draft.variable_examples];
+              examples[index] = event.target.value;
+              update("variable_examples", examples);
+            }} placeholder="Example value" maxLength={128} required disabled={submission.phase === "submitting"} />
+          </div>)}
+        </div>}
+        <div style={{ marginTop: 18, padding: 14, background: "rgba(255,255,255,0.025)", border: "1px solid var(--wire)" }}>
+          <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Preview</div>
+          <div style={{ color: "var(--cream)", whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6 }}>{preview || "Your message preview will appear here."}</div>
+        </div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
+          <button className="btn btn-gold" type="submit" disabled={submission.phase === "submitting" || malformedVariables}>{submission.phase === "submitting" ? "Submitting…" : "Submit to Meta"}</button>
+          <span className="mono" role={submission.phase === "error" || submission.phase === "rejected" ? "alert" : "status"} style={{ color: stateColor, fontSize: 9, letterSpacing: 1, textTransform: "uppercase" }}>
+            {submission.phase === "draft" ? "Draft locally" : submission.message || "Meta error"}
+          </span>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function WhatsAppTemplates({ customer }) {
   // This page mounts only after the user chooses it, so Meta is never queried
   // during dashboard/session restoration or while other pages are open.
   const [data, setData] = useState(null);
@@ -1392,6 +1500,8 @@ function WhatsAppTemplates() {
   const [recipient, setRecipient] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
+  const [showComposer, setShowComposer] = useState(false);
+  const canManageTemplates = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
 
   const templates = data?.templates || [];
   const selected = templates.find((template) => String(template.id) === selectedId) || templates[0] || null;
@@ -1407,6 +1517,11 @@ function WhatsAppTemplates() {
 
   const refresh = async () => {
     setResult(null);
+    await refetch();
+  };
+
+  const onTemplateSubmitted = async (created) => {
+    setResult({ ok: true, message: `Meta received “${created.template?.name || "your template"}”. The live list below is refreshed from Meta.` });
     await refetch();
   };
 
@@ -1438,8 +1553,13 @@ function WhatsAppTemplates() {
           <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase", marginBottom: 5 }}>Live Meta data</div>
           <div style={{ color: "var(--mist)", fontSize: 12 }}>{data?.connection?.display_name ? `Connected number: ${data.connection.display_name}` : "Templates are read directly from Meta."}</div>
         </div>
-        <button className="btn btn-wire" onClick={refresh} disabled={loading} aria-label="Refresh WhatsApp templates">{loading ? "Refreshing…" : "Refresh templates"}</button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {canManageTemplates && <button className="btn btn-gold" onClick={() => setShowComposer((current) => !current)} aria-expanded={showComposer}>{showComposer ? "Close composer" : "Create template"}</button>}
+          <button className="btn btn-wire" onClick={refresh} disabled={loading} aria-label="Refresh WhatsApp templates">{loading ? "Refreshing…" : "Refresh templates"}</button>
+        </div>
       </div>
+
+      {showComposer && canManageTemplates && <TemplateComposer onClose={() => setShowComposer(false)} onSubmitted={onTemplateSubmitted} />}
 
       {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "#FCA5A5" }}>We could not load templates: {error}</div> : !templates.length ? (
         <div className="card" style={{ padding: 24, color: "var(--mist)" }}>No WhatsApp templates were returned for this workspace’s connected account.</div>
@@ -1676,7 +1796,7 @@ export default function App() {
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Message Log",  comp: <MessageLog customer={customer} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates /> },
+    templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
