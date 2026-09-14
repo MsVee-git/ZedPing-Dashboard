@@ -1368,111 +1368,52 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
 
 // ── WHATSAPP TEMPLATES ───────────────────────────────────────────────────────
 function TemplateComposer({ onSubmitted, onClose }) {
-  const [draft, setDraft] = useState({ name: "", category: "UTILITY", language: "en_US", body: "", variable_examples: [] });
+  const [draft, setDraft] = useState({ name: "", category: "UTILITY", language: "en_US", body: "", variable_examples: [], header_type: "none", header_text: "", footer_text: "", buttons: [] });
+  const [headerFile, setHeaderFile] = useState(null);
   const [submission, setSubmission] = useState({ phase: "draft", message: "" });
   const rawVariables = [...new Set([...draft.body.matchAll(/{{(\d+)}}/g)].map((match) => Number(match[1])))];
   const variableKey = rawVariables.join(",");
   const malformedVariables = /{{|}}/.test(draft.body.replace(/{{\d+}}/g, "")) || rawVariables.some((number, index) => number !== index + 1);
+  const mediaHeader = ["image", "document"].includes(draft.header_type);
 
-  useEffect(() => {
-    setDraft((current) => ({
-      ...current,
-      variable_examples: rawVariables.map((_, index) => current.variable_examples[index] || "")
-    }));
-  }, [variableKey]);
-
-  const update = (field, value) => {
-    setDraft((current) => ({ ...current, [field]: value }));
-    if (submission.phase !== "draft") setSubmission({ phase: "draft", message: "" });
-  };
-
+  useEffect(() => { setDraft((current) => ({ ...current, variable_examples: rawVariables.map((_, index) => current.variable_examples[index] || "") })); }, [variableKey]);
+  const update = (field, value) => { setDraft((current) => ({ ...current, [field]: value })); if (submission.phase !== "draft") setSubmission({ phase: "draft", message: "" }); };
+  const updateButton = (index, field, value) => update("buttons", draft.buttons.map((button, item) => item === index ? { ...button, [field]: value } : button));
   const preview = draft.body.replace(/{{(\d+)}}/g, (_, number) => draft.variable_examples[Number(number) - 1] || "{{" + number + "}}");
+  const addButton = () => { if (draft.buttons.length < 3) update("buttons", [...draft.buttons, { type: "quick_reply", text: "" }]); };
 
   const submit = async (event) => {
     event.preventDefault();
-    if (malformedVariables) {
-      setSubmission({ phase: "error", message: "Use consecutive placeholders only: {{1}}, {{2}}, and so on." });
-      return;
-    }
+    if (malformedVariables) return setSubmission({ phase: "error", message: "Use consecutive placeholders only: {{1}}, {{2}}, and so on." });
+    if (mediaHeader && !headerFile) return setSubmission({ phase: "error", message: "Select the required header media file." });
     setSubmission({ phase: "submitting", message: "" });
     try {
-      const response = await apiFetch(`${API}/templates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft)
-      });
+      const form = new FormData();
+      for (const field of ["name", "category", "language", "body", "header_type", "header_text", "footer_text"]) form.append(field, draft[field]);
+      form.append("variable_examples", JSON.stringify(draft.variable_examples));
+      form.append("buttons", JSON.stringify(draft.buttons));
+      if (headerFile) form.append("header_media", headerFile);
+      const response = await apiFetch(`${API}/templates`, { method: "POST", body: form });
       const created = await response.json();
       const status = String(created.template?.status || "PENDING").toUpperCase();
-      const phase = status === "APPROVED" ? "approved" : status === "REJECTED" ? "rejected" : "pending";
-      setSubmission({ phase, message: phase === "approved" ? "Meta approved this template." : phase === "rejected" ? "Meta rejected this template." : "Submitted to Meta. It is pending review." });
+      setSubmission({ phase: status === "APPROVED" ? "approved" : status === "REJECTED" ? "rejected" : "pending", message: status === "APPROVED" ? "Meta approved this template." : status === "REJECTED" ? "Meta rejected this template." : "Submitted to Meta for review." });
       await onSubmitted(created);
-    } catch (submitError) {
-      setSubmission({ phase: "error", message: submitError?.message || "Meta could not accept this template." });
-    }
+    } catch (submitError) { setSubmission({ phase: "error", message: submitError?.message || "Meta could not accept this template." }); }
   };
-
-  const stateColor = submission.phase === "error" || submission.phase === "rejected" ? "#FCA5A5" : submission.phase === "approved" ? "#86EFAC" : submission.phase === "pending" ? "#FDE68A" : "var(--mist)";
-
-  return (
-    <div className="card" style={{ padding: 22, marginBottom: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-        <div>
-          <div className="editorial" style={{ color: "var(--cream)", fontSize: 25, fontWeight: 600 }}>Create WhatsApp template</div>
-          <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 5 }}>Create a body-only template and submit it securely to Meta for review.</div>
-        </div>
-        <button type="button" className="btn btn-wire" onClick={onClose}>Close</button>
-      </div>
-      <form onSubmit={submit}>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(150px, 0.7fr) minmax(130px, 0.55fr)", gap: 12 }}>
-          <div>
-            <label className="label" htmlFor="template-name">Template name</label>
-            <input id="template-name" className="input" value={draft.name} onChange={(event) => update("name", event.target.value)} placeholder="booking_reminder" maxLength={100} required disabled={submission.phase === "submitting"} />
-            <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>Lowercase letters, numbers and underscores only.</div>
-          </div>
-          <div>
-            <label className="label" htmlFor="template-category">Category</label>
-            <select id="template-category" className="input" value={draft.category} onChange={(event) => update("category", event.target.value)} disabled={submission.phase === "submitting"}>
-              <option value="UTILITY">Utility</option>
-              <option value="MARKETING">Marketing</option>
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="template-language">Language</label>
-            <select id="template-language" className="input" value={draft.language} onChange={(event) => update("language", event.target.value)} disabled={submission.phase === "submitting"}>
-              <option value="en_US">English (US)</option>
-              <option value="en_GB">English (UK)</option>
-              <option value="en">English</option>
-            </select>
-          </div>
-        </div>
-        <div style={{ marginTop: 16 }}>
-          <label className="label" htmlFor="template-body">Message body</label>
-          <textarea id="template-body" className="input" value={draft.body} onChange={(event) => update("body", event.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required disabled={submission.phase === "submitting"} style={{ minHeight: 120, resize: "vertical", paddingTop: 12 }} />
-          <div style={{ color: malformedVariables ? "#FCA5A5" : "var(--mist)", fontSize: 10, marginTop: 6 }}>{malformedVariables ? "Placeholders must be consecutive: {{1}}, {{2}}, and so on." : "Optional placeholders must use numbered format: {{1}}, {{2}}, and so on."}</div>
-        </div>
-        {!!rawVariables.length && !malformedVariables && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
-          {rawVariables.map((number, index) => <div key={number}>
-            <label className="label" htmlFor={"template-example-" + number}>Example for {"{{" + number + "}}"}</label>
-            <input id={"template-example-" + number} className="input" value={draft.variable_examples[index] || ""} onChange={(event) => {
-              const examples = [...draft.variable_examples];
-              examples[index] = event.target.value;
-              update("variable_examples", examples);
-            }} placeholder="Example value" maxLength={128} required disabled={submission.phase === "submitting"} />
-          </div>)}
-        </div>}
-        <div style={{ marginTop: 18, padding: 14, background: "rgba(255,255,255,0.025)", border: "1px solid var(--wire)" }}>
-          <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 8 }}>Preview</div>
-          <div style={{ color: "var(--cream)", whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.6 }}>{preview || "Your message preview will appear here."}</div>
-        </div>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 16, flexWrap: "wrap" }}>
-          <button className="btn btn-gold" type="submit" disabled={submission.phase === "submitting" || malformedVariables}>{submission.phase === "submitting" ? "Submitting…" : "Submit to Meta"}</button>
-          <span className="mono" role={submission.phase === "error" || submission.phase === "rejected" ? "alert" : "status"} style={{ color: stateColor, fontSize: 9, letterSpacing: 1, textTransform: "uppercase" }}>
-            {submission.phase === "draft" ? "Draft locally" : submission.message || "Meta error"}
-          </span>
-        </div>
-      </form>
-    </div>
-  );
+  const stateColor = ["error", "rejected"].includes(submission.phase) ? "#FCA5A5" : submission.phase === "approved" ? "#86EFAC" : submission.phase === "pending" ? "#FDE68A" : "var(--mist)";
+  return <div className="card" style={{ padding: 22, marginBottom: 18 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 18 }}><div><div className="editorial" style={{ color: "var(--cream)", fontSize: 25, fontWeight: 600 }}>Create WhatsApp template</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 5 }}>Meta-ready headers, footer and buttons. ZedPing constructs the final Meta components securely.</div></div><button type="button" className="btn btn-wire" onClick={onClose}>Close</button></div>
+    <form onSubmit={submit}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(140px,.7fr) minmax(130px,.55fr)", gap: 12 }}><div><label className="label">Template name</label><input className="input" value={draft.name} onChange={e=>update("name",e.target.value)} placeholder="booking_reminder" maxLength={100} required /></div><div><label className="label">Category</label><select className="input" value={draft.category} onChange={e=>update("category",e.target.value)}><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option></select></div><div><label className="label">Language</label><select className="input" value={draft.language} onChange={e=>update("language",e.target.value)}><option value="en_US">English (US)</option><option value="en_GB">English (UK)</option><option value="en">English</option></select></div></div>
+      <div style={{ display:"grid",gridTemplateColumns:"minmax(160px,.55fr) minmax(0,1fr)",gap:12,marginTop:16 }}><div><label className="label">Header</label><select className="input" value={draft.header_type} onChange={e=>{update("header_type",e.target.value);setHeaderFile(null)}}><option value="none">No header</option><option value="text">Text</option><option value="image">Image</option><option value="document">Document (PDF)</option></select></div>{draft.header_type==="text"&&<div><label className="label">Header text</label><input className="input" value={draft.header_text} onChange={e=>update("header_text",e.target.value)} maxLength={60} required /></div>}{mediaHeader&&<div><label className="label">{draft.header_type==="image"?"Header image (JPEG/PNG, up to 10 MB)":"Header document (PDF, up to 10 MB)"}</label><input className="input" type="file" accept={draft.header_type==="image"?"image/jpeg,image/png":"application/pdf"} onChange={e=>setHeaderFile(e.target.files?.[0]||null)} required /></div>}</div>
+      <div style={{ marginTop:16 }}><label className="label">Message body</label><textarea className="input" value={draft.body} onChange={e=>update("body",e.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required style={{minHeight:110,resize:"vertical",paddingTop:12}} /><div style={{color:malformedVariables?"#FCA5A5":"var(--mist)",fontSize:10,marginTop:6}}>{malformedVariables?"Placeholders must be consecutive.":"Use optional numbered placeholders: {{1}}, {{2}}."}</div></div>
+      {!!rawVariables.length&&!malformedVariables&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginTop:12}}>{rawVariables.map((number,index)=><div key={number}><label className="label">Example for {"{{"+number+"}}"}</label><input className="input" value={draft.variable_examples[index]||""} onChange={e=>{const values=[...draft.variable_examples];values[index]=e.target.value;update("variable_examples",values)}} required maxLength={128}/></div>)}</div>}
+      <div style={{marginTop:14}}><label className="label">Footer (optional)</label><input className="input" value={draft.footer_text} onChange={e=>update("footer_text",e.target.value)} maxLength={60} placeholder="Reply STOP to opt out" /></div>
+      <div style={{marginTop:16,borderTop:"1px solid var(--wire)",paddingTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><label className="label">Buttons (optional)</label><button type="button" className="btn btn-wire" onClick={addButton} disabled={draft.buttons.length>=3}>Add button</button></div>{draft.buttons.map((button,index)=><div key={index} style={{display:"grid",gridTemplateColumns:"150px minmax(130px,.6fr) minmax(0,1fr) auto",gap:8,marginTop:8}}><select className="input" value={button.type} onChange={e=>updateButton(index,"type",e.target.value)}><option value="quick_reply">Quick reply</option><option value="url">URL</option><option value="phone_number">Phone number</option></select><input className="input" value={button.text} onChange={e=>updateButton(index,"text",e.target.value)} placeholder="Button text" maxLength={25} required/>{button.type==="url"?<input className="input" value={button.url||""} onChange={e=>updateButton(index,"url",e.target.value)} placeholder="https://example.com" required/>:button.type==="phone_number"?<input className="input" value={button.phone_number||""} onChange={e=>updateButton(index,"phone_number",e.target.value)} placeholder="+260..." required/>:<div/>}<button type="button" className="btn btn-wire" onClick={()=>update("buttons",draft.buttons.filter((_,item)=>item!==index))}>Remove</button></div>)}</div>
+      <div style={{marginTop:18,padding:14,background:"rgba(255,255,255,.025)",border:"1px solid var(--wire)"}}><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Live preview</div>{draft.header_type==="text"&&<div style={{color:"var(--cream)",fontWeight:600,marginBottom:8}}>{draft.header_text||"Header text"}</div>}{mediaHeader&&<div style={{color:"var(--mist)",fontSize:11,marginBottom:8}}>{headerFile?headerFile.name:`${draft.header_type} header media`}</div>}<div style={{color:"var(--cream)",whiteSpace:"pre-wrap",fontSize:13,lineHeight:1.6}}>{preview||"Your message preview will appear here."}</div>{draft.footer_text&&<div style={{color:"var(--mist)",fontSize:11,marginTop:10}}>{draft.footer_text}</div>}{draft.buttons.length>0&&<div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12}}>{draft.buttons.map((button,index)=><span key={index} style={{border:"1px solid var(--wire2)",padding:"6px 10px",fontSize:11,color:"var(--gold2)"}}>{button.text||"Button"}</span>)}</div>}</div>
+      <div style={{display:"flex",gap:12,alignItems:"center",marginTop:16,flexWrap:"wrap"}}><button className="btn btn-gold" type="submit" disabled={submission.phase==="submitting"||malformedVariables}>{submission.phase==="submitting"?"Submitting…":"Submit to Meta"}</button><span className="mono" role={["error","rejected"].includes(submission.phase)?"alert":"status"} style={{color:stateColor,fontSize:9,letterSpacing:1,textTransform:"uppercase"}}>{submission.phase==="draft"?"Draft locally":submission.message}</span></div>
+    </form>
+  </div>;
 }
 
 function WhatsAppTemplates({ customer }) {
