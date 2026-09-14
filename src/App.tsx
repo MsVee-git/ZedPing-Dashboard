@@ -1441,6 +1441,7 @@ function WhatsAppTemplates({ customer }) {
   const [selectedId, setSelectedId] = useState("");
   const [recipient, setRecipient] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendHeaderFile, setSendHeaderFile] = useState(null);
   const [result, setResult] = useState(null);
   const [showComposer, setShowComposer] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -1452,6 +1453,8 @@ function WhatsAppTemplates({ customer }) {
   const approved = selected && String(selected.status || "").toUpperCase() === "APPROVED";
   const hasVariables = selected && /{{\s*\d+\s*}}/.test(JSON.stringify(selected.components || []));
   const body = selected?.components?.find((component) => String(component.type || "").toUpperCase() === "BODY")?.text;
+  const mediaHeaderType = String(selected?.components?.find((component) => String(component.type || "").toUpperCase() === "HEADER")?.format || "").toLowerCase();
+  const requiresMediaHeader = ["image", "document"].includes(mediaHeaderType);
 
   useEffect(() => {
     if (templates.length && !templates.some((template) => String(template.id) === selectedId)) {
@@ -1492,16 +1495,16 @@ function WhatsAppTemplates({ customer }) {
   };
 
   const send = async () => {
-    if (!selected || !approved || hasVariables || !recipient.trim()) return;
+    if (!selected || !approved || hasVariables || !recipient.trim() || (requiresMediaHeader && !sendHeaderFile)) return;
     if (!window.confirm(`Send the approved template “${selected.name}” to ${recipient.trim()}? This sends a real WhatsApp message.`)) return;
     setSending(true);
     setResult(null);
     try {
-      const response = await apiFetch(`${API}/templates/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template_id: String(selected.id), to: recipient.trim() })
-      });
+      const form = new FormData();
+      form.append("template_id", String(selected.id));
+      form.append("to", recipient.trim());
+      if (sendHeaderFile) form.append("header_media", sendHeaderFile);
+      const response = await apiFetch(`${API}/templates/send`, { method: "POST", body: form });
       const sent = await response.json();
       setResult({ ok: true, message: `WhatsApp accepted “${sent.template?.name || selected.name}”.${sent.meta_message_id ? " Message ID recorded." : ""}` });
     } catch (sendError) {
@@ -1565,8 +1568,9 @@ function WhatsAppTemplates({ customer }) {
               <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 18 }}>
                 <label className="label" htmlFor="template-recipient">Test recipient number</label>
                 <input id="template-recipient" className="input" placeholder="+260971234567" value={recipient} onChange={(event) => setRecipient(event.target.value)} disabled={sending} />
+                {requiresMediaHeader && <div style={{ marginTop: 12 }}><label className="label">Required {mediaHeaderType} header media</label><input className="input" type="file" accept={mediaHeaderType === "image" ? "image/jpeg,image/png" : "application/pdf"} onChange={(event) => setSendHeaderFile(event.target.files?.[0] || null)} disabled={sending} required /></div>}
                 <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 7 }}>This sends a real WhatsApp template message after confirmation.</div>
-                <button className="btn btn-gold" onClick={send} disabled={sending || !recipient.trim()} style={{ marginTop: 14 }}>{sending ? "Sending…" : "Send approved template"}</button>
+                <button className="btn btn-gold" onClick={send} disabled={sending || !recipient.trim() || (requiresMediaHeader && !sendHeaderFile)} style={{ marginTop: 14 }}>{sending ? "Sending…" : "Send approved template"}</button>
               </div>
             )}
             {result && <div role={result.ok ? "status" : "alert"} style={{ color: result.ok ? "#86EFAC" : "#FCA5A5", fontSize: 12, marginTop: 16 }}>{result.message}</div>}
