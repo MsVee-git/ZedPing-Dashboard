@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { WhatsAppConnection } from "./WhatsAppConnection";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
+import * as XLSX from "xlsx";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
@@ -759,23 +760,114 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
 
 // ── BROADCASTS ────────────────────────────────────────────────────────────────
 function Broadcasts({ customer }) {
-  const { data, loading, refetch } = useAPI("/broadcasts/scheduled");
-  const [form, setForm] = useState({ message: "", phone: "" });
+  const { data: history, loading: historyLoading, refetch: refetchHistory } = useAPI("/broadcasts/scheduled");
+  const { data: contacts, loading: contactsLoading } = useAPI("/contacts");
+  const [mode, setMode] = useState("list");
+  const [message, setMessage] = useState("");
+  const [phone, setPhone] = useState("");
+  const [groups, setGroups] = useState([]);
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [recipients, setRecipients] = useState([]);
+  const [uploadReport, setUploadReport] = useState(null);
+  const [saveImported, setSaveImported] = useState(false);
   const [sending, setSending] = useState(false);
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const [notice, setNotice] = useState(null);
+  const [activityFilter, setActivityFilter] = useState("all");
+  const uploadRef = useRef();
 
+  useEffect(() => {
+    let alive = true;
+    async function loadGroups() {
+      if (!customer?.id) return;
+      const { data } = await supabase.from("contact_groups").select("id,name,description,total_contacts").eq("customer_id", customer.id).order("name");
+      if (alive) setGroups(data || []);
+    }
+    loadGroups();
+    return () => { alive = false; };
+  }, [customer?.id]);
+
+  const normalizePhone = (value) => {
+    const raw = String(value || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return null;
+    if (raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
+    if (/^260\d{9}$/.test(digits)) return "+" + digits;
+    if (/^0\d{9}$/.test(digits)) return "+260" + digits.slice(1);
+    if (/^[79]\d{8}$/.test(digits)) return "+260" + digits;
+    if (/^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
+    return null;
+  };
+
+  const setGroup = async (groupId) => {
+    setSelectedGroupId(groupId);
+    setRecipients([]);
+    setNotice(null);
+    if (!groupId) return;
+    const { data: memberships, error } = await supabase.from("contact_group_members").select("contact_id").eq("group_id", groupId);
+    if (error) { setNotice({ ok: false, text: "Could not load this contact list." }); return; }
+    const ids = new Set((memberships || []).map(row => row.contact_id));
+    const selected = (contacts || []).filter(contact => ids.has(contact.id));
+    setRecipients(selected);
+  };
+
+  const parseUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadReport(null); setRecipients([]); setNotice(null);
+    if (file.size > 5 * 1024 * 1024) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: "File must be 5 MB or smaller" }] }); return; }
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
+      const headers = (rows[0] || []).map(value => String(value).trim().toLowerCase());
+      const nameIndex = headers.findIndex(header => header.includes("name"));
+      const phoneIndex = headers.findIndex(header => header.includes("phone") || header.includes("number") || header.includes("mobile"));
+      if (nameIndex < 0 || phoneIndex < 0) throw new Error("Your file needs Name and Phone Number columns.");
+      const invalid = [], seen = new Set(), valid = [];
+      rows.slice(1).forEach((row, index) => {
+        if (!row.some(value => String(value).trim())) return;
+        const phone_number = normalizePhone(row[phoneIndex]);
+        const name = String(row[nameIndex] || "").trim();
+        if (!name || !phone_number) { invalid.push({ row: index + 2, reason: !name ? "Missing name" : "Invalid phone number" }); return; }
+        if (!seen.has(phone_number)) { seen.add(phone_number); valid.push({ name, phone_number }); }
+      });
+      setRecipients(valid); setUploadReport({ valid, invalid, file: file.name });
+    } catch (error) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: error.message || "Could not read this file" }] }); }
+  };
+
+  const recipientsForMode = () => {
+    if (mode === "single") {
+      const phone_number = normalizePhone(phone);
+      return phone_number ? [{ name: "Contact", phone_number }] : [];
+    }
+    return recipients;
+  };
 
   const send = async () => {
-    if (!form.message||!form.phone) return;
-    setSending(true);
+    const selected = recipientsForMode();
+    if (!message.trim() || !selected.length) { setNotice({ ok: false, text: "Add a message and at least one valid recipient." }); return; }
+    setSending(true); setNotice(null);
     try {
-      const r = await apiFetch(`${API}/broadcasts/send`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contacts:[{name:"Contact",phone_number:form.phone}],message:form.message})});
-      const d = await r.json();
-      alert(`Sent: ${d.sent} · Failed: ${d.failed}`);
-      setForm({message:"",phone:""});
-    } catch(e) { alert("Error: "+e.message); }
+      if (mode === "upload" && saveImported && uploadReport?.valid?.length) {
+        await apiFetch(`${API}/contacts/upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: uploadReport.valid }) });
+      }
+      const response = await apiFetch(`${API}/broadcasts/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: selected, message: message.trim() }) });
+      const result = await response.json();
+      setNotice({ ok: result.failed === 0, text: `Sent: ${result.sent} · Failed: ${result.failed}` });
+      if (mode === "single") setPhone("");
+      if (mode === "upload") { setRecipients([]); setUploadReport(null); }
+      refetchHistory();
+    } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
     finally { setSending(false); }
   };
+
+  const statusFor = (broadcast) => {
+    if (broadcast.status === "completed") return { label: "SENT", cls: "badge-green" };
+    if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
+    if (broadcast.status === "pending" || broadcast.status === "sending") return { label: "SCHEDULED", cls: "badge-gold" };
+    return null;
+  };
+  const activity = (history || []).filter(broadcast => activityFilter === "all" || statusFor(broadcast)?.label.toLowerCase() === activityFilter);
 
   return (
     <div className="pad" style={{ padding: 28 }}>
@@ -783,25 +875,50 @@ function Broadcasts({ customer }) {
       <div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Send Message</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {[["list", "Select Contact List"], ["upload", "Upload Contacts"], ["single", "Single Number"]].map(([id, label]) => <button key={id} className={mode === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => { setMode(id); setNotice(null); }} style={{ fontSize: 10, padding: "8px 12px" }}>{label}</button>)}
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div><label className="label">Phone Number</label><input className="input" placeholder="+260971234567" value={form.phone} onChange={e=>set("phone",e.target.value)} /></div>
-          <div><label className="label">Message</label><textarea className="textarea" placeholder="Your message here..." value={form.message} onChange={e=>set("message",e.target.value)} /></div>
-          <button className="btn btn-gold" onClick={send} disabled={sending} style={{ alignSelf:"flex-start", padding:"10px 22px" }}>
-            <Ic n="send" s={12} c="var(--ink)" />{sending?"Sending...":"Send Now"}
-          </button>
+          {mode === "list" && <div>
+            <label className="label">Contact List</label>
+            <select className="input" value={selectedGroupId} onChange={event => setGroup(event.target.value)} disabled={contactsLoading}>
+              <option value="">Select an existing list…</option>
+              {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select>
+            {groups.length === 0 && <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>No contact lists with members are available yet. Create and populate a list in Contacts first.</div>}
+            {selectedGroupId && <div className="mono" style={{ fontSize: 10, color: "var(--gold2)", marginTop: 8 }}>{recipients.length} recipient{recipients.length === 1 ? "" : "s"} selected</div>}
+          </div>}
+          {mode === "upload" && <div>
+            <label className="label">CSV or XLSX file</label>
+            <input ref={uploadRef} type="file" accept=".csv,.xlsx" onChange={parseUpload} className="input" style={{ padding: 9 }} />
+            <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>Required columns: Name, Phone Number · 5 MB maximum</div>
+            {uploadReport && <div style={{ marginTop: 10, padding: "10px 12px", border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}>
+              <div className="mono" style={{ fontSize: 10, color: "var(--success-text)" }}>{uploadReport.valid.length} valid recipient{uploadReport.valid.length === 1 ? "" : "s"}</div>
+              {uploadReport.invalid.length > 0 && <div className="mono" style={{ fontSize: 10, color: "var(--error-text)", marginTop: 5 }}>{uploadReport.invalid.length} invalid row{uploadReport.invalid.length === 1 ? "" : "s"} · {uploadReport.invalid.slice(0, 3).map(item => item.row ? `Row ${item.row}: ${item.reason}` : item.reason).join(" · ")}</div>}
+            </div>}
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 12, color: "var(--mist)", cursor: "pointer" }}><input type="checkbox" checked={saveImported} onChange={event => setSaveImported(event.target.checked)} />Save these contacts to Contacts</label>
+          </div>}
+          {mode === "single" && <div><label className="label">Phone Number</label><input className="input" placeholder="+260971234567" value={phone} onChange={event => setPhone(event.target.value)} /></div>}
+          <div><label className="label">Message</label><textarea className="textarea" maxLength={4096} placeholder="Your message here..." value={message} onChange={event => setMessage(event.target.value)} /><div className="mono" style={{ fontSize: 10, color: "var(--mist)", textAlign: "right", marginTop: 5 }}>{message.length}/4096</div></div>
+          {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
+          <button className="btn btn-gold" onClick={send} disabled={sending} style={{ alignSelf: "flex-start", padding: "10px 22px" }}><Ic n="send" s={12} c="var(--ink)" />{sending ? "Sending..." : "Send Now"}</button>
         </div>
       </div>
-      <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Scheduled Broadcasts</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Broadcast Activity</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sent","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+      </div>
       <div className="card">
-        {loading ? <Loader /> : !(data?.length) ? <Empty msg="No scheduled broadcasts" /> :
-          data.map((b,i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{b.broadcast_name}</div>
-              <div style={{ fontSize: 12, color: "var(--mist)" }}>{new Date(b.scheduled_at).toLocaleDateString()}</div>
-              <div className={`badge ${b.status==="completed"?"badge-green":b.status==="pending"?"badge-gold":"badge-blue"}`}>{b.status?.toUpperCase()}</div>
-            </div>
-          ))
-        }
+        {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
+          const status = statusFor(broadcast); if (!status) return null;
+          return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px", gap: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
+            <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{Array.isArray(broadcast.contacts) ? broadcast.contacts.length : 0} recipients</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString()}</div>
+            <div className={"badge " + status.cls}>{status.label}</div>
+          </div>;
+        })}
       </div>
     </div>
   );
