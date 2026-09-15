@@ -236,10 +236,10 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
             Connect the WhatsApp Business account your team uses to speak with customers. ZedPing will securely verify the account before it is connected to this workspace.
           </p>
 
-          {!profileComplete && <div role="status" style={{ marginTop: 14, color: "#FCD34D", fontSize: 12 }}>Complete and save the business profile above before connecting WhatsApp.</div>}
-          {!emailVerified && <div role="status" style={{ marginTop: 14, color: "#FCD34D", fontSize: 12 }}>Verify your email before connecting WhatsApp.</div>}
+          {!profileComplete && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>Complete and save the business profile above before connecting WhatsApp.</div>}
+          {!emailVerified && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>Verify your email before connecting WhatsApp.</div>}
           {!canManage && <div role="status" style={{ marginTop: 14, color: "var(--mist)", fontSize: 12 }}>Only workspace owners and admins can connect WhatsApp.</div>}
-          {!configured && canManage && <div role="status" style={{ marginTop: 14, color: "#FCD34D", fontSize: 12 }}>WhatsApp self-connection is being configured for this environment. Contact ZedPing support to connect your number.</div>}
+          {!configured && canManage && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>WhatsApp self-connection is being configured for this environment. Contact ZedPing support to connect your number.</div>}
 
           {canManage && emailVerified && profileComplete && configured && (
             <button className="btn btn-gold" type="button" onClick={start} disabled={busy} style={{ marginTop: 18 }}>
@@ -249,7 +249,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
         </>
       )}
 
-      {message && <div role={phase === "error" ? "alert" : "status"} aria-live="polite" style={{ marginTop: 14, color: phase === "error" ? "#FCA5A5" : phase === "complete" ? "#86EFAC" : "var(--cream2)", fontSize: 12, lineHeight: 1.5 }}>{message}</div>}
+      {message && <div role={phase === "error" ? "alert" : "status"} aria-live="polite" style={{ marginTop: 14, color: phase === "error" ? "var(--error-text)" : phase === "complete" ? "var(--success-text)" : "var(--cream2)", fontSize: 12, lineHeight: 1.5 }}>{message}</div>}
       {phase === "error" && !connection && canManage && emailVerified && profileComplete && configured && <button type="button" className="btn btn-wire" onClick={start} style={{ marginTop: 12 }}>Try again</button>}
     </section>
   );
