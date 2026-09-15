@@ -125,8 +125,10 @@ async function verifyWorkspaceSelection(workspaces, preferredId) {
   throw lastError || new Error("No authorized workspace is available for this account.");
 }
 
+import faceliftCss from "./facelift.css?inline";
+
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
   :root {
     --ink:   #090909;
@@ -150,7 +152,7 @@ const css = `
   body { font-family: 'DM Sans', sans-serif; background: var(--ink); color: var(--cream); -webkit-font-smoothing: antialiased; }
   a { text-decoration: none; color: inherit; }
 
-  .editorial { font-family: 'Cormorant Garant', serif; line-height: 1; }
+  .editorial { font-family: 'Cormorant Garamond', serif; line-height: 1; }
   .mono { font-family: 'DM Mono', monospace; }
 
   /* Buttons */
@@ -160,7 +162,7 @@ const css = `
   .btn-gold:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-wire { background: transparent; color: var(--cream2); border: 1px solid var(--wire); padding: 9px 18px; }
   .btn-wire:hover { border-color: var(--gold); color: var(--gold2); }
-  .btn-danger { background: transparent; color: #FCA5A5; border: 1px solid rgba(239,68,68,0.2); padding: 9px 18px; }
+  .btn-danger { background: transparent; color: var(--error-text); border: 1px solid rgba(239,68,68,0.2); padding: 9px 18px; }
 
   /* Inputs */
   .input { background: rgba(255,255,255,0.02); border: 1px solid var(--wire); padding: 11px 14px; font-size: 14px; color: var(--cream); outline: none; font-family: 'DM Sans'; transition: border-color 0.2s; width: 100%; border-radius: 0; }
@@ -176,9 +178,9 @@ const css = `
   /* Badges */
   .badge { display: inline-flex; align-items: center; padding: 2px 8px; font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; font-weight: 500; }
   .badge-gold { background: rgba(184,146,42,0.08); color: var(--gold2); border: 1px solid var(--wire2); }
-  .badge-green { background: rgba(34,197,94,0.06); color: #86EFAC; border: 1px solid rgba(34,197,94,0.15); }
+  .badge-green { background: rgba(34,197,94,0.06); color: var(--success-text); border: 1px solid rgba(34,197,94,0.15); }
   .badge-blue { background: rgba(59,130,246,0.06); color: #93C5FD; border: 1px solid rgba(59,130,246,0.15); }
-  .badge-red { background: rgba(239,68,68,0.06); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.15); }
+  .badge-red { background: rgba(239,68,68,0.06); color: var(--error-text); border: 1px solid rgba(239,68,68,0.15); }
   .badge-cream { background: rgba(242,237,228,0.04); color: var(--cream2); border: 1px solid var(--wire); }
 
   /* Table */
@@ -237,7 +239,8 @@ const css = `
     .stat-g { grid-template-columns: repeat(2,1fr) !important; gap: 10px !important; }
   }
 
-  ::-webkit-scrollbar { width: 3px; }
+  ${faceliftCss}
+  ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--ink); }
   ::-webkit-scrollbar-thumb { background: rgba(184,146,42,0.3); }
 `;
@@ -275,7 +278,7 @@ function Logo({ size = "md" }) {
         </div>
         <div style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, background: "var(--gold2)", borderRadius: "50%", boxShadow: "0 0 6px rgba(212,168,67,0.6)" }} />
       </div>
-      <span style={{ fontFamily: "Cormorant Garant, serif", fontWeight: 600, fontSize: fs, color: "var(--cream)", letterSpacing: 0.5 }}>
+      <span style={{ fontFamily: "Cormorant Garamond, serif", fontWeight: 600, fontSize: fs, color: "var(--cream)", letterSpacing: 0.5 }}>
         Zed<span style={{ color: "var(--gold2)" }}>Ping</span>
       </span>
     </div>
@@ -313,7 +316,7 @@ function useAPI(endpoint, deps = []) {
 // ── AUTH LAYOUT ───────────────────────────────────────────────────────────────
 function AuthWrap({ children }) {
   return (
-    <div style={{ minHeight: "100vh", background: "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" }}>
+    <div className="auth-wrap" style={{ minHeight: "100vh", background: "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", overflow: "hidden" }}>
       <div style={{ position: "absolute", top: "10%", right: "-5%", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(184,146,42,0.05) 0%, transparent 65%)", filter: "blur(60px)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(26,58,42,0.12) 0%, transparent 65%)", filter: "blur(60px)", pointerEvents: "none" }} />
       {[25,50,75].map(x => <div key={x} style={{ position: "absolute", top: 0, bottom: 0, left: `${x}%`, width: 1, background: "rgba(255,255,255,0.015)", pointerEvents: "none" }} />)}
@@ -371,7 +374,7 @@ function SignUp({ onSwitch, onAuth }) {
   };
 
   const plans = [
-    { id: "starter", label: "Starter", price: "K650" },
+    { id: "starter", label: "Starter", price: "K850" },
     { id: "business", label: "Business", price: "K1,500", popular: true },
     { id: "pro", label: "Pro", price: "K2,500" },
   ];
@@ -379,21 +382,21 @@ function SignUp({ onSwitch, onAuth }) {
   return (
     <AuthWrap>
       <div className="auth-card">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Create Account</div>
-        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>Get started free.</h2>
-        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32, lineHeight: 1.7 }}>Explore the full dashboard. Pay when you're ready to go live.</p>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>GET STARTED</div>
+        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>Create your ZedPing account</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32, lineHeight: 1.7 }}>Build smarter customer communication with ZedPing.</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div><label className="label">Your Name *</label><input className="input" placeholder="Veronica" value={f.name} onChange={e=>set("name",e.target.value)} /></div>
-            <div><label className="label">Business Name *</label><input className="input" placeholder="My Business" value={f.business_name} onChange={e=>set("business_name",e.target.value)} /></div>
+            <div><label className="label">Your Name *</label><input aria-label="Your name" autoComplete="name" className="input" placeholder="Your name" value={f.name} onChange={e=>set("name",e.target.value)} /></div>
+            <div><label className="label">Business Name *</label><input aria-label="Business name" className="input" placeholder="My Business" value={f.business_name} onChange={e=>set("business_name",e.target.value)} /></div>
           </div>
-          <div><label className="label">Email *</label><input className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} /></div>
+          <div><label className="label">Email *</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} /></div>
           <div><label className="label">Phone</label><input className="input" placeholder="+260971234567" value={f.phone} onChange={e=>set("phone",e.target.value)} /></div>
           <div>
             <label className="label">Password *</label>
             <div style={{ position: "relative" }}>
-              <input className="input" type={showP?"text":"password"} placeholder="Min 6 characters" value={f.password} onChange={e=>set("password",e.target.value)} style={{ paddingRight: 44 }} />
-              <button onClick={()=>setShowP(s=>!s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--mist)" }}>
+              <input aria-label="Password" className="input" type={showP?"text":"password"} placeholder="Min 6 characters" value={f.password} onChange={e=>set("password",e.target.value)} style={{ paddingRight: 44 }} />
+              <button aria-label={showP ? "Hide password" : "Show password"} type="button" onClick={()=>setShowP(s=>!s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--mist)" }}>
                 <Ic n={showP?"eyeoff":"eye"} s={14} c="var(--mist)" />
               </button>
             </div>
@@ -410,16 +413,16 @@ function SignUp({ onSwitch, onAuth }) {
               ))}
             </div>
           </div>
-          {verificationEmail && <div className="mono" role="status" style={{ color: "#86EFAC", fontSize: 11, lineHeight: 1.6 }}>
+          {verificationEmail && <div className="mono" role="status" style={{ color: "var(--success-text)", fontSize: 11, lineHeight: 1.6 }}>
             Account created. Verify <strong>{verificationEmail}</strong> before signing in.
             <button type="button" onClick={resendVerification} disabled={resending} style={{ display: "block", marginTop: 8, padding: 0, border: 0, background: "transparent", color: "var(--gold2)", cursor: "pointer", fontFamily: "inherit", fontSize: 10 }}>
               {resending ? "Resending…" : "Resend verification email"}
             </button>
-            {resendStatus && <span style={{ display: "block", marginTop: 6, color: resendStatus.includes("resent") ? "#86EFAC" : "#FCA5A5" }}>{resendStatus}</span>}
+            {resendStatus && <span style={{ display: "block", marginTop: 6, color: resendStatus.includes("resent") ? "var(--success-text)" : "var(--error-text)" }}>{resendStatus}</span>}
           </div>}
-          {err && <div className="mono" role="alert" style={{ color: "#FCA5A5", fontSize: 11, letterSpacing: 0.5 }}>{err}</div>}
+          {err && <div className="mono" role="alert" style={{ color: "var(--error-text)", fontSize: 11, letterSpacing: 0.5 }}>{err}</div>}
           <button className="btn btn-gold" onClick={submit} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 11, marginTop: 4 }}>
-            {loading ? <div className="spin" /> : "Start Exploring Free →"}
+            {loading ? <div className="spin" /> : "Create account →"}
           </button>
         </div>
         <p style={{ textAlign: "center", color: "var(--mist)", fontSize: 13, marginTop: 20 }}>
@@ -438,6 +441,7 @@ function Login({ onSwitch, onAuth }) {
   const [err, setErr] = useState("");
   const [showP, setShowP] = useState(false);
   const [reset, setReset] = useState(false);
+  const [forgot, setForgot] = useState(false);
   const set = (k,v) => setF(p => ({ ...p, [k]: v }));
 
   const submit = async () => {
@@ -466,32 +470,32 @@ function Login({ onSwitch, onAuth }) {
   return (
     <AuthWrap>
       <div className="auth-card">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Welcome Back</div>
-        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>Sign in.</h2>
-        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32 }}>Access your ZedPing dashboard.</p>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{forgot ? "RESET PASSWORD" : "WELCOME BACK"}</div>
+        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>{forgot ? "Forgot your password?" : "Sign in to your account"}</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32 }}>{forgot ? "Enter your email and we’ll send you a link to reset your password." : "Keep your business conversations moving — smarter, faster, on WhatsApp."}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div><label className="label">Email</label><input className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} /></div>
-          <div>
+          <div><label className="label">Email</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&(forgot ? sendReset() : submit())} /></div>
+          {!forgot && <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
               <label className="label" style={{ margin: 0 }}>Password</label>
-              <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", cursor: "pointer", letterSpacing: 1 }} onClick={sendReset}>Forgot?</span>
+              <button type="button" className="text-button" onClick={()=>{setForgot(true);setErr("");}}>Forgot password?</button>
             </div>
             <div style={{ position: "relative" }}>
-              <input className="input" type={showP?"text":"password"} placeholder="Your password" value={f.password} onChange={e=>set("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} style={{ paddingRight: 44 }} />
-              <button onClick={()=>setShowP(s=>!s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer" }}>
+              <input aria-label="Password" className="input" type={showP?"text":"password"} placeholder="Your password" value={f.password} onChange={e=>set("password",e.target.value)} onKeyDown={e=>e.key==="Enter"&&(forgot ? sendReset() : submit())} style={{ paddingRight: 44 }} />
+              <button aria-label={showP ? "Hide password" : "Show password"} type="button" onClick={()=>setShowP(s=>!s)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer" }}>
                 <Ic n={showP?"eyeoff":"eye"} s={14} c="var(--mist)" />
               </button>
             </div>
-          </div>
-          {err && <div className="mono" style={{ color: "#FCA5A5", fontSize: 11 }}>{err}</div>}
-          {reset && <div className="mono" style={{ color: "#86EFAC", fontSize: 11 }}>Reset email sent. Check your inbox.</div>}
-          <button className="btn btn-gold" onClick={submit} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
-            {loading ? <div className="spin" /> : "Sign In →"}
+          </div>}
+          {err && <div className="mono" style={{ color: "var(--error-text)", fontSize: 11 }}>{err}</div>}
+          {reset && <div className="mono" style={{ color: "var(--success-text)", fontSize: 11 }}>Reset email sent. Check your inbox.</div>}
+          <button className="btn btn-gold" onClick={forgot ? sendReset : submit} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
+            {loading ? <div className="spin" /> : forgot ? "Send reset link →" : "Sign in →"}
           </button>
         </div>
         <p style={{ textAlign: "center", color: "var(--mist)", fontSize: 13, marginTop: 20 }}>
-          Don't have an account?{" "}
-          <span style={{ color: "var(--gold2)", cursor: "pointer", fontWeight: 500 }} onClick={onSwitch}>Sign up free</span>
+          {forgot ? "Remember your password?" : "Don’t have an account?"}{" "}
+          <button className="text-button" onClick={()=>{if(forgot){setForgot(false);setErr("");}else onSwitch();}}>{forgot ? "Back to sign in" : "Create account"}</button>
         </p>
       </div>
     </AuthWrap>
@@ -519,13 +523,13 @@ function ResetPass({ onDone }) {
   return (
     <AuthWrap>
       <div className="auth-card">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>Security</div>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>RESET PASSWORD</div>
         <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 28, fontWeight: 600 }}>New password.</h2>
-        {ok ? <div className="mono" style={{ color: "#86EFAC", fontSize: 11, textAlign: "center", padding: "24px 0" }}>Password updated. Redirecting...</div> : (
+        {ok ? <div className="mono" style={{ color: "var(--success-text)", fontSize: 11, textAlign: "center", padding: "24px 0" }}>Password updated. Redirecting...</div> : (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div><label className="label">New Password</label><input className="input" type="password" placeholder="Min 6 characters" value={pw} onChange={e=>setPw(e.target.value)} /></div>
             <div><label className="label">Confirm Password</label><input className="input" type="password" placeholder="Repeat password" value={cpw} onChange={e=>setCpw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} /></div>
-            {err && <div className="mono" style={{ color: "#FCA5A5", fontSize: 11 }}>{err}</div>}
+            {err && <div className="mono" style={{ color: "var(--error-text)", fontSize: 11 }}>{err}</div>}
             <button className="btn btn-gold" onClick={submit} disabled={loading} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
               {loading ? <div className="spin" /> : "Set New Password →"}
             </button>
@@ -564,7 +568,7 @@ function VerifyEmail({ user, onLogout }) {
         <p style={{ color: "var(--mist)", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
           Verify <strong style={{ color: "var(--cream)" }}>{user.email}</strong> before completing setup or connecting WhatsApp.
         </p>
-        {status && <div className="mono" role="status" style={{ color: status.includes("resent") ? "#86EFAC" : "#FCA5A5", fontSize: 11, marginBottom: 16 }}>{status}</div>}
+        {status && <div className="mono" role="status" style={{ color: status.includes("resent") ? "var(--success-text)" : "var(--error-text)", fontSize: 11, marginBottom: 16 }}>{status}</div>}
         <button className="btn btn-gold" onClick={resend} disabled={sending} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
           {sending ? <div className="spin" /> : "Resend Verification Email"}
         </button>
@@ -577,13 +581,13 @@ function VerifyEmail({ user, onLogout }) {
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function Sidebar({ active, setActive, user, customer, onLogout, open, onClose }) {
   const links = [
-    { id: "overview", label: "Overview", icon: "home" },
+    { id: "overview", label: "Dashboard", icon: "home" },
     { id: "broadcasts", label: "Broadcasts", icon: "broadcast" },
     { id: "contacts", label: "Contacts", icon: "contacts" },
     { id: "messages", label: "Message Log", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
     { id: "templates", label: "WhatsApp Templates", icon: "messages" },
-    { id: "settings", label: "Account", icon: "settings" },
+    { id: "settings", label: "Settings", icon: "settings" },
   ];
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
 
@@ -615,13 +619,6 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
             </button>
           ))}
         </nav>
-        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--wire)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1, textTransform: "uppercase" }}>Broadcast limit</span>
-            <span className="mono" style={{ fontSize: 8, color: "var(--gold2)" }}>800 contacts</span>
-          </div>
-          <div className="progress"><div className="progress-fill" style={{ width: "28%" }} /></div>
-        </div>
         <div style={{ padding: "8px 8px 14px" }}>
           <button className="slink" onClick={onLogout} style={{ color: "rgba(239,68,68,0.6)" }}>
             <Ic n="logout" s={13} c="rgba(239,68,68,0.6)" /> Sign Out
@@ -636,7 +633,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
 function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWorkspaceId, switching }) {
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
   return (
-    <div className="desk-bar" style={{ height: 56, alignItems: "center", justifyContent: "space-between", padding: "0 32px", borderBottom: "1px solid var(--wire)", background: "rgba(9,9,9,0.9)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 10 }}>
+    <div className="desk-bar" style={{ height: 56, alignItems: "center", justifyContent: "space-between", padding: "0 32px", borderBottom: "1px solid var(--wire)", background: "var(--workspace-bg)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 1, height: 16, background: "var(--gold)", opacity: 0.6 }} />
         <span className="mono" style={{ fontSize: 10, color: "var(--cream2)", letterSpacing: 2, textTransform: "uppercase" }}>{title}</span>
@@ -660,7 +657,7 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWo
 function MobTopbar({ onMenu, onLogout, workspaces, activeWorkspaceId, onWorkspaceChange, switching }) {
   return (
     <div className="mob-bar">
-      <button onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--cream)", padding: 4 }}><Ic n="menu" s={20} c="var(--cream)" /></button>
+      <button aria-label="Open navigation" onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--cream)", padding: 4 }}><Ic n="menu" s={20} c="var(--cream)" /></button>
       {workspaces.length > 1 ? <select aria-label="Active workspace" value={activeWorkspaceId || ""} onChange={event => onWorkspaceChange(event.target.value)} disabled={switching} className="input" style={{ width: "42%", padding: "6px 8px", fontSize: 11, opacity: switching ? 0.6 : 1 }}>
         {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
       </select> : <Logo size="sm" />}
@@ -695,16 +692,16 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
   const profileComplete = Boolean(customer?.profile_completed_at);
   const connectionFailed = whatsappConnectionState?.phase === "error";
   const activation = whatsappConnected
-    ? { title: "WhatsApp is connected", detail: "This workspace is ready to send and receive WhatsApp messages.", action: "Manage connection →", tone: "#86EFAC" }
+    ? { title: "WhatsApp is connected", detail: "This workspace is ready to send and receive WhatsApp messages.", action: "Manage connection →", tone: "#23734a" }
     : connectionFailed
-      ? { title: "WhatsApp connection needs attention", detail: whatsappConnectionState.message || "No connection was created. Review the connection details and try again.", action: "Review connection →", tone: "#FCA5A5" }
+      ? { title: "WhatsApp connection needs attention", detail: whatsappConnectionState.message || "No connection was created. Review the connection details and try again.", action: "Review connection →", tone: "#b33a35" }
       : profileComplete
         ? { title: "Connect your WhatsApp number", detail: "Securely connect the WhatsApp Business account your team uses to speak with customers.", action: "Connect WhatsApp →", tone: "var(--gold2)" }
         : { title: "Complete your business profile", detail: "Add your workspace details before connecting WhatsApp.", action: "Complete profile →", tone: "var(--gold2)" };
   const stats = [
-    { label: "Sent Today", value: mL ? "—" : todayOut, sub: "Outbound messages", color: "var(--gold2)" },
-    { label: "Contacts", value: cL ? "—" : (contacts?.length||0), sub: "In your list", color: "var(--cream2)" },
-    { label: "Active Keywords", value: (autos||[]).filter(a=>a.is_active&&a.trigger_type==="keyword").length, sub: "Automations live", color: "var(--gold2)" },
+    { label: "Sent Today", value: mL || !Array.isArray(msgs) ? "—" : todayOut, sub: "Outbound messages", color: "var(--gold2)" },
+    { label: "Contacts", value: cL || !Array.isArray(contacts) ? "—" : contacts.length, sub: "In your list", color: "var(--cream2)" },
+    { label: "Active Keywords", value: Array.isArray(autos) ? autos.filter(a=>a.is_active&&a.trigger_type==="keyword").length : "—", sub: "Automations live", color: "var(--gold2)" },
     { label: "Plan", value: (customer?.subscription_plan||"Starter").charAt(0).toUpperCase()+(customer?.subscription_plan||"starter").slice(1), sub: customer?.subscription_status||"trial", color: "var(--cream2)" },
   ];
 
@@ -713,12 +710,12 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
           <div style={{ width: 20, height: 1, background: "var(--gold)", opacity: 0.6 }} />
-          <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>{greet}</span>
+          <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>YOUR WORKSPACE</span>
         </div>
-        <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{customer?.business_name || user?.email?.split("@")[0] || "Welcome"}</h1>
-        <p style={{ color: "var(--mist)", fontSize: 14 }}>Your WhatsApp automation dashboard.</p>
+        <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{greet}, {user?.user_metadata?.name?.trim().split(/\s+/)[0] || user?.email?.split("@")[0] || "there"} 👋</h1>
+        <p style={{ color: "var(--mist)", fontSize: 14 }}>Your business conversations, automated.</p>
       </div>
-      <div style={{ background: connectionFailed ? "rgba(127,29,29,0.22)" : whatsappConnected ? "rgba(26,58,42,0.4)" : "rgba(26,58,42,0.22)", border: `1px solid ${connectionFailed ? "rgba(239,68,68,0.35)" : "var(--wire2)"}`, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
+      <div style={{ background: connectionFailed ? "#fff1f0" : "#fffaf0", border: `1px solid ${connectionFailed ? "rgba(239,68,68,0.35)" : "var(--wire2)"}`, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
         <span aria-hidden="true" style={{ fontSize: 18 }}>{whatsappConnected ? "✓" : connectionFailed ? "!" : "📱"}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -729,7 +726,7 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
       </div>
       <div className="stat-g" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
         {stats.map((s,i) => (
-          <div key={i} style={{ background: "var(--panel)", border: "1px solid var(--wire)", padding: "20px 18px", position: "relative" }}>
+          <div className="kpi-card" key={i} style={{ background: "var(--panel)", border: "1px solid var(--wire)", padding: "20px 18px", position: "relative" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${s.color}, transparent)`, opacity: 0.3 }} />
             <div className="editorial" style={{ fontSize: 40, color: "var(--cream)", lineHeight: 1, marginBottom: 8, fontWeight: 600 }}>{s.value}</div>
             <div className="mono" style={{ fontSize: 9, color: s.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 2 }}>{s.label}</div>
@@ -737,6 +734,12 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
           </div>
         ))}
       </div>
+      <section className="quick-actions" aria-label="Quick actions">
+        <h2>Quick actions</h2>
+        <div className="quick-grid">
+          {[{id:"broadcasts",title:"Send a message",detail:"Open your broadcast tools",icon:"send"},{id:"contacts",title:"Manage contacts",detail:"Add, import and organise",icon:"contacts"},{id:"automations",title:"Create automation",detail:"Set up a keyword reply",icon:"auto"}].map(action => <button key={action.id} className="quick-action" onClick={()=>onNavigate(action.id)}><Ic n={action.icon} s={20}/><span><strong>{action.title}</strong><small>{action.detail}</small></span><span aria-hidden="true">↗</span></button>)}
+        </div>
+      </section>
       <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Recent Messages</div>
       <div className="card">
         {mL ? <Loader /> : !(msgs?.length) ? <Empty msg="No messages yet" /> :
@@ -929,7 +932,7 @@ function Contacts({ customer }) {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: toast.ok ? "#1A3A2A" : "#7F1D1D", border: `1px solid ${toast.ok ? "var(--wire2)" : "rgba(239,68,68,0.3)"}`, color: toast.ok ? "#86EFAC" : "#FCA5A5", padding: "12px 20px", zIndex: 9999, fontFamily: "DM Mono, monospace", fontSize: 11, letterSpacing: 1 }}>
+        <div style={{ position: "fixed", bottom: 24, right: 24, background: toast.ok ? "#1A3A2A" : "#7F1D1D", border: `1px solid ${toast.ok ? "var(--wire2)" : "rgba(239,68,68,0.3)"}`, color: toast.ok ? "var(--success-text)" : "var(--error-text)", padding: "12px 20px", zIndex: 9999, fontFamily: "DM Mono, monospace", fontSize: 11, letterSpacing: 1 }}>
           {toast.msg}
         </div>
       )}
@@ -966,7 +969,7 @@ function Contacts({ customer }) {
       {tab === "contacts" && (
         <>
           {uploadMsg && (
-            <div className="mono" style={{ fontSize: 11, color: uploadMsg.startsWith("✓") ? "#86EFAC" : "#FCA5A5", marginBottom: 16, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--wire)" }}>
+            <div className="mono" style={{ fontSize: 11, color: uploadMsg.startsWith("✓") ? "var(--success-text)" : "var(--error-text)", marginBottom: 16, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--wire)" }}>
               {uploadMsg}
             </div>
           )}
@@ -1062,7 +1065,7 @@ function Contacts({ customer }) {
       {showGroupModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
           onClick={e => e.target === e.currentTarget && setShowGroupModal(false)}>
-          <div style={{ background: "var(--panel)", border: "1px solid var(--wire2)", padding: "28px 28px 24px", width: "100%", maxWidth: 460, position: "relative" }}>
+          <div className="dialog-surface" style={{ background: "var(--panel)", border: "1px solid var(--wire2)", padding: "28px 28px 24px", width: "100%", maxWidth: 460, position: "relative" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.5 }} />
             <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{editGroup ? "Edit Group" : "New Group"}</div>
             <h3 className="editorial" style={{ fontSize: 24, color: "var(--cream)", fontWeight: 600, marginBottom: 22 }}>{editGroup ? editGroup.name : "Create group."}</h3>
@@ -1106,7 +1109,7 @@ function Contacts({ customer }) {
           onClick={e => e.target === e.currentTarget && setDeleteGroup(null)}>
           <div style={{ background: "var(--panel)", border: "1px solid rgba(239,68,68,0.2)", padding: "28px", width: "100%", maxWidth: 400, position: "relative" }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--red), transparent)", opacity: 0.4 }} />
-            <div className="mono" style={{ fontSize: 9, color: "#FCA5A5", letterSpacing: 2, marginBottom: 6 }}>CONFIRM DELETE</div>
+            <div className="mono" style={{ fontSize: 9, color: "var(--error-text)", letterSpacing: 2, marginBottom: 6 }}>CONFIRM DELETE</div>
             <h3 className="editorial" style={{ fontSize: 22, color: "var(--cream)", fontWeight: 600, marginBottom: 10 }}>Delete group?</h3>
             <p style={{ color: "var(--mist)", fontSize: 13, marginBottom: 22, lineHeight: 1.6 }}>
               This will delete <strong style={{ color: "var(--cream)" }}>{deleteGroup.name}</strong> and remove all {deleteGroup.total_contacts} member links. Contacts themselves are not deleted.
@@ -1187,7 +1190,7 @@ function Automations({ customer }) {
       <div className="card" style={{ padding: 22, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold2), transparent)", opacity: 0.3 }} />
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Add Keyword</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 12, alignItems: "flex-end" }}>
+        <div className="automation-form" style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 12, alignItems: "flex-end" }}>
           <div><label className="label">Keyword</label><input className="input" placeholder="e.g. PRICING" value={form.keyword} onChange={e=>set("keyword",e.target.value)} /></div>
           <div><label className="label">Auto-reply</label><input className="input" placeholder="Message sent when keyword received" value={form.reply} onChange={e=>set("reply",e.target.value)} /></div>
           <button className="btn btn-gold" onClick={add} disabled={saving} style={{ padding:"11px 16px", alignSelf:"flex-end" }}>
@@ -1204,7 +1207,7 @@ function Automations({ customer }) {
             <div key={i} className="row" style={{ gridTemplateColumns: "1fr 3fr 100px 80px", gap: 12 }}>
               <div className="kw-tag"><span className="mono" style={{ fontSize: 11, color: "var(--gold2)" }}>{k.trigger_value}</span></div>
               <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.message_template}</div>
-              <div className={`badge ${k.is_active?"badge-green":"badge-red"}`}>{k.is_active?"Active":"Off"}</div>
+              <div className={`badge ${k.is_active?"badge-green":"badge-cream"}`}>{k.is_active?"Active":"Off"}</div>
               <button className="btn btn-wire" style={{ fontSize: 9, padding: "4px 10px" }} onClick={()=>toggle(k.id,k.is_active)}>{k.is_active?"Pause":"Enable"}</button>
             </div>
           ))
@@ -1320,7 +1323,7 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
           {canEdit ? "Complete these details to prepare this workspace for WhatsApp connection." : "You can view this workspace profile. Only owners and admins can make changes."}
         </p>
 
-        {loading ? <Loader /> : error ? <div role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>We could not load the latest profile: {error}</div> : (
+        {loading ? <Loader /> : error ? <div role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>We could not load the latest profile: {error}</div> : (
           <form onSubmit={saveProfile}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
               {fields.map(([field, label, type, hint]) => (
@@ -1344,8 +1347,8 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
             </div>
             {canEdit && <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               <button className="btn btn-gold" type="submit" disabled={saving}>{saving ? "Saving…" : "Save business profile"}</button>
-              {saved && <span role="status" style={{ color: "#86EFAC", fontSize: 12 }}>Business profile saved.</span>}
-              {saveError && <span role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>{saveError}</span>}
+              {saved && <span role="status" style={{ color: "var(--success-text)", fontSize: 12 }}>Business profile saved.</span>}
+              {saveError && <span role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>{saveError}</span>}
             </div>}
           </form>
         )}
@@ -1400,13 +1403,13 @@ function TemplateComposer({ onSubmitted, onClose }) {
       await onSubmitted(created);
     } catch (submitError) { setSubmission({ phase: "error", message: submitError?.message || "Meta could not accept this template." }); }
   };
-  const stateColor = ["error", "rejected"].includes(submission.phase) ? "#FCA5A5" : submission.phase === "approved" ? "#86EFAC" : submission.phase === "pending" ? "#FDE68A" : "var(--mist)";
-  return <div className="card" style={{ padding: 22, marginBottom: 18 }}>
+  const stateColor = ["error", "rejected"].includes(submission.phase) ? "var(--error-text)" : submission.phase === "approved" ? "var(--success-text)" : submission.phase === "pending" ? "#FDE68A" : "var(--mist)";
+  return <div className="card template-composer" style={{ padding: 22, marginBottom: 18 }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 18 }}><div><div className="editorial" style={{ color: "var(--cream)", fontSize: 25, fontWeight: 600 }}>Create WhatsApp template</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 5 }}>Meta-ready headers, footer and buttons. ZedPing constructs the final Meta components securely.</div></div><button type="button" className="btn btn-wire" onClick={onClose}>Close</button></div>
     <form onSubmit={submit}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(140px,.7fr) minmax(130px,.55fr)", gap: 12 }}><div><label className="label">Template name</label><input className="input" value={draft.name} onChange={e=>update("name",e.target.value)} placeholder="booking_reminder" maxLength={100} required /></div><div><label className="label">Category</label><select className="input" value={draft.category} onChange={e=>update("category",e.target.value)}><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option></select></div><div><label className="label">Language</label><select className="input" value={draft.language} onChange={e=>update("language",e.target.value)}><option value="en_US">English (US)</option><option value="en_GB">English (UK)</option><option value="en">English</option></select></div></div>
       <div style={{ display:"grid",gridTemplateColumns:"minmax(160px,.55fr) minmax(0,1fr)",gap:12,marginTop:16 }}><div><label className="label">Header</label><select className="input" value={draft.header_type} onChange={e=>{update("header_type",e.target.value);setHeaderFile(null)}}><option value="none">No header</option><option value="text">Text</option><option value="image">Image</option><option value="document">Document (PDF)</option></select></div>{draft.header_type==="text"&&<div><label className="label">Header text</label><input className="input" value={draft.header_text} onChange={e=>update("header_text",e.target.value)} maxLength={60} required /></div>}{mediaHeader&&<div><label className="label">{draft.header_type==="image"?"Header image (JPEG/PNG, up to 10 MB)":"Header document (PDF, up to 10 MB)"}</label><input className="input" type="file" accept={draft.header_type==="image"?"image/jpeg,image/png":"application/pdf"} onChange={e=>setHeaderFile(e.target.files?.[0]||null)} required /></div>}</div>
-      <div style={{ marginTop:16 }}><label className="label">Message body</label><textarea className="input" value={draft.body} onChange={e=>update("body",e.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required style={{minHeight:110,resize:"vertical",paddingTop:12}} /><div style={{color:malformedVariables?"#FCA5A5":"var(--mist)",fontSize:10,marginTop:6}}>{malformedVariables?"Placeholders must be consecutive.":"Use optional numbered placeholders: {{1}}, {{2}}."}</div></div>
+      <div style={{ marginTop:16 }}><label className="label">Message body</label><textarea className="input" value={draft.body} onChange={e=>update("body",e.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required style={{minHeight:110,resize:"vertical",paddingTop:12}} /><div style={{color:malformedVariables?"var(--error-text)":"var(--mist)",fontSize:10,marginTop:6}}>{malformedVariables?"Placeholders must be consecutive.":"Use optional numbered placeholders: {{1}}, {{2}}."}</div></div>
       {!!rawVariables.length&&!malformedVariables&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginTop:12}}>{rawVariables.map((number,index)=><div key={number}><label className="label">Example for {"{{"+number+"}}"}</label><input className="input" value={draft.variable_examples[index]||""} onChange={e=>{const values=[...draft.variable_examples];values[index]=e.target.value;update("variable_examples",values)}} required maxLength={128}/></div>)}</div>}
       <div style={{marginTop:14}}><label className="label">Footer (optional)</label><input className="input" value={draft.footer_text} onChange={e=>update("footer_text",e.target.value)} maxLength={60} placeholder="Reply STOP to opt out" /></div>
       <div style={{marginTop:16,borderTop:"1px solid var(--wire)",paddingTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><label className="label">Buttons (optional)</label><button type="button" className="btn btn-wire" onClick={addButton} disabled={draft.buttons.length>=3}>Add button</button></div>{draft.buttons.map((button,index)=><div key={index} style={{display:"grid",gridTemplateColumns:"150px minmax(130px,.6fr) minmax(0,1fr) auto",gap:8,marginTop:8}}><select className="input" value={button.type} onChange={e=>updateButton(index,"type",e.target.value)}><option value="quick_reply">Quick reply</option><option value="url">URL</option><option value="phone_number">Phone number</option></select><input className="input" value={button.text} onChange={e=>updateButton(index,"text",e.target.value)} placeholder="Button text" maxLength={25} required/>{button.type==="url"?<input className="input" value={button.url||""} onChange={e=>updateButton(index,"url",e.target.value)} placeholder="https://example.com" required/>:button.type==="phone_number"?<input className="input" value={button.phone_number||""} onChange={e=>updateButton(index,"phone_number",e.target.value)} placeholder="+260..." required/>:<div/>}<button type="button" className="btn btn-wire" onClick={()=>update("buttons",draft.buttons.filter((_,item)=>item!==index))}>Remove</button></div>)}</div>
@@ -1530,10 +1533,10 @@ function WhatsAppTemplates({ customer }) {
 
       {showComposer && canManageTemplates && <TemplateComposer onClose={() => setShowComposer(false)} onSubmitted={onTemplateSubmitted} />}
 
-      {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "#FCA5A5" }}>We could not load templates: {error}</div> : !templates.length ? (
+      {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "var(--error-text)" }}>We could not load templates: {error}</div> : !templates.length ? (
         <div className="card" style={{ padding: 24, color: "var(--mist)" }}>No WhatsApp templates were returned for this workspace’s connected account.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(250px, 0.9fr) minmax(0, 1.4fr)", gap: 16, alignItems: "start" }}>
+        <div className="template-layout" style={{ display: "grid", gridTemplateColumns: "minmax(250px, 0.9fr) minmax(0, 1.4fr)", gap: 16, alignItems: "start" }}>
           <div className="card" style={{ padding: 10 }}>
             {templates.map((template) => (
               <button key={template.id} onClick={() => { setSelectedId(String(template.id)); setResult(null); }} style={{ width: "100%", textAlign: "left", border: selected?.id === template.id ? "1px solid rgba(184,146,42,0.65)" : "1px solid transparent", background: selected?.id === template.id ? "rgba(184,146,42,0.08)" : "transparent", color: "var(--cream)", padding: 13, cursor: "pointer", marginBottom: 4 }}>
@@ -1560,11 +1563,11 @@ function WhatsAppTemplates({ customer }) {
             </details>
 
             {canManageTemplates && <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 16, marginBottom: 18 }}>
-              <button className="btn btn-wire" onClick={() => setDeleteTarget(selected)} style={{ color: "#FCA5A5", borderColor: "rgba(239,68,68,0.45)" }}>Delete template</button>
+              <button className="btn btn-wire" onClick={() => setDeleteTarget(selected)} style={{ color: "var(--error-text)", borderColor: "rgba(239,68,68,0.45)" }}>Delete template</button>
               <div style={{ color: "var(--mist)", fontSize: 10, marginTop: 7 }}>This permanently removes the template from Meta after confirmation.</div>
             </div>}
 
-            {!approved ? <div role="alert" style={{ color: "#FCA5A5", fontSize: 12 }}>Only Meta-approved templates can be sent.</div> : hasVariables ? <div role="alert" style={{ color: "#FDE68A", fontSize: 12 }}>This template requires variables. This first review-ready version supports approved templates with no variables only.</div> : (
+            {!approved ? <div role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>Only Meta-approved templates can be sent.</div> : hasVariables ? <div role="alert" style={{ color: "#FDE68A", fontSize: 12 }}>This template requires variables. This first review-ready version supports approved templates with no variables only.</div> : (
               <div style={{ borderTop: "1px solid var(--wire)", paddingTop: 18 }}>
                 <label className="label" htmlFor="template-recipient">Test recipient number</label>
                 <input id="template-recipient" className="input" placeholder="+260971234567" value={recipient} onChange={(event) => setRecipient(event.target.value)} disabled={sending} />
@@ -1573,7 +1576,7 @@ function WhatsAppTemplates({ customer }) {
                 <button className="btn btn-gold" onClick={send} disabled={sending || !recipient.trim() || (requiresMediaHeader && !sendHeaderFile)} style={{ marginTop: 14 }}>{sending ? "Sending…" : "Send approved template"}</button>
               </div>
             )}
-            {result && <div role={result.ok ? "status" : "alert"} style={{ color: result.ok ? "#86EFAC" : "#FCA5A5", fontSize: 12, marginTop: 16 }}>{result.message}</div>}
+            {result && <div role={result.ok ? "status" : "alert"} style={{ color: result.ok ? "var(--success-text)" : "var(--error-text)", fontSize: 12, marginTop: 16 }}>{result.message}</div>}
           </div>}
         </div>
       )}
@@ -1800,7 +1803,7 @@ export default function App() {
   if (!user) return (
     <>
       <style>{css}</style>
-      {authError && <div className="mono" role="alert" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, maxWidth: 520, padding: "10px 14px", background: "var(--panel)", border: "1px solid rgba(239,68,68,0.35)", color: "#FCA5A5", fontSize: 10, letterSpacing: 0.5, textAlign: "center" }}>{authError}</div>}
+      {authError && <div className="mono" role="alert" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, maxWidth: 520, padding: "10px 14px", background: "var(--panel)", border: "1px solid rgba(239,68,68,0.35)", color: "var(--error-text)", fontSize: 10, letterSpacing: 0.5, textAlign: "center" }}>{authError}</div>}
       {view === "signup" ? <SignUp onSwitch={() => setView("login")} onAuth={loadAuthenticatedContext} /> : <Login onSwitch={() => setView("signup")} onAuth={loadAuthenticatedContext} />}
     </>
   );
@@ -1812,7 +1815,7 @@ export default function App() {
       <style>{css}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
-        <div className="main">
+        <div className="main workspace">
           <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
           {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>}
