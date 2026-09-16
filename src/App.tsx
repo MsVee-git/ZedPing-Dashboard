@@ -273,12 +273,7 @@ function Logo({ size = "md" }) {
   const fs = size === "lg" ? 22 : size === "sm" ? 16 : 18;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <div style={{ position: "relative" }}>
-        <div style={{ width: sz, height: sz, background: "var(--ink)", border: "1px solid var(--wire2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span className="editorial" style={{ color: "var(--cream)", fontSize: fs * 1.1, fontWeight: 600, lineHeight: 1 }}>Z</span>
-        </div>
-        <div style={{ position: "absolute", top: -3, right: -3, width: 7, height: 7, background: "var(--gold2)", borderRadius: "50%", boxShadow: "0 0 6px rgba(212,168,67,0.6)" }} />
-      </div>
+      <img src="/zedping-logo-v3.svg" alt="" width={sz} height={sz} style={{ display: "block", objectFit: "contain", flexShrink: 0, border: 0, background: "transparent" }} />
       <span style={{ fontFamily: "Cormorant Garamond, serif", fontWeight: 600, fontSize: fs, color: "var(--cream)", letterSpacing: 0.5 }}>
         Zed<span style={{ color: "var(--gold2)" }}>Ping</span>
       </span>
