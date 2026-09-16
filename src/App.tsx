@@ -717,16 +717,16 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
           <div style={{ width: 20, height: 1, background: "var(--gold)", opacity: 0.6 }} />
           <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>YOUR WORKSPACE</span>
         </div>
-        <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{greet}, {user?.user_metadata?.name?.trim().split(/\s+/)[0] || user?.email?.split("@")[0] || "there"} 👋</h1>
-        <p style={{ color: "var(--mist)", fontSize: 14 }}>Your business conversations, automated.</p>
+        <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{greet}, {customer?.business_name || "your workspace"} 👋</h1>
+        <p style={{ color: "var(--mist)", fontSize: 14 }}>Here’s what’s happening across your WhatsApp workspace.</p>
       </div>
 
       {!setupLoading && checklist?.presentation === "primary" && <section className="card-gold" style={{ padding: 22, marginBottom: 18 }} aria-label="Getting started">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div>
             <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 7 }}>Getting started</div>
-            <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600 }}>Welcome to ZedPing, {customer?.business_name || "your business"}.</div>
-            <p style={{ color: "var(--mist)", fontSize: 12, marginTop: 7 }}>Let’s get your WhatsApp working for your business.</p>
+            <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600 }}>Let’s get you set up</div>
+            <p style={{ color: "var(--mist)", fontSize: 12, marginTop: 7 }}>Complete these steps to get the most out of ZedPing.</p>
           </div>
           <div className="mono" style={{ color: "var(--gold2)", fontSize: 10, letterSpacing: 1 }}>{checklist.completed}/{checklist.total} COMPLETE</div>
         </div>
