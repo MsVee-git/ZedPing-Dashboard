@@ -1195,9 +1195,9 @@ function TeamInbox({ customer, user }) {
             </div>)}
           </div>
           <form onSubmit={sendReply} style={{ padding: 14, borderTop: "1px solid var(--wire)" }}>
-            <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : "Take the conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
+            <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
-              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Replies are sent through this workspace’s WhatsApp number." : "Automation is paused only after a conversation is taken by a human."}</span>
+              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Automation is paused. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Automation is paused while this conversation needs attention." : "Take or reopen this conversation before replying."}</span>
               <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>
             </div>
           </form>
@@ -1211,19 +1211,21 @@ function TeamInbox({ customer, user }) {
           <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{active.contacts?.phone_number || "No phone number"}</div>
           {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
           <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
-            <div className="label">Control</div>
-            <div style={{ color: "var(--cream)", fontSize: 12 }}>{labelFor(active)}</div>
-            {active.handoff_reason && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Reason: {active.handoff_reason}</div>}
+            <div className="label">Conversation status</div>
+            <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{labelFor(active)}</div>
+            {active.control_mode === "needs_attention" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused while this conversation needs attention.</div>}
+            {active.control_mode === "human" && active.status !== "resolved" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused.</div>}
           </div>
           <div style={{ display: "grid", gap: 9 }}>
             {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
-            {active.control_mode === "needs_attention" && (!active.assigned_user_id || active.assigned_user_id === user?.id) && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take conversation</button>}
-            {active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve conversation</button>}
+            {active.control_mode === "needs_attention" && (!active.assigned_user_id || active.assigned_user_id === user?.id) && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take Conversation</button>}
+            {active.status === "resolved" && <button className="btn btn-gold" onClick={() => runAction("/reopen")}>Reopen Conversation</button>}
+            {active.control_mode === "human" && active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve Conversation</button>}
           </div>
           {canManageAssignment && active.status !== "resolved" && <div style={{ borderTop: "1px solid var(--wire)", marginTop: 18, paddingTop: 16 }}>
-            <label className="label" htmlFor="conversation-assignee">Assign conversation</label>
+            <label className="label" htmlFor="conversation-assignee">Assign to</label>
             <select id="conversation-assignee" className="input" value={active.assigned_user_id || ""} onChange={(event) => runAction("/assignment", { method: "PATCH", body: { assigned_user_id: event.target.value || null } })}>
-              <option value="">Unassigned</option>
+              <option value="">Waiting for a team member</option>
               {(members || []).map((member) => <option key={member.id} value={member.id}>{member.name || member.email || member.id} · {member.role}</option>)}
             </select>
           </div>}
