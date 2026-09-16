@@ -778,188 +778,12 @@ function Broadcasts({ customer }) {
   useEffect(() => {
     let alive = true;
     async function loadGroups() {
-      if (!customer?.id) return;
-      const { data } = await supabase.from("contact_groups").select("id,name,description,total_contacts").eq("customer_id", customer.id).order("name");
-      if (alive) setGroups(data || []);
-    }
-    loadGroups();
-    return () => { alive = false; };
-  }, [customer?.id]);
-
-  const normalizePhone = (value) => {
-    const raw = String(value || "").trim();
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) return null;
-    if (raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
-    if (/^260\d{9}$/.test(digits)) return "+" + digits;
-    if (/^0\d{9}$/.test(digits)) return "+260" + digits.slice(1);
-    if (/^[79]\d{8}$/.test(digits)) return "+260" + digits;
-    if (/^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
-    return null;
-  };
-
-  const setGroup = async (groupId) => {
-    setSelectedGroupId(groupId);
-    setRecipients([]);
-    setNotice(null);
-    if (!groupId) return;
-    const { data: memberships, error } = await supabase.from("contact_group_members").select("contact_id").eq("group_id", groupId);
-    if (error) { setNotice({ ok: false, text: "Could not load this contact list." }); return; }
-    const ids = new Set((memberships || []).map(row => row.contact_id));
-    const selected = (contacts || []).filter(contact => ids.has(contact.id));
-    setRecipients(selected);
-  };
-
-  const parseUpload = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setUploadReport(null); setRecipients([]); setNotice(null);
-    if (file.size > 5 * 1024 * 1024) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: "File must be 5 MB or smaller" }] }); return; }
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
-      const headers = (rows[0] || []).map(value => String(value).trim().toLowerCase());
-      const nameIndex = headers.findIndex(header => header.includes("name"));
-      const phoneIndex = headers.findIndex(header => header.includes("phone") || header.includes("number") || header.includes("mobile"));
-      if (nameIndex < 0 || phoneIndex < 0) throw new Error("Your file needs Name and Phone Number columns.");
-      const invalid = [], seen = new Set(), valid = [];
-      rows.slice(1).forEach((row, index) => {
-        if (!row.some(value => String(value).trim())) return;
-        const phone_number = normalizePhone(row[phoneIndex]);
-        const name = String(row[nameIndex] || "").trim();
-        if (!name || !phone_number) { invalid.push({ row: index + 2, reason: !name ? "Missing name" : "Invalid phone number" }); return; }
-        if (!seen.has(phone_number)) { seen.add(phone_number); valid.push({ name, phone_number }); }
-      });
-      setRecipients(valid); setUploadReport({ valid, invalid, file: file.name });
-    } catch (error) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: error.message || "Could not read this file" }] }); }
-  };
-
-  const recipientsForMode = () => {
-    if (mode === "single") {
-      const phone_number = normalizePhone(phone);
-      return phone_number ? [{ name: "Contact", phone_number }] : [];
-    }
-    return recipients;
-  };
-
-  const send = async () => {
-    const selected = recipientsForMode();
-    if (!message.trim() || !selected.length) { setNotice({ ok: false, text: "Add a message and at least one valid recipient." }); return; }
-    setSending(true); setNotice(null);
-    try {
-      if (mode === "upload" && saveImported && uploadReport?.valid?.length) {
-        await apiFetch(`${API}/contacts/upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: uploadReport.valid }) });
-      }
-      const response = await apiFetch(`${API}/broadcasts/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: selected, message: message.trim() }) });
-      const result = await response.json();
-      setNotice({ ok: result.failed === 0, text: `Sent: ${result.sent} · Failed: ${result.failed}` });
-      if (mode === "single") setPhone("");
-      if (mode === "upload") { setRecipients([]); setUploadReport(null); }
-      refetchHistory();
-    } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
-    finally { setSending(false); }
-  };
-
-  const statusFor = (broadcast) => {
-    if (broadcast.status === "completed") return { label: "SENT", cls: "badge-green" };
-    if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
-    if (broadcast.status === "pending" || broadcast.status === "sending") return { label: "SCHEDULED", cls: "badge-gold" };
-    return null;
-  };
-  const activity = (history || []).filter(broadcast => activityFilter === "all" || statusFor(broadcast)?.label.toLowerCase() === activityFilter);
-
-  return (
-    <div className="pad" style={{ padding: 28 }}>
-      <PageHead label="WhatsApp" title="Broadcasts." sub="Send messages to your contact list" />
-      <div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Send Message</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {[["list", "Select Contact List"], ["upload", "Upload Contacts"], ["single", "Single Number"]].map(([id, label]) => <button key={id} className={mode === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => { setMode(id); setNotice(null); }} style={{ fontSize: 10, padding: "8px 12px" }}>{label}</button>)}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {mode === "list" && <div>
-            <label className="label">Contact List</label>
-            <select className="input" value={selectedGroupId} onChange={event => setGroup(event.target.value)} disabled={contactsLoading}>
-              <option value="">Select an existing list…</option>
-              {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </select>
-            {groups.length === 0 && <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>No contact lists with members are available yet. Create and populate a list in Contacts first.</div>}
-            {selectedGroupId && <div className="mono" style={{ fontSize: 10, color: "var(--gold2)", marginTop: 8 }}>{recipients.length} recipient{recipients.length === 1 ? "" : "s"} selected</div>}
-          </div>}
-          {mode === "upload" && <div>
-            <label className="label">CSV or XLSX file</label>
-            <input ref={uploadRef} type="file" accept=".csv,.xlsx" onChange={parseUpload} className="input" style={{ padding: 9 }} />
-            <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>Required columns: Name, Phone Number · 5 MB maximum</div>
-            {uploadReport && <div style={{ marginTop: 10, padding: "10px 12px", border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}>
-              <div className="mono" style={{ fontSize: 10, color: "var(--success-text)" }}>{uploadReport.valid.length} valid recipient{uploadReport.valid.length === 1 ? "" : "s"}</div>
-              {uploadReport.invalid.length > 0 && <div className="mono" style={{ fontSize: 10, color: "var(--error-text)", marginTop: 5 }}>{uploadReport.invalid.length} invalid row{uploadReport.invalid.length === 1 ? "" : "s"} · {uploadReport.invalid.slice(0, 3).map(item => item.row ? `Row ${item.row}: ${item.reason}` : item.reason).join(" · ")}</div>}
-            </div>}
-            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 12, color: "var(--mist)", cursor: "pointer" }}><input type="checkbox" checked={saveImported} onChange={event => setSaveImported(event.target.checked)} />Save these contacts to Contacts</label>
-          </div>}
-          {mode === "single" && <div><label className="label">Phone Number</label><input className="input" placeholder="+260971234567" value={phone} onChange={event => setPhone(event.target.value)} /></div>}
-          <div><label className="label">Message</label><textarea className="textarea" maxLength={4096} placeholder="Your message here..." value={message} onChange={event => setMessage(event.target.value)} /><div className="mono" style={{ fontSize: 10, color: "var(--mist)", textAlign: "right", marginTop: 5 }}>{message.length}/4096</div></div>
-          {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
-          <button className="btn btn-gold" onClick={send} disabled={sending} style={{ alignSelf: "flex-start", padding: "10px 22px" }}><Ic n="send" s={12} c="var(--ink)" />{sending ? "Sending..." : "Send Now"}</button>
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Broadcast Activity</div>
-        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sent","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
-      </div>
-      <div className="card">
-        {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
-          const status = statusFor(broadcast); if (!status) return null;
-          return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px", gap: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
-            <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{Array.isArray(broadcast.contacts) ? broadcast.contacts.length : 0} recipients</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString()}</div>
-            <div className={"badge " + status.cls}>{status.label}</div>
-          </div>;
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── CONTACTS ──────────────────────────────────────────────────────────────────
-function Contacts({ customer }) {
-  const { data, loading, refetch } = useAPI("/contacts");
-  const [tab, setTab] = useState("contacts");
-  const [search, setSearch] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState("");
-  const fileRef = useRef();
-
-  // ── Groups state ────────────────────────────────────────────────────────────
-  const [groups, setGroups] = useState([]);
-  const [groupsLoading, setGroupsLoading] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [editGroup, setEditGroup] = useState(null);
-  const [deleteGroup, setDeleteGroup] = useState(null);
-  const [groupForm, setGroupForm] = useState({ name: "", description: "", color: "#B8922A" });
-  const [groupSaving, setGroupSaving] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  const plan = customer?.subscription_plan || "starter";
-  const PLAN_LIMIT = plan === "pro" ? Infinity : plan === "business" ? 5000 : 800;
-
-  function showToast(msg, ok = true) {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
-  }
-
-  async function loadGroups() {
     if (!customer?.id) return;
     setGroupsLoading(true);
-    const { data: g } = await supabase
-      .from("contact_groups")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("created_at", { ascending: false });
-    setGroups(g || []);
+    const { data: g } = await supabase.from("contact_groups").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
+    const { data: members } = await supabase.from("contact_group_members").select("group_id");
+    const counts = (members || []).reduce((all, member) => ({ ...all, [member.group_id]: (all[member.group_id] || 0) + 1 }), {});
+    setGroups((g || []).map(group => ({ ...group, total_contacts: counts[group.id] || 0 })));
     setGroupsLoading(false);
   }
 
@@ -1001,6 +825,27 @@ function Contacts({ customer }) {
     setEditGroup(g);
     setGroupForm({ name: g.name, description: g.description || "", color: g.color || "#B8922A" });
     setShowGroupModal(true);
+  }
+
+  async function openGroup(group) {
+    setActiveGroup(group); setSelectedContactId(""); setMembersLoading(true);
+    const { data: members, error } = await supabase.from("contact_group_members").select("id,contact_id").eq("group_id", group.id);
+    if (error) { showToast("Could not load group members", false); setGroupMembers([]); }
+    else setGroupMembers((members || []).map(member => ({ ...member, contact: (data || []).find(contact => contact.id === member.contact_id) })).filter(member => member.contact));
+    setMembersLoading(false);
+  }
+
+  async function addGroupMember() {
+    if (!activeGroup || !selectedContactId) return;
+    const { error } = await supabase.from("contact_group_members").insert({ group_id: activeGroup.id, contact_id: selectedContactId });
+    if (error) return showToast("Could not add this contact to the group", false);
+    showToast("Contact added to group"); setSelectedContactId(""); await openGroup(activeGroup); loadGroups();
+  }
+
+  async function removeGroupMember(member) {
+    const { error } = await supabase.from("contact_group_members").delete().eq("id", member.id).eq("group_id", activeGroup.id);
+    if (error) return showToast("Could not remove this contact", false);
+    showToast("Contact removed from group"); await openGroup(activeGroup); loadGroups();
   }
 
   const filtered = (data || []).filter(c =>
@@ -1123,60 +968,29 @@ function Contacts({ customer }) {
       {/* ── CONTACT GROUPS TAB ── */}
       {tab === "groups" && (
         <>
-          <div style={{ padding: "10px 16px", background: "rgba(184,146,42,0.04)", border: "1px solid var(--wire2)", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 14 }}>⚡</span>
-            <span className="mono" style={{ fontSize: 10, color: "var(--gold2)", letterSpacing: 1 }}>
-              {plan.toUpperCase()} PLAN · {PLAN_LIMIT === Infinity ? "Unlimited contacts per broadcast" : `${PLAN_LIMIT.toLocaleString()} contacts per broadcast — ZedPing auto-splits larger groups`}
-            </span>
-          </div>
-
-          {groupsLoading ? <Loader /> : groups.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "56px 24px", background: "var(--panel)", border: "1px solid var(--wire)" }}>
-              <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, marginBottom: 12 }}>NO GROUPS YET</div>
-              <p style={{ color: "var(--mist)", fontSize: 13, marginBottom: 20 }}>Create a group to organise contacts for targeted broadcasts.</p>
-              <button className="btn btn-gold" onClick={() => { setEditGroup(null); setGroupForm({ name: "", description: "", color: "#B8922A" }); setShowGroupModal(true); }}>
-                <Ic n="plus" s={12} c="var(--ink)" />Create first group
-              </button>
-            </div>
-          ) : (
+          {groupsLoading ? <Loader /> : groups.length === 0 ? <Empty msg="No contact groups yet" /> : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-              {groups.map(g => {
-                const batches = getBatches(g.total_contacts);
-                return (
-                  <div key={g.id} className="card" style={{ padding: "18px 20px", position: "relative" }}>
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: g.color || "var(--gold)", opacity: 0.7 }} />
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                      <div style={{ width: 36, height: 36, background: (g.color || "#B8922A") + "18", border: `1px solid ${g.color || "#B8922A"}44`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <span className="editorial" style={{ color: g.color || "var(--gold2)", fontSize: 16, fontWeight: 600 }}>{g.name.charAt(0).toUpperCase()}</span>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</div>
-                        {g.description && <div style={{ fontSize: 11, color: "var(--mist)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.description}</div>}
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div className="editorial" style={{ fontSize: 26, color: "var(--cream)", fontWeight: 600, lineHeight: 1 }}>{g.total_contacts}</div>
-                        <div className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1 }}>CONTACTS</div>
-                      </div>
-                    </div>
-                    {batches > 1 && (
-                      <div style={{ background: "rgba(184,146,42,0.06)", border: "1px solid var(--wire2)", padding: "7px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 11 }}>⚡</span>
-                        <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 0.5 }}>
-                          Sends as {batches} broadcasts · {PLAN_LIMIT.toLocaleString()} contacts each
-                        </span>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btn btn-wire" style={{ flex: 1, fontSize: 9, padding: "7px 10px" }} onClick={() => openEdit(g)}>Edit</button>
-                      <button className="btn btn-danger" style={{ fontSize: 9, padding: "7px 10px" }} onClick={() => setDeleteGroup(g)}>Delete</button>
-                    </div>
-                  </div>
-                );
-              })}
+              {groups.map(g => <div key={g.id} className="card" style={{ padding: "18px 20px", position: "relative" }}>
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: g.color || "var(--gold)", opacity: 0.7 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 13, color: "var(--cream)" }}>{g.name}</div>{g.description && <div style={{ fontSize: 11, color: "var(--mist)", marginTop: 2 }}>{g.description}</div>}</div>
+                  <div style={{ textAlign: "right" }}><div className="editorial" style={{ fontSize: 26, color: "var(--cream)", fontWeight: 600, lineHeight: 1 }}>{g.total_contacts || 0}</div><div className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1 }}>CONTACTS</div></div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}><button className="btn btn-gold" style={{ flex: 1, fontSize: 9, padding: "7px 10px" }} onClick={() => openGroup(g)}>Manage</button><button className="btn btn-wire" style={{ fontSize: 9, padding: "7px 10px" }} onClick={() => openEdit(g)}>Edit</button><button className="btn btn-danger" style={{ fontSize: 9, padding: "7px 10px" }} onClick={() => setDeleteGroup(g)}>Delete</button></div>
+              </div>)}
             </div>
           )}
         </>
       )}
+
+      {activeGroup && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div className="dialog-surface" style={{ background: "var(--panel)", border: "1px solid var(--wire2)", padding: 28, width: "100%", maxWidth: 620, maxHeight: "80vh", overflow: "auto" }}>
+          <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>CONTACT LIST</div><h3 className="editorial" style={{ fontSize: 24, color: "var(--cream)", marginBottom: 16 }}>{activeGroup.name}</h3>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><select className="input" value={selectedContactId} onChange={event => setSelectedContactId(event.target.value)}><option value="">Select an existing contact…</option>{(data || []).filter(contact => !groupMembers.some(member => member.contact_id === contact.id)).map(contact => <option key={contact.id} value={contact.id}>{contact.name} · {contact.phone_number}</option>)}</select><button className="btn btn-gold" onClick={addGroupMember} disabled={!selectedContactId}>Add</button></div>
+          {membersLoading ? <Loader /> : groupMembers.length === 0 ? <Empty msg="No contacts in this group yet" /> : <div className="card">{groupMembers.map(member => <div key={member.id} className="row" style={{ gridTemplateColumns: "2fr 1.5fr 80px", gap: 12 }}><div style={{ color: "var(--cream)", fontSize: 13 }}>{member.contact.name}</div><div style={{ color: "var(--mist)", fontSize: 12 }}>{member.contact.phone_number}</div><button className="btn btn-wire" style={{ fontSize: 9, padding: "5px 8px" }} onClick={() => removeGroupMember(member)}>Remove</button></div>)}</div>}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}><button className="btn btn-wire" onClick={() => setActiveGroup(null)}>Done</button></div>
+        </div>
+      </div>}
 
       {/* ── CREATE / EDIT GROUP MODAL ── */}
       {showGroupModal && (
