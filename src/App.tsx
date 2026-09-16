@@ -1761,6 +1761,7 @@ function ContentLibrary({ customer }) {
   const [actionError, setActionError] = useState("");
   const [form, setForm] = useState({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
 
   const load = useCallback(async () => {
@@ -1827,7 +1828,8 @@ function ContentLibrary({ customer }) {
     try {
       const response = await apiFetch(`${API}/content/${item.id}/download`);
       const result = await response.json();
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      if (item.content_type === "IMAGE") setPreviewUrl(result.url);
+      else window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (openError) { setActionError(openError?.message || "We could not open this secure file."); }
   };
 
@@ -1871,7 +1873,7 @@ function ContentLibrary({ customer }) {
         {selected.description && <p style={{ color: "var(--mist)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>{selected.description}</p>}
         {selected.content_type === "TEXT" && <div style={{ whiteSpace: "pre-wrap", color: "var(--cream2)", fontSize: 12, lineHeight: 1.55, marginTop: 15 }}>{selected.text_content}</div>}
         {selected.content_type === "LINK" && <a href={selected.link_url} target="_blank" rel="noreferrer" style={{ color: "var(--gold2)", display: "block", fontSize: 12, marginTop: 15, wordBreak: "break-all" }}>{selected.link_url}</a>}
-        {["DOCUMENT","IMAGE"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>Open secure {selected.content_type.toLowerCase()}</button>}
+        {["DOCUMENT","IMAGE"].includes(selected.content_type) && <><button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>{selected.content_type === "IMAGE" ? "Preview secure image" : "Open secure document"}</button>{selected.content_type === "IMAGE" && previewUrl && <img src={previewUrl} alt={selected.name} style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "contain", marginTop: 14, border: "1px solid var(--wire)" }} />}</>}
         {selected.content_type === "WHATSAPP_TEMPLATE_REFERENCE" && <><div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 15 }}>{selected.template_name} · {selected.template_language || "language unavailable"} · {selected.template_status || "status unavailable"}</div>{canManage && <button className="btn btn-wire" onClick={() => refreshTemplate(selected)} style={{ marginTop: 13 }}>Refresh from Meta</button>}</>}
         {canManage && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
       </>}</div>
