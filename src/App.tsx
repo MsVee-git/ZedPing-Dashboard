@@ -1766,7 +1766,7 @@ function ContentLibrary({ customer }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const response = await apiFetch(\`\${API}/content\`);
+      const response = await apiFetch(`${API}/content`);
       const result = await response.json();
       setItems(result.items || []);
     } catch (loadError) {
@@ -1782,7 +1782,7 @@ function ContentLibrary({ customer }) {
     if (nextType !== "WHATSAPP_TEMPLATE_REFERENCE" || templates.length) return;
     setTemplateError("");
     try {
-      const response = await apiFetch(\`\${API}/templates\`);
+      const response = await apiFetch(`${API}/templates`);
       const result = await response.json();
       setTemplates(result.templates || []);
     } catch (templateLoadError) {
@@ -1803,7 +1803,7 @@ function ContentLibrary({ customer }) {
       if (type === "LINK") body.set("link_url", form.link_url);
       if (type === "WHATSAPP_TEMPLATE_REFERENCE") body.set("template_id", form.template_id);
       if (["DOCUMENT", "IMAGE"].includes(type) && file) body.set("file", file);
-      const response = await apiFetch(\`\${API}/content\`, { method: "POST", body });
+      const response = await apiFetch(`${API}/content`, { method: "POST", body });
       const result = await response.json();
       setItems((current) => [result.item, ...current]);
       setSelected(result.item); setCreating(false); setType(null);
@@ -1813,10 +1813,10 @@ function ContentLibrary({ customer }) {
   };
 
   const archive = async (item) => {
-    if (!window.confirm(\`Archive “\${item.name}”? It will no longer be available for new uses.\`)) return;
+    if (!window.confirm(`Archive “${item.name}”? It will no longer be available for new uses.`)) return;
     setActionError("");
     try {
-      await apiFetch(\`\${API}/content/\${item.id}/archive\`, { method: "POST" });
+      await apiFetch(`${API}/content/${item.id}/archive`, { method: "POST" });
       setItems((current) => current.filter((entry) => entry.id !== item.id));
       if (selected?.id === item.id) setSelected(null);
     } catch (archiveError) { setActionError(archiveError?.message || "We could not archive this content."); }
@@ -1825,7 +1825,7 @@ function ContentLibrary({ customer }) {
   const secureOpen = async (item) => {
     setActionError("");
     try {
-      const response = await apiFetch(\`\${API}/content/\${item.id}/download\`);
+      const response = await apiFetch(`${API}/content/${item.id}/download`);
       const result = await response.json();
       window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (openError) { setActionError(openError?.message || "We could not open this secure file."); }
@@ -1834,7 +1834,7 @@ function ContentLibrary({ customer }) {
   const refreshTemplate = async (item) => {
     setActionError("");
     try {
-      const response = await apiFetch(\`\${API}/content/\${item.id}/refresh-template\`, { method: "POST" });
+      const response = await apiFetch(`${API}/content/${item.id}/refresh-template`, { method: "POST" });
       const result = await response.json();
       setItems((current) => current.map((entry) => entry.id === item.id ? result.item : entry));
       setSelected(result.item);
@@ -1847,7 +1847,7 @@ function ContentLibrary({ customer }) {
   const typeLabel = (contentType) => ({ TEXT: "Text", DOCUMENT: "Document", IMAGE: "Image", LINK: "Link", WHATSAPP_TEMPLATE_REFERENCE: "WhatsApp Template" }[contentType] || contentType);
   const preview = (item) => {
     if (item.content_type === "TEXT") return String(item.text_content || "").slice(0, 110);
-    if (item.content_type === "DOCUMENT") return [item.mime_type?.split("/").pop()?.toUpperCase(), item.file_size ? \`\${Math.ceil(item.file_size / 1024)} KB\` : null].filter(Boolean).join(" · ");
+    if (item.content_type === "DOCUMENT") return [item.mime_type?.split("/").pop()?.toUpperCase(), item.file_size ? `${Math.ceil(item.file_size / 1024)} KB` : null].filter(Boolean).join(" · ");
     if (item.content_type === "IMAGE") return item.mime_type?.replace("image/", "").toUpperCase() || "Image";
     if (item.content_type === "LINK") { try { return new URL(item.link_url).hostname; } catch (_) { return item.link_url; } }
     return [item.template_status, item.template_language].filter(Boolean).join(" · ");
