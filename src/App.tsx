@@ -686,12 +686,16 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
   const { data: msgs, loading: mL } = useAPI("/messages");
   const { data: contacts, loading: cL } = useAPI("/contacts");
   const { data: autos } = useAPI("/automations");
+  const { data: setup, loading: setupLoading } = useAPI("/workspace");
   const todayOut = (msgs||[]).filter(m => new Date(m.created_at).toDateString()===new Date().toDateString()&&m.direction==="outbound").length;
   const h = new Date().getHours();
   const greet = h<12 ? "Good morning" : h<17 ? "Good afternoon" : "Good evening";
-  const whatsappConnected = Boolean(customer?.whatsapp_connected_at);
+  const whatsappConnected = Boolean(setup?.whatsapp_connection?.status === "connected" || customer?.whatsapp_connected_at);
   const profileComplete = Boolean(customer?.profile_completed_at);
   const connectionFailed = whatsappConnectionState?.phase === "error";
+  const checklist = setup?.setup_checklist;
+  const discovery = setup?.discovery;
+  const recommendations = setup?.recommendations;
   const activation = whatsappConnected
     ? { title: "WhatsApp is connected", detail: "This workspace is ready to send and receive WhatsApp messages.", action: "Manage connection →", tone: "#23734a" }
     : connectionFailed
@@ -716,6 +720,33 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
         <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{greet}, {user?.user_metadata?.name?.trim().split(/\s+/)[0] || user?.email?.split("@")[0] || "there"} 👋</h1>
         <p style={{ color: "var(--mist)", fontSize: 14 }}>Your business conversations, automated.</p>
       </div>
+
+      {!setupLoading && checklist?.presentation === "primary" && <section className="card-gold" style={{ padding: 22, marginBottom: 18 }} aria-label="Getting started">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div>
+            <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 7 }}>Getting started</div>
+            <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600 }}>Welcome to ZedPing, {customer?.business_name || "your business"}.</div>
+            <p style={{ color: "var(--mist)", fontSize: 12, marginTop: 7 }}>Let’s get your WhatsApp working for your business.</p>
+          </div>
+          <div className="mono" style={{ color: "var(--gold2)", fontSize: 10, letterSpacing: 1 }}>{checklist.completed}/{checklist.total} COMPLETE</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 9, marginTop: 18 }}>
+          {checklist.items.map((item) => <div key={item.key} style={{ display: "flex", gap: 9, alignItems: "center", color: item.complete ? "var(--cream)" : "var(--mist)", fontSize: 12 }}>
+            <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", background: item.complete ? "var(--gold)" : "rgba(255,255,255,0.08)", color: item.complete ? "var(--ink)" : "var(--mist)", fontSize: 10 }}>{item.complete ? "✓" : "○"}</span>
+            {item.label}
+          </div>)}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
+          <button className="btn btn-gold" onClick={() => onNavigate?.("settings")}>{discovery?.completed_at ? "Update your setup" : "Tell us what you need"}</button>
+          <button className="btn btn-wire" onClick={() => onNavigate?.("contacts")}>Add contacts</button>
+        </div>
+      </section>}
+
+      {!setupLoading && checklist?.presentation === "secondary" && <div className="card" style={{ padding: "12px 16px", marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ color: "var(--mist)", fontSize: 12 }}>Setup progress: {checklist.completed} of {checklist.total} steps complete.</span>
+        <button className="btn btn-wire" onClick={() => onNavigate?.("settings")}>View setup</button>
+      </div>}
+
       <div style={{ background: connectionFailed ? "#fff1f0" : "#fffaf0", border: `1px solid ${connectionFailed ? "rgba(239,68,68,0.35)" : "var(--wire2)"}`, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
         <span aria-hidden="true" style={{ fontSize: 18 }}>{whatsappConnected ? "✓" : connectionFailed ? "!" : "📱"}</span>
@@ -725,6 +756,19 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
         </div>
         <button type="button" onClick={() => onNavigate?.("settings")} className={connectionFailed ? "btn btn-wire" : "btn btn-gold"} style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10 }}>{activation.action}</button>
       </div>
+
+      {discovery?.completed_at && (recommendations?.packs?.length || recommendations?.automations?.length) > 0 && <section className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Recommended for your business</div>
+        <p style={{ color: "var(--mist)", fontSize: 12, marginBottom: 14 }}>Based on your industry and the jobs you chose for ZedPing.</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {[...(recommendations?.packs || []), ...(recommendations?.automations || [])].slice(0,4).map((item) => <div key={item.id} style={{ border: "1px solid var(--wire)", padding: 14 }}>
+            <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{item.name}</div>
+            <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 5 }}>{item.description}</div>
+            <button className="btn btn-wire" style={{ marginTop: 12, fontSize: 9, padding: "7px 10px" }} onClick={() => onNavigate?.("automations")}>Explore automations</button>
+          </div>)}
+        </div>
+      </section>}
+
       <div className="stat-g" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
         {stats.map((s,i) => (
           <div className="kpi-card" key={i} style={{ background: "var(--panel)", border: "1px solid var(--wire)", padding: "20px 18px", position: "relative" }}>
