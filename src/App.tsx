@@ -1052,9 +1052,11 @@ function Contacts({ customer }) {
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
 function TeamInbox({ customer, user }) {
-  const { data: conversations, loading, error, refetch } = useAPI("/conversations", [customer?.id]);
-  const { data: members } = useAPI("/conversations/members", [customer?.id]);
   const [filter, setFilter] = useState("all");
+  const conversationEndpoint = filter === "mine" ? "/conversations?view=assigned_to_me" : filter === "unassigned" ? "/conversations?view=unassigned_human" : "/conversations";
+  const { data: conversations, loading, error, refetch } = useAPI(conversationEndpoint, [customer?.id, filter]);
+  const { data: members } = useAPI("/conversations/members", [customer?.id]);
+
   const [selectedId, setSelectedId] = useState("");
   const [thread, setThread] = useState(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -1135,9 +1137,9 @@ function TeamInbox({ customer, user }) {
   const list = Array.isArray(conversations) ? conversations : [];
   const filtered = list.filter((conversation) => {
     if (filter === "unread") return Number(conversation.unread_count || 0) > 0;
-    if (filter === "attention") return conversation.status === "needs_attention";
-    if (filter === "mine") return conversation.assigned_user_id === user?.id;
-    if (filter === "unassigned") return !conversation.assigned_user_id && conversation.status !== "resolved";
+    if (filter === "attention") return conversation.status === "needs_attention" && conversation.control_mode === "needs_attention";
+    // The server has already derived these two views from the authenticated caller.
+    if (filter === "mine" || filter === "unassigned") return true;
     if (filter === "resolved") return conversation.status === "resolved";
     return true;
   });
@@ -1145,7 +1147,13 @@ function TeamInbox({ customer, user }) {
   const canManageAssignment = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
   const isHuman = active?.control_mode === "human" && active?.status !== "resolved";
   const isAssignedToMe = active?.assigned_user_id === user?.id;
-  const labelFor = (conversation) => conversation.status === "needs_attention" ? "Needs attention" : conversation.status === "resolved" ? "Resolved" : conversation.control_mode === "human" ? "Human" : "Automation";
+  const assigneeName = (conversation) => (members || []).find((member) => member.id === conversation?.assigned_user_id)?.name || (members || []).find((member) => member.id === conversation?.assigned_user_id)?.email || "another team member";
+  const labelFor = (conversation) => {
+    if (conversation.status === "resolved") return "Resolved";
+    if (conversation.control_mode === "needs_attention") return conversation.assigned_user_id ? `Assigned to ${assigneeName(conversation)}` : "Waiting for a team member";
+    if (conversation.control_mode === "human") return conversation.assigned_user_id === user?.id ? "You're handling this conversation" : `Assigned to ${assigneeName(conversation)}`;
+    return "Automation active";
+  };
 
   return <div className="pad" style={{ padding: 28 }}>
     <PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." />
