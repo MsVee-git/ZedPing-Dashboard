@@ -11,7 +11,7 @@ function loadFacebookSdk(appId) {
     const existing = document.getElementById("facebook-jssdk");
     const initialise = () => {
       if (!window.FB) return reject(new Error("Facebook login could not be loaded."));
-      window.FB.init({ appId, cookie: true, xfbml: false, version: "v18.0" });
+      window.FB.init({ appId, cookie: true, xfbml: false, version: "v26.0" });
       resolve(window.FB);
     };
 
