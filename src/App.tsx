@@ -946,9 +946,15 @@ function Contacts({ customer }) {
     setGroupsLoading(true);
     const { data: groupRows, error } = await supabase.from("contact_groups").select("id,name,description,color,created_at").eq("customer_id", customer.id).order("created_at", { ascending: false });
     if (error) notify("Could not load groups", false);
-    const { data: links } = await supabase.from("contact_group_members").select("group_id");
-    const counts = (links || []).reduce((result, link) => ({ ...result, [link.group_id]: (result[link.group_id] || 0) + 1 }), {});
-    setGroups((groupRows || []).map(group => ({ ...group, member_count: counts[group.id] || 0 })));
+    const { data: links } = await supabase.from("contact_group_members").select("group_id,contact_id");
+    // Counts reflect distinct contacts, so an accidental duplicate membership link
+    // cannot inflate the recipient count shown to the user.
+    const counts = (links || []).reduce((result, link) => {
+      if (!result[link.group_id]) result[link.group_id] = new Set();
+      result[link.group_id].add(link.contact_id);
+      return result;
+    }, {});
+    setGroups((groupRows || []).map(group => ({ ...group, member_count: counts[group.id]?.size || 0 })));
     setGroupsLoading(false);
   }
   useEffect(() => { if (tab === "groups") loadGroups(); }, [tab, customer?.id]);
