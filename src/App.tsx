@@ -778,282 +778,225 @@ function Broadcasts({ customer }) {
   useEffect(() => {
     let alive = true;
     async function loadGroups() {
-    if (!customer?.id) return;
-    setGroupsLoading(true);
-    const { data: g } = await supabase.from("contact_groups").select("*").eq("customer_id", customer.id).order("created_at", { ascending: false });
-    const { data: members } = await supabase.from("contact_group_members").select("group_id");
-    const counts = (members || []).reduce((all, member) => ({ ...all, [member.group_id]: (all[member.group_id] || 0) + 1 }), {});
-    setGroups((g || []).map(group => ({ ...group, total_contacts: counts[group.id] || 0 })));
-    setGroupsLoading(false);
-  }
-
-  useEffect(() => { if (tab === "groups") loadGroups(); }, [tab, customer?.id]);
-
-  function getBatches(total) {
-    if (PLAN_LIMIT === Infinity || total <= PLAN_LIMIT) return 1;
-    return Math.ceil(total / PLAN_LIMIT);
-  }
-
-  async function saveGroup() {
-    if (!groupForm.name.trim()) return;
-    setGroupSaving(true);
-    if (editGroup) {
-      await supabase.from("contact_groups")
-        .update({ name: groupForm.name.trim(), description: groupForm.description.trim(), color: groupForm.color, updated_at: new Date().toISOString() })
-        .eq("id", editGroup.id);
-      showToast("Group updated");
-    } else {
-      await supabase.from("contact_groups")
-        .insert({ customer_id: customer.id, name: groupForm.name.trim(), description: groupForm.description.trim(), color: groupForm.color, total_contacts: 0 });
-      showToast("Group created");
+      if (!customer?.id) return;
+      const { data } = await supabase.from("contact_groups").select("id,name,description,total_contacts").eq("customer_id", customer.id).order("name");
+      if (alive) setGroups(data || []);
     }
-    setGroupSaving(false);
-    setShowGroupModal(false);
-    setEditGroup(null);
-    setGroupForm({ name: "", description: "", color: "#B8922A" });
     loadGroups();
-  }
+    return () => { alive = false; };
+  }, [customer?.id]);
 
-  async function confirmDelete() {
-    await supabase.from("contact_groups").delete().eq("id", deleteGroup.id);
-    showToast("Group deleted");
-    setDeleteGroup(null);
-    loadGroups();
-  }
+  const normalizePhone = (value) => {
+    const raw = String(value || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return null;
+    if (raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
+    if (/^260\d{9}$/.test(digits)) return "+" + digits;
+    if (/^0\d{9}$/.test(digits)) return "+260" + digits.slice(1);
+    if (/^[79]\d{8}$/.test(digits)) return "+260" + digits;
+    if (/^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
+    return null;
+  };
 
-  function openEdit(g) {
-    setEditGroup(g);
-    setGroupForm({ name: g.name, description: g.description || "", color: g.color || "#B8922A" });
-    setShowGroupModal(true);
-  }
+  const setGroup = async (groupId) => {
+    setSelectedGroupId(groupId);
+    setRecipients([]);
+    setNotice(null);
+    if (!groupId) return;
+    const { data: memberships, error } = await supabase.from("contact_group_members").select("contact_id").eq("group_id", groupId);
+    if (error) { setNotice({ ok: false, text: "Could not load this contact list." }); return; }
+    const ids = new Set((memberships || []).map(row => row.contact_id));
+    const selected = (contacts || []).filter(contact => ids.has(contact.id));
+    setRecipients(selected);
+  };
 
-  async function openGroup(group) {
-    setActiveGroup(group); setSelectedContactId(""); setMembersLoading(true);
-    const { data: members, error } = await supabase.from("contact_group_members").select("id,contact_id").eq("group_id", group.id);
-    if (error) { showToast("Could not load group members", false); setGroupMembers([]); }
-    else setGroupMembers((members || []).map(member => ({ ...member, contact: (data || []).find(contact => contact.id === member.contact_id) })).filter(member => member.contact));
-    setMembersLoading(false);
-  }
-
-  async function addGroupMember() {
-    if (!activeGroup || !selectedContactId) return;
-    const { error } = await supabase.from("contact_group_members").insert({ group_id: activeGroup.id, contact_id: selectedContactId });
-    if (error) return showToast("Could not add this contact to the group", false);
-    showToast("Contact added to group"); setSelectedContactId(""); await openGroup(activeGroup); loadGroups();
-  }
-
-  async function removeGroupMember(member) {
-    const { error } = await supabase.from("contact_group_members").delete().eq("id", member.id).eq("group_id", activeGroup.id);
-    if (error) return showToast("Could not remove this contact", false);
-    showToast("Contact removed from group"); await openGroup(activeGroup); loadGroups();
-  }
-
-  const filtered = (data || []).filter(c =>
-    (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (c.phone_number || "").includes(search)
-  );
-
-  const handleFile = async (e) => {
-    const file = e.target.files[0];
-    const input = e.target;
+  const parseUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
-    setUploading(true); setUploadMsg("");
+    setUploadReport(null); setRecipients([]); setNotice(null);
+    if (file.size > 5 * 1024 * 1024) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: "File must be 5 MB or smaller" }] }); return; }
     try {
-      const text = await file.text();
-      const lines = text.trim().split("\n");
-      const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/"/g, ""));
-      const nameIdx = headers.findIndex(h => h.includes("name"));
-      const phoneIdx = headers.findIndex(h => h.includes("phone") || h.includes("number") || h.includes("mobile"));
-      const tagIdx = headers.findIndex(h => h.includes("tag") || h.includes("group") || h.includes("type"));
-      if (nameIdx === -1 || phoneIdx === -1) { setUploadMsg("❌ CSV must have 'Name' and 'Phone' columns."); setUploading(false); return; }
-      const contacts = lines.slice(1).filter(l => l.trim()).map(line => {
-        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
-        return { name: cols[nameIdx] || "", phone_number: cols[phoneIdx] || "", tag: tagIdx > -1 ? cols[tagIdx] : "Contact", customer_id: customer?.id };
-      }).filter(c => c.name && c.phone_number);
-      if (contacts.length === 0) { setUploadMsg("❌ No valid contacts found in file."); setUploading(false); return; }
-      const r = await apiFetch(`${API}/contacts/bulk`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) });
-      await r.json();
-      setUploadMsg(`✓ ${contacts.length} contacts uploaded successfully.`);
-      refetch();
-    } catch (e) { setUploadMsg("❌ Error: " + e.message); }
-    finally { setUploading(false); input.value = ""; }
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
+      const headers = (rows[0] || []).map(value => String(value).trim().toLowerCase());
+      const nameIndex = headers.findIndex(header => header.includes("name"));
+      const phoneIndex = headers.findIndex(header => header.includes("phone") || header.includes("number") || header.includes("mobile"));
+      if (nameIndex < 0 || phoneIndex < 0) throw new Error("Your file needs Name and Phone Number columns.");
+      const invalid = [], seen = new Set(), valid = [];
+      rows.slice(1).forEach((row, index) => {
+        if (!row.some(value => String(value).trim())) return;
+        const phone_number = normalizePhone(row[phoneIndex]);
+        const name = String(row[nameIndex] || "").trim();
+        if (!name || !phone_number) { invalid.push({ row: index + 2, reason: !name ? "Missing name" : "Invalid phone number" }); return; }
+        if (!seen.has(phone_number)) { seen.add(phone_number); valid.push({ name, phone_number }); }
+      });
+      setRecipients(valid); setUploadReport({ valid, invalid, file: file.name });
+    } catch (error) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: error.message || "Could not read this file" }] }); }
   };
 
-  const downloadTemplate = () => {
-    const csv = "Name,Phone Number,Tag\nMrs Mwanza,+260971234567,VIP\nJohn Banda,+260962345678,Regular";
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "zedping-contacts-template.csv"; a.click();
-    URL.revokeObjectURL(url);
+  const recipientsForMode = () => {
+    if (mode === "single") {
+      const phone_number = normalizePhone(phone);
+      return phone_number ? [{ name: "Contact", phone_number }] : [];
+    }
+    return recipients;
   };
 
-  const GROUP_COLORS = ["#B8922A", "#22C55E", "#3B82F6", "#A855F7", "#EF4444", "#6B6B6B"];
+  const send = async () => {
+    const selected = recipientsForMode();
+    if (!message.trim() || !selected.length) { setNotice({ ok: false, text: "Add a message and at least one valid recipient." }); return; }
+    setSending(true); setNotice(null);
+    try {
+      if (mode === "upload" && saveImported && uploadReport?.valid?.length) {
+        await apiFetch(`${API}/contacts/upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: uploadReport.valid }) });
+      }
+      const response = await apiFetch(`${API}/broadcasts/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: selected, message: message.trim() }) });
+      const result = await response.json();
+      setNotice({ ok: result.failed === 0, text: `Sent: ${result.sent} · Failed: ${result.failed}` });
+      if (mode === "single") setPhone("");
+      if (mode === "upload") { setRecipients([]); setUploadReport(null); }
+      refetchHistory();
+    } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
+    finally { setSending(false); }
+  };
+
+  const statusFor = (broadcast) => {
+    if (broadcast.status === "completed") return { label: "SENT", cls: "badge-green" };
+    if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
+    if (broadcast.status === "pending" || broadcast.status === "sending") return { label: "SCHEDULED", cls: "badge-gold" };
+    return null;
+  };
+  const activity = (history || []).filter(broadcast => activityFilter === "all" || statusFor(broadcast)?.label.toLowerCase() === activityFilter);
 
   return (
     <div className="pad" style={{ padding: 28 }}>
-
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, right: 24, background: toast.ok ? "#1A3A2A" : "#7F1D1D", border: `1px solid ${toast.ok ? "var(--wire2)" : "rgba(239,68,68,0.3)"}`, color: toast.ok ? "var(--success-text)" : "var(--error-text)", padding: "12px 20px", zIndex: 9999, fontFamily: "DM Mono, monospace", fontSize: 11, letterSpacing: 1 }}>
-          {toast.msg}
+      <PageHead label="WhatsApp" title="Broadcasts." sub="Send messages to your contact list" />
+      <div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Send Message</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+          {[["list", "Select Contact List"], ["upload", "Upload Contacts"], ["single", "Single Number"]].map(([id, label]) => <button key={id} className={mode === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => { setMode(id); setNotice(null); }} style={{ fontSize: 10, padding: "8px 12px" }}>{label}</button>)}
         </div>
-      )}
-
-      <PageHead
-        label="Database"
-        title="Contacts."
-        sub={loading ? "Loading..." : `${data?.length || 0} contacts`}
-        action={
-          tab === "contacts" ? (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn btn-wire" onClick={downloadTemplate}><Ic n="upload" s={12} c="var(--mist)" />Download Template</button>
-              <button className="btn btn-gold" onClick={() => fileRef.current.click()} disabled={uploading}><Ic n="upload" s={12} c="var(--ink)" />{uploading ? "Uploading..." : "Import CSV"}</button>
-              <input ref={fileRef} type="file" accept=".csv" style={{ display: "none" }} onChange={handleFile} />
-            </div>
-          ) : (
-            <button className="btn btn-gold" onClick={() => { setEditGroup(null); setGroupForm({ name: "", description: "", color: "#B8922A" }); setShowGroupModal(true); }}>
-              <Ic n="plus" s={12} c="var(--ink)" />New Group
-            </button>
-          )
-        }
-      />
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: "1px solid var(--wire)" }}>
-        {[["contacts", "All Contacts"], ["groups", "Contact Groups"]].map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ background: "none", border: "none", borderBottom: tab === id ? "2px solid var(--gold)" : "2px solid transparent", color: tab === id ? "var(--gold2)" : "var(--mist)", fontFamily: "DM Mono, monospace", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", padding: "10px 18px", cursor: "pointer", transition: "all 0.15s", marginBottom: -1 }}>
-            {label}
-          </button>
-        ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {mode === "list" && <div>
+            <label className="label">Contact List</label>
+            <select className="input" value={selectedGroupId} onChange={event => setGroup(event.target.value)} disabled={contactsLoading}>
+              <option value="">Select an existing list…</option>
+              {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select>
+            {groups.length === 0 && <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>No contact lists with members are available yet. Create and populate a list in Contacts first.</div>}
+            {selectedGroupId && <div className="mono" style={{ fontSize: 10, color: "var(--gold2)", marginTop: 8 }}>{recipients.length} recipient{recipients.length === 1 ? "" : "s"} selected</div>}
+          </div>}
+          {mode === "upload" && <div>
+            <label className="label">CSV or XLSX file</label>
+            <input ref={uploadRef} type="file" accept=".csv,.xlsx" onChange={parseUpload} className="input" style={{ padding: 9 }} />
+            <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>Required columns: Name, Phone Number · 5 MB maximum</div>
+            {uploadReport && <div style={{ marginTop: 10, padding: "10px 12px", border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}>
+              <div className="mono" style={{ fontSize: 10, color: "var(--success-text)" }}>{uploadReport.valid.length} valid recipient{uploadReport.valid.length === 1 ? "" : "s"}</div>
+              {uploadReport.invalid.length > 0 && <div className="mono" style={{ fontSize: 10, color: "var(--error-text)", marginTop: 5 }}>{uploadReport.invalid.length} invalid row{uploadReport.invalid.length === 1 ? "" : "s"} · {uploadReport.invalid.slice(0, 3).map(item => item.row ? `Row ${item.row}: ${item.reason}` : item.reason).join(" · ")}</div>}
+            </div>}
+            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 12, color: "var(--mist)", cursor: "pointer" }}><input type="checkbox" checked={saveImported} onChange={event => setSaveImported(event.target.checked)} />Save these contacts to Contacts</label>
+          </div>}
+          {mode === "single" && <div><label className="label">Phone Number</label><input className="input" placeholder="+260971234567" value={phone} onChange={event => setPhone(event.target.value)} /></div>}
+          <div><label className="label">Message</label><textarea className="textarea" maxLength={4096} placeholder="Your message here..." value={message} onChange={event => setMessage(event.target.value)} /><div className="mono" style={{ fontSize: 10, color: "var(--mist)", textAlign: "right", marginTop: 5 }}>{message.length}/4096</div></div>
+          {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
+          <button className="btn btn-gold" onClick={send} disabled={sending} style={{ alignSelf: "flex-start", padding: "10px 22px" }}><Ic n="send" s={12} c="var(--ink)" />{sending ? "Sending..." : "Send Now"}</button>
+        </div>
       </div>
-
-      {/* ── ALL CONTACTS TAB ── */}
-      {tab === "contacts" && (
-        <>
-          {uploadMsg && (
-            <div className="mono" style={{ fontSize: 11, color: uploadMsg.startsWith("✓") ? "var(--success-text)" : "var(--error-text)", marginBottom: 16, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--wire)" }}>
-              {uploadMsg}
-            </div>
-          )}
-          <div style={{ marginBottom: 12, padding: "10px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--wire)" }}>
-            <span className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>CSV format: Name, Phone Number, Tag (optional) · Download the template above for the correct format</span>
-          </div>
-          <div style={{ position: "relative", marginBottom: 16 }}>
-            <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Ic n="search" s={13} c="var(--mist)" /></div>
-            <input className="input" placeholder="Search contacts..." style={{ paddingLeft: 36 }} value={search} onChange={e => setSearch(e.target.value)} />
-          </div>
-          <div className="card">
-            <div className="row th" style={{ gridTemplateColumns: "2fr 1.5fr 1fr 1fr", gap: 12 }}>
-              {["Name", "Phone", "Tag", "Added"].map(h => <div key={h}>{h}</div>)}
-            </div>
-            {loading ? <Loader /> : !filtered.length ? <Empty msg="No contacts found" /> :
-              filtered.map((c, i) => (
-                <div key={i} className="row" style={{ gridTemplateColumns: "2fr 1.5fr 1fr 1fr", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 28, height: 28, background: "var(--green)", border: "1px solid var(--wire2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span className="editorial" style={{ color: "var(--gold2)", fontSize: 13, fontWeight: 600 }}>{(c.name || "?").charAt(0).toUpperCase()}</span>
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{c.name || "Unknown"}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--mist)" }}>{c.phone_number}</div>
-                  <div className={`badge ${c.tag === "VIP" ? "badge-gold" : "badge-cream"}`}>{c.tag || "Contact"}</div>
-                  <div style={{ fontSize: 11, color: "var(--mist)" }}>{c.created_at ? new Date(c.created_at).toLocaleDateString() : "—"}</div>
-                </div>
-              ))
-            }
-          </div>
-        </>
-      )}
-
-      {/* ── CONTACT GROUPS TAB ── */}
-      {tab === "groups" && (
-        <>
-          {groupsLoading ? <Loader /> : groups.length === 0 ? <Empty msg="No contact groups yet" /> : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-              {groups.map(g => <div key={g.id} className="card" style={{ padding: "18px 20px", position: "relative" }}>
-                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: g.color || "var(--gold)", opacity: 0.7 }} />
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 13, color: "var(--cream)" }}>{g.name}</div>{g.description && <div style={{ fontSize: 11, color: "var(--mist)", marginTop: 2 }}>{g.description}</div>}</div>
-                  <div style={{ textAlign: "right" }}><div className="editorial" style={{ fontSize: 26, color: "var(--cream)", fontWeight: 600, lineHeight: 1 }}>{g.total_contacts || 0}</div><div className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 1 }}>CONTACTS</div></div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}><button className="btn btn-gold" style={{ flex: 1, fontSize: 9, padding: "7px 10px" }} onClick={() => openGroup(g)}>Manage</button><button className="btn btn-wire" style={{ fontSize: 9, padding: "7px 10px" }} onClick={() => openEdit(g)}>Edit</button><button className="btn btn-danger" style={{ fontSize: 9, padding: "7px 10px" }} onClick={() => setDeleteGroup(g)}>Delete</button></div>
-              </div>)}
-            </div>
-          )}
-        </>
-      )}
-
-      {activeGroup && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <div className="dialog-surface" style={{ background: "var(--panel)", border: "1px solid var(--wire2)", padding: 28, width: "100%", maxWidth: 620, maxHeight: "80vh", overflow: "auto" }}>
-          <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>CONTACT LIST</div><h3 className="editorial" style={{ fontSize: 24, color: "var(--cream)", marginBottom: 16 }}>{activeGroup.name}</h3>
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}><select className="input" value={selectedContactId} onChange={event => setSelectedContactId(event.target.value)}><option value="">Select an existing contact…</option>{(data || []).filter(contact => !groupMembers.some(member => member.contact_id === contact.id)).map(contact => <option key={contact.id} value={contact.id}>{contact.name} · {contact.phone_number}</option>)}</select><button className="btn btn-gold" onClick={addGroupMember} disabled={!selectedContactId}>Add</button></div>
-          {membersLoading ? <Loader /> : groupMembers.length === 0 ? <Empty msg="No contacts in this group yet" /> : <div className="card">{groupMembers.map(member => <div key={member.id} className="row" style={{ gridTemplateColumns: "2fr 1.5fr 80px", gap: 12 }}><div style={{ color: "var(--cream)", fontSize: 13 }}>{member.contact.name}</div><div style={{ color: "var(--mist)", fontSize: 12 }}>{member.contact.phone_number}</div><button className="btn btn-wire" style={{ fontSize: 9, padding: "5px 8px" }} onClick={() => removeGroupMember(member)}>Remove</button></div>)}</div>}
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}><button className="btn btn-wire" onClick={() => setActiveGroup(null)}>Done</button></div>
-        </div>
-      </div>}
-
-      {/* ── CREATE / EDIT GROUP MODAL ── */}
-      {showGroupModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-          onClick={e => e.target === e.currentTarget && setShowGroupModal(false)}>
-          <div className="dialog-surface" style={{ background: "var(--panel)", border: "1px solid var(--wire2)", padding: "28px 28px 24px", width: "100%", maxWidth: 460, position: "relative" }}>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.5 }} />
-            <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{editGroup ? "Edit Group" : "New Group"}</div>
-            <h3 className="editorial" style={{ fontSize: 24, color: "var(--cream)", fontWeight: 600, marginBottom: 22 }}>{editGroup ? editGroup.name : "Create group."}</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <label className="label">Group name *</label>
-                <input className="input" placeholder="e.g. Parents – Term 2 Fees" value={groupForm.name} onChange={e => setGroupForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Description (optional)</label>
-                <input className="input" placeholder="e.g. All parents with outstanding fees" value={groupForm.description} onChange={e => setGroupForm(f => ({ ...f, description: e.target.value }))} />
-              </div>
-              <div>
-                <label className="label">Colour</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {GROUP_COLORS.map(c => (
-                    <button key={c} onClick={() => setGroupForm(f => ({ ...f, color: c }))} style={{ width: 28, height: 28, background: c, border: groupForm.color === c ? "2px solid var(--cream)" : "2px solid transparent", cursor: "pointer", transition: "transform 0.1s", transform: groupForm.color === c ? "scale(1.15)" : "scale(1)" }} />
-                  ))}
-                </div>
-              </div>
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--wire)", padding: "10px 14px" }}>
-                <span className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 1 }}>
-                  Your {plan.toUpperCase()} plan sends {PLAN_LIMIT === Infinity ? "unlimited" : `up to ${PLAN_LIMIT.toLocaleString()}`} contacts per broadcast.
-                  {PLAN_LIMIT !== Infinity && " Groups larger than this are auto-split."}
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
-                <button className="btn btn-wire" onClick={() => { setShowGroupModal(false); setEditGroup(null); }}>Cancel</button>
-                <button className="btn btn-gold" onClick={saveGroup} disabled={!groupForm.name.trim() || groupSaving} style={{ opacity: !groupForm.name.trim() || groupSaving ? 0.4 : 1 }}>
-                  {groupSaving ? <div className="spin" /> : editGroup ? "Save changes" : "Create group"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── DELETE CONFIRM MODAL ── */}
-      {deleteGroup && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
-          onClick={e => e.target === e.currentTarget && setDeleteGroup(null)}>
-          <div style={{ background: "var(--panel)", border: "1px solid rgba(239,68,68,0.2)", padding: "28px", width: "100%", maxWidth: 400, position: "relative" }}>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--red), transparent)", opacity: 0.4 }} />
-            <div className="mono" style={{ fontSize: 9, color: "var(--error-text)", letterSpacing: 2, marginBottom: 6 }}>CONFIRM DELETE</div>
-            <h3 className="editorial" style={{ fontSize: 22, color: "var(--cream)", fontWeight: 600, marginBottom: 10 }}>Delete group?</h3>
-            <p style={{ color: "var(--mist)", fontSize: 13, marginBottom: 22, lineHeight: 1.6 }}>
-              This will delete <strong style={{ color: "var(--cream)" }}>{deleteGroup.name}</strong> and remove all {deleteGroup.total_contacts} member links. Contacts themselves are not deleted.
-            </p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button className="btn btn-wire" onClick={() => setDeleteGroup(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={confirmDelete}>Delete group</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Broadcast Activity</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sent","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+      </div>
+      <div className="card">
+        {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
+          const status = statusFor(broadcast); if (!status) return null;
+          return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px", gap: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
+            <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{Array.isArray(broadcast.contacts) ? broadcast.contacts.length : 0} recipients</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString()}</div>
+            <div className={"badge " + status.cls}>{status.label}</div>
+          </div>;
+        })}
+      </div>
     </div>
   );
+}
+
+// ── CONTACTS ──────────────────────────────────────────────────────────────────
+function Contacts({ customer }) {
+  const { data, loading, refetch } = useAPI("/contacts");
+  const [tab, setTab] = useState("contacts");
+  const [search, setSearch] = useState("");
+  const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [showGroupForm, setShowGroupForm] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [activeGroup, setActiveGroup] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const notify = (text, ok = true) => { setToast({ text, ok }); setTimeout(() => setToast(null), 3000); };
+  const filtered = (data || []).filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()) || (c.phone_number || "").includes(search));
+
+  async function loadGroups() {
+    if (!customer?.id) return;
+    setGroupsLoading(true);
+    const { data: groupRows, error } = await supabase.from("contact_groups").select("id,name,description,color,created_at").eq("customer_id", customer.id).order("created_at", { ascending: false });
+    if (error) notify("Could not load groups", false);
+    const { data: links } = await supabase.from("contact_group_members").select("group_id");
+    const counts = (links || []).reduce((result, link) => ({ ...result, [link.group_id]: (result[link.group_id] || 0) + 1 }), {});
+    setGroups((groupRows || []).map(group => ({ ...group, member_count: counts[group.id] || 0 })));
+    setGroupsLoading(false);
+  }
+  useEffect(() => { if (tab === "groups") loadGroups(); }, [tab, customer?.id]);
+
+  async function createGroup() {
+    const name = groupName.trim();
+    if (!name) return;
+    const { error } = await supabase.from("contact_groups").insert({ customer_id: customer.id, name, total_contacts: 0 });
+    if (error) return notify("Could not create group", false);
+    setGroupName(""); setShowGroupForm(false); notify("Contact list created"); loadGroups();
+  }
+  async function openGroup(group) {
+    setActiveGroup(group); setSelectedContactId("");
+    const { data: links, error } = await supabase.from("contact_group_members").select("id,contact_id").eq("group_id", group.id);
+    if (error) return notify("Could not load group members", false);
+    setMembers((links || []).map(link => ({ ...link, contact: (data || []).find(contact => contact.id === link.contact_id) })).filter(link => link.contact));
+  }
+  async function addMember() {
+    if (!activeGroup || !selectedContactId) return;
+    const { error } = await supabase.from("contact_group_members").insert({ group_id: activeGroup.id, contact_id: selectedContactId });
+    if (error) return notify("Could not add contact to this list", false);
+    notify("Contact added"); await openGroup(activeGroup); loadGroups();
+  }
+  async function removeMember(member) {
+    const { error } = await supabase.from("contact_group_members").delete().eq("id", member.id).eq("group_id", activeGroup.id);
+    if (error) return notify("Could not remove contact", false);
+    notify("Contact removed"); await openGroup(activeGroup); loadGroups();
+  }
+  async function deleteGroup(group) {
+    const { error } = await supabase.from("contact_groups").delete().eq("id", group.id).eq("customer_id", customer.id);
+    if (error) return notify("Could not delete group", false);
+    notify("Contact list deleted"); loadGroups();
+  }
+
+  return <div className="pad" style={{ padding: 28 }}>
+    {toast && <div className="mono" style={{ position:"fixed",right:24,bottom:24,zIndex:2000,padding:"12px 16px",background:toast.ok?"#1A3A2A":"#7F1D1D",color:toast.ok?"var(--success-text)":"var(--error-text)",border:"1px solid var(--wire2)",fontSize:11 }}>{toast.text}</div>}
+    <PageHead label="Database" title="Contacts." sub={loading ? "Loading..." : `${data?.length || 0} contacts`} action={tab === "groups" ? <button className="btn btn-gold" onClick={() => setShowGroupForm(true)}><Ic n="plus" s={12} c="var(--ink)" />New Group</button> : null} />
+    <div style={{ display:"flex",borderBottom:"1px solid var(--wire)",marginBottom:20 }}>
+      {[["contacts","All Contacts"],["groups","Contact Groups"]].map(([id,label]) => <button key={id} onClick={() => setTab(id)} style={{background:"none",border:"none",borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent",color:tab===id?"var(--gold2)":"var(--mist)",padding:"10px 18px",fontFamily:"DM Mono, monospace",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{label}</button>)}
+    </div>
+    {tab === "contacts" && <>
+      <div style={{ position:"relative",marginBottom:16 }}><input className="input" placeholder="Search contacts..." value={search} onChange={event => setSearch(event.target.value)} /></div>
+      <div className="card"><div className="row th" style={{gridTemplateColumns:"2fr 1.5fr 1fr 1fr",gap:12}}>{["Name","Phone","Tag","Added"].map(h => <div key={h}>{h}</div>)}</div>{loading?<Loader/>:!filtered.length?<Empty msg="No contacts found"/>:filtered.map(contact => <div key={contact.id} className="row" style={{gridTemplateColumns:"2fr 1.5fr 1fr 1fr",gap:12}}><div style={{color:"var(--cream)",fontSize:13}}>{contact.name}</div><div style={{color:"var(--mist)",fontSize:12}}>{contact.phone_number}</div><div className="badge badge-cream">{contact.tag || "Contact"}</div><div style={{color:"var(--mist)",fontSize:11}}>{contact.created_at ? new Date(contact.created_at).toLocaleDateString() : "—"}</div></div>)}</div>
+    </>}
+    {tab === "groups" && (groupsLoading?<Loader/>:!groups.length?<Empty msg="No contact groups yet"/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>{groups.map(group=><div key={group.id} className="card" style={{padding:"18px 20px"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:14}}><div><div style={{fontSize:13,fontWeight:600,color:"var(--cream)"}}>{group.name}</div>{group.description&&<div style={{fontSize:11,color:"var(--mist)"}}>{group.description}</div>}</div><div className="mono" style={{fontSize:10,color:"var(--gold2)"}}>{group.member_count} CONTACTS</div></div><div style={{display:"flex",gap:8}}><button className="btn btn-gold" style={{flex:1,fontSize:9,padding:"7px 10px"}} onClick={()=>openGroup(group)}>Manage</button><button className="btn btn-danger" style={{fontSize:9,padding:"7px 10px"}} onClick={()=>deleteGroup(group)}>Delete</button></div></div>)}</div>)}
+    {showGroupForm && <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div className="dialog-surface" style={{background:"var(--panel)",padding:28,width:"100%",maxWidth:440}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>NEW CONTACT LIST</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Create a group.</h3><label className="label">List name</label><input className="input" value={groupName} onChange={event=>setGroupName(event.target.value)} placeholder="e.g. VIP customers"/><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}><button className="btn btn-wire" onClick={()=>setShowGroupForm(false)}>Cancel</button><button className="btn btn-gold" onClick={createGroup} disabled={!groupName.trim()}>Create</button></div></div></div>}
+    {activeGroup && <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div className="dialog-surface" style={{background:"var(--panel)",padding:28,width:"100%",maxWidth:620,maxHeight:"80vh",overflow:"auto"}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT LIST</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>{activeGroup.name}</h3><div style={{display:"flex",gap:8,margin:"16px 0"}}><select className="input" value={selectedContactId} onChange={event=>setSelectedContactId(event.target.value)}><option value="">Select an existing contact…</option>{(data||[]).filter(contact=>!members.some(member=>member.contact_id===contact.id)).map(contact=><option key={contact.id} value={contact.id}>{contact.name} · {contact.phone_number}</option>)}</select><button className="btn btn-gold" onClick={addMember} disabled={!selectedContactId}>Add</button></div>{!members.length?<Empty msg="No contacts in this list yet"/>:<div className="card">{members.map(member=><div key={member.id} className="row" style={{gridTemplateColumns:"2fr 1.5fr 80px",gap:12}}><div style={{color:"var(--cream)",fontSize:13}}>{member.contact.name}</div><div style={{color:"var(--mist)",fontSize:12}}>{member.contact.phone_number}</div><button className="btn btn-wire" style={{fontSize:9,padding:"5px 8px"}} onClick={()=>removeMember(member)}>Remove</button></div>)}</div>}<div style={{display:"flex",justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={()=>setActiveGroup(null)}>Done</button></div></div></div>}
+  </div>;
 }
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
