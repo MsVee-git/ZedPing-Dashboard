@@ -585,7 +585,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "overview", label: "Dashboard", icon: "home" },
     { id: "broadcasts", label: "Broadcasts", icon: "broadcast" },
     { id: "contacts", label: "Contacts", icon: "contacts" },
-    { id: "messages", label: "Message Log", icon: "messages" },
+    { id: "messages", label: "Team Inbox", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
     { id: "templates", label: "WhatsApp Templates", icon: "messages" },
     { id: "settings", label: "Settings", icon: "settings" },
@@ -1050,37 +1050,178 @@ function Contacts({ customer }) {
 }
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
-function MessageLog({ customer }) {
-  const { data, loading, refetch } = useAPI("/messages");
-  const [search, setSearch] = useState("");
-  const filtered = (data||[]).filter(m=>(m.message_body||"").toLowerCase().includes(search.toLowerCase())||(m.from_number||m.to_number||"").includes(search));
+function TeamInbox({ customer, user }) {
+  const { data: conversations, loading, error, refetch } = useAPI("/conversations", [customer?.id]);
+  const { data: members } = useAPI("/conversations/members", [customer?.id]);
+  const [filter, setFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState("");
+  const [thread, setThread] = useState(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadError, setThreadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [reply, setReply] = useState("");
+  const [replying, setReplying] = useState(false);
+  const requestRef = useRef(0);
 
-  return (
-    <div className="pad" style={{ padding: 28 }}>
-      <PageHead label="Log" title="Messages." sub={loading?"Loading...":`${data?.length||0} messages`}
-        action={<button className="btn btn-wire" onClick={refetch}><Ic n="refresh" s={12} c="var(--mist)" /></button>}
-      />
-      <div style={{ position: "relative", marginBottom: 16 }}>
-        <div style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }}><Ic n="search" s={13} c="var(--mist)" /></div>
-        <input className="input" placeholder="Search messages..." style={{ paddingLeft: 36 }} value={search} onChange={e=>setSearch(e.target.value)} />
-      </div>
-      <div className="card">
-        <div className="row th" style={{ gridTemplateColumns: "1.2fr 3fr 100px 80px", gap: 12 }}>
-          {["Contact","Message","Direction","Time"].map(h=><div key={h}>{h}</div>)}
-        </div>
-        {loading ? <Loader /> : !filtered.length ? <Empty msg="No messages yet" /> :
-          filtered.slice(0,50).map((m,i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: "1.2fr 3fr 100px 80px", gap: 12 }}>
-              <div style={{ fontSize: 12, color: "var(--cream)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from_number||m.to_number}</div>
-              <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.message_body}</div>
-              <div className={`badge ${m.direction==="inbound"?"badge-blue":"badge-green"}`}>{m.direction==="inbound"?"Inbound":"Outbound"}</div>
-              <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{m.created_at?new Date(m.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"—"}</div>
+  useEffect(() => {
+    requestRef.current += 1;
+    setSelectedId("");
+    setThread(null);
+    setThreadError("");
+    setActionError("");
+    setReply("");
+  }, [customer?.id]);
+
+  const openConversation = async (id) => {
+    const request = ++requestRef.current;
+    setSelectedId(id); setThread(null); setThreadError(""); setActionError(""); setReply(""); setThreadLoading(true);
+    try {
+      const response = await apiFetch(`${API}/conversations/${id}`);
+      const payload = await response.json();
+      if (request !== requestRef.current) return;
+      setThread(payload);
+      await apiFetch(`${API}/conversations/${id}/read`, { method: "POST" });
+      refetch();
+    } catch (failure) {
+      if (request === requestRef.current) setThreadError(failure?.message || "We could not load this conversation.");
+    } finally {
+      if (request === requestRef.current) setThreadLoading(false);
+    }
+  };
+
+  const refreshThread = async (id = selectedId) => {
+    if (!id) return;
+    await openConversation(id);
+  };
+
+  const runAction = async (path, options = {}) => {
+    if (!selectedId) return;
+    setActionError("");
+    try {
+      const response = await apiFetch(`${API}/conversations/${selectedId}${path}`, {
+        method: options.method || "POST",
+        headers: { "Content-Type": "application/json" },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      const payload = await response.json();
+      if (payload?.conversation) setThread((current) => current ? { ...current, conversation: payload.conversation } : current);
+      await refetch();
+      return payload;
+    } catch (failure) {
+      setActionError(failure?.message || "This action could not be completed.");
+      return null;
+    }
+  };
+
+  const sendReply = async (event) => {
+    event.preventDefault();
+    if (!reply.trim() || !selectedId) return;
+    setReplying(true); setActionError("");
+    try {
+      await apiFetch(`${API}/conversations/${selectedId}/reply`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: reply })
+      });
+      setReply("");
+      await refreshThread(selectedId);
+      await refetch();
+    } catch (failure) {
+      setActionError(failure?.message || "We could not send this reply.");
+    } finally {
+      setReplying(false);
+    }
+  };
+
+  const list = Array.isArray(conversations) ? conversations : [];
+  const filtered = list.filter((conversation) => {
+    if (filter === "unread") return Number(conversation.unread_count || 0) > 0;
+    if (filter === "attention") return conversation.status === "needs_attention";
+    if (filter === "mine") return conversation.assigned_user_id === user?.id;
+    if (filter === "unassigned") return !conversation.assigned_user_id && conversation.status !== "resolved";
+    if (filter === "resolved") return conversation.status === "resolved";
+    return true;
+  });
+  const active = thread?.conversation;
+  const canManageAssignment = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
+  const isHuman = active?.control_mode === "human" && active?.status !== "resolved";
+  const isAssignedToMe = active?.assigned_user_id === user?.id;
+  const labelFor = (conversation) => conversation.status === "needs_attention" ? "Needs attention" : conversation.status === "resolved" ? "Resolved" : conversation.control_mode === "human" ? "Human" : "Automation";
+
+  return <div className="pad" style={{ padding: 28 }}>
+    <PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." />
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      {[["all","All"],["unread","Unread"],["attention","Needs Attention"],["mine","Assigned to Me"],["unassigned","Unassigned"],["resolved","Resolved"]].map(([id,label]) =>
+        <button key={id} className={filter===id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(id)} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>
+      )}
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, .9fr) minmax(340px, 1.55fr) minmax(210px, .7fr)", gap: 14, alignItems: "stretch" }} className="team-inbox">
+      <div className="card" style={{ minHeight: 540 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, padding: "14px 16px", borderBottom: "1px solid var(--wire)" }}>{filter === "all" ? "CONVERSATIONS" : filter.toUpperCase()}</div>
+        {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 16, color: "var(--error-text)", fontSize: 12 }}>We could not load conversations: {error}</div> : !filtered.length ? <Empty msg={list.length ? "No conversations match this filter" : "No conversations yet"} /> :
+          filtered.map((conversation) => <button key={conversation.id} onClick={() => openConversation(conversation.id)} style={{ display: "block", width: "100%", border: "none", borderBottom: "1px solid var(--wire)", background: selectedId === conversation.id ? "rgba(184,146,42,.08)" : "transparent", color: "var(--cream)", textAlign: "left", padding: "14px 16px", cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <strong style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.contacts?.name || conversation.contacts?.phone_number || "Unknown contact"}</strong>
+              {Number(conversation.unread_count || 0) > 0 && <span className="badge badge-gold">{conversation.unread_count}</span>}
             </div>
-          ))
-        }
+            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{conversation.contacts?.phone_number || "No phone number"}</div>
+            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.last_message?.message_body || "No message preview"}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center" }}>
+              <span className={conversation.status === "needs_attention" ? "badge badge-red" : conversation.status === "resolved" ? "badge badge-cream" : conversation.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(conversation)}</span>
+              <span className="mono" style={{ color: "var(--mist)", fontSize: 9 }}>{conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleDateString() : "—"}</span>
+            </div>
+          </button>)}
+      </div>
+
+      <div className="card" style={{ minHeight: 540, display: "flex", flexDirection: "column" }}>
+        {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
+          <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
+            <span className={active.status === "needs_attention" ? "badge badge-red" : active.status === "resolved" ? "badge badge-cream" : active.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(active)}</span>
+          </div>
+          {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
+          <div style={{ flex: 1, padding: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+            {(thread.messages || []).map((message) => <div key={message.id} style={{ alignSelf: message.direction === "outbound" ? "flex-end" : "flex-start", maxWidth: "80%", background: message.direction === "outbound" ? "rgba(184,146,42,.16)" : "rgba(255,255,255,.05)", border: "1px solid var(--wire)", padding: "10px 12px" }}>
+              <div style={{ color: "var(--cream)", fontSize: 13, whiteSpace: "pre-wrap" }}>{message.message_body || "Unsupported message type"}</div>
+              <div className="mono" style={{ color: "var(--mist)", fontSize: 9, marginTop: 7 }}>{message.direction === "outbound" ? "OUTBOUND" : "INBOUND"} · {message.status || "—"} · {message.created_at ? new Date(message.created_at).toLocaleString() : "—"}</div>
+            </div>)}
+          </div>
+          <form onSubmit={sendReply} style={{ padding: 14, borderTop: "1px solid var(--wire)" }}>
+            <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : "Take the conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
+              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Replies are sent through this workspace’s WhatsApp number." : "Automation is paused only after a conversation is taken by a human."}</span>
+              <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>
+            </div>
+          </form>
+        </>}
+      </div>
+
+      <div className="card" style={{ padding: 18, minHeight: 540 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, marginBottom: 14 }}>CONVERSATION DETAILS</div>
+        {!active ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose a conversation to see contact details and controls.</div> : <>
+          <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{active.contacts?.name || "Unnamed contact"}</div>
+          <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{active.contacts?.phone_number || "No phone number"}</div>
+          {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
+          <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
+            <div className="label">Control</div>
+            <div style={{ color: "var(--cream)", fontSize: 12 }}>{labelFor(active)}</div>
+            {active.handoff_reason && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Reason: {active.handoff_reason}</div>}
+          </div>
+          <div style={{ display: "grid", gap: 9 }}>
+            {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
+            {active.control_mode === "needs_attention" && !active.assigned_user_id && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take conversation</button>}
+            {active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve conversation</button>}
+          </div>
+          {canManageAssignment && active.status !== "resolved" && <div style={{ borderTop: "1px solid var(--wire)", marginTop: 18, paddingTop: 16 }}>
+            <label className="label" htmlFor="conversation-assignee">Assign conversation</label>
+            <select id="conversation-assignee" className="input" value={active.assigned_user_id || ""} onChange={(event) => runAction("/assignment", { method: "PATCH", body: { assigned_user_id: event.target.value || null } })}>
+              <option value="">Unassigned</option>
+              {(members || []).map((member) => <option key={member.id} value={member.id}>{member.name || member.email || member.id} · {member.role}</option>)}
+            </select>
+          </div>}
+        </>}
       </div>
     </div>
-  );
+  </div>
 }
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
@@ -1789,7 +1930,7 @@ export default function App() {
     overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={setActive} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
     broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
-    messages:    { title: "Message Log",  comp: <MessageLog customer={customer} /> },
+    messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
