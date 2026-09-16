@@ -1208,7 +1208,7 @@ function TeamInbox({ customer, user }) {
           </div>
           <div style={{ display: "grid", gap: 9 }}>
             {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
-            {active.control_mode === "needs_attention" && !active.assigned_user_id && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take conversation</button>}
+            {active.control_mode === "needs_attention" && (!active.assigned_user_id || active.assigned_user_id === user?.id) && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take conversation</button>}
             {active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve conversation</button>}
           </div>
           {canManageAssignment && active.status !== "resolved" && <div style={{ borderTop: "1px solid var(--wire)", marginTop: 18, paddingTop: 16 }}>
