@@ -1161,6 +1161,10 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [discoveryForm, setDiscoveryForm] = useState({ goals: [], team_size: "", contact_sources: [] });
+  const [discoverySaving, setDiscoverySaving] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState("");
+  const [discoverySaved, setDiscoverySaved] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -1172,6 +1176,14 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
       email: workspace.email || user?.email || ""
     });
   }, [workspace.id, workspace.business_name, workspace.contact_person, workspace.phone, workspace.country, workspace.industry, workspace.email, user?.email]);
+
+  useEffect(() => {
+    setDiscoveryForm({
+      goals: Array.isArray(data?.discovery?.goals) ? data.discovery.goals : [],
+      team_size: data?.discovery?.team_size || "",
+      contact_sources: Array.isArray(data?.discovery?.contact_sources) ? data.discovery.contact_sources : []
+    });
+  }, [data?.discovery?.goals, data?.discovery?.team_size, data?.discovery?.contact_sources]);
 
   const updateField = (field, value) => {
     setSaved(false);
@@ -1201,6 +1213,47 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
       setSaving(false);
     }
   };
+
+  const toggleDiscoveryChoice = (field, value) => {
+    setDiscoverySaved(false);
+    setDiscoveryError("");
+    setDiscoveryForm((current) => ({
+      ...current,
+      [field]: current[field].includes(value) ? current[field].filter((item) => item !== value) : [...current[field], value]
+    }));
+  };
+
+  const saveDiscovery = async (event) => {
+    event.preventDefault();
+    if (!canEdit) return;
+    setDiscoverySaving(true);
+    setDiscoveryError("");
+    setDiscoverySaved(false);
+    try {
+      await apiFetch(`${API}/workspace/discovery`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(discoveryForm)
+      });
+      await refetch();
+      setDiscoverySaved(true);
+    } catch (failure) {
+      setDiscoveryError(failure?.message || "We could not save these setup details.");
+    } finally {
+      setDiscoverySaving(false);
+    }
+  };
+
+  const goalOptions = [
+    ["customer_support", "Customer Support"], ["marketing_promotions", "Marketing & Promotions"],
+    ["customer_updates", "Customer Updates"], ["lead_follow_up", "Lead Follow-up"],
+    ["appointments_reminders", "Appointments & Reminders"], ["payments_collections", "Payments & Collections"],
+    ["orders", "Orders"], ["internal_notifications", "Internal Notifications"]
+  ];
+  const sourceOptions = [
+    ["excel", "Excel"], ["google_sheets", "Google Sheets"], ["airtable", "Airtable"],
+    ["phone_contacts", "Phone contacts"], ["pos", "POS"], ["crm", "CRM"], ["other", "Other"]
+  ];
 
   const stages = [
     ["Account created", onboarding.account_complete],
@@ -1277,6 +1330,35 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
           </form>
         )}
       </div>
+
+      {onboarding.business_profile_complete && <div className="card" style={{ padding: 24, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 6 }}>
+          <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>Help us tailor ZedPing</div>
+          <div className="mono" style={{ fontSize: 9, color: canEdit ? "var(--gold2)" : "var(--mist)", letterSpacing: 1, textTransform: "uppercase" }}>{role}</div>
+        </div>
+        <p style={{ color: "var(--mist)", fontSize: 12, lineHeight: 1.6, margin: "0 0 18px" }}>Tell us which jobs matter most. We’ll use this to suggest useful starter automations and setup steps for this workspace.</p>
+        <form onSubmit={saveDiscovery}>
+          <fieldset disabled={!canEdit || discoverySaving} style={{ border: 0, padding: 0, margin: 0 }}>
+            <label className="label">What do you want ZedPing to help with?</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+              {goalOptions.map(([value, label]) => <button key={value} type="button" onClick={() => toggleDiscoveryChoice("goals", value)} className={discoveryForm.goals.includes(value) ? "btn btn-gold" : "btn btn-wire"} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>)}
+            </div>
+            <label className="label" htmlFor="team-size">Team size</label>
+            <select id="team-size" className="input" value={discoveryForm.team_size} onChange={(event) => { setDiscoverySaved(false); setDiscoveryForm((current) => ({ ...current, team_size: event.target.value })); }} style={{ marginBottom: 18 }}>
+              <option value="">Select team size</option><option value="1">1</option><option value="2-5">2–5</option><option value="6-10">6–10</option><option value="11-25">11–25</option><option value="25+">25+</option>
+            </select>
+            <label className="label">Where are your customer records today?</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {sourceOptions.map(([value, label]) => <button key={value} type="button" onClick={() => toggleDiscoveryChoice("contact_sources", value)} className={discoveryForm.contact_sources.includes(value) ? "btn btn-gold" : "btn btn-wire"} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>)}
+            </div>
+          </fieldset>
+          {canEdit && <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <button className="btn btn-gold" type="submit" disabled={discoverySaving || !discoveryForm.goals.length || !discoveryForm.team_size}>{discoverySaving ? "Saving…" : "Save setup details"}</button>
+            {discoverySaved && <span role="status" style={{ color: "var(--success-text)", fontSize: 12 }}>Setup details saved.</span>}
+            {discoveryError && <span role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>{discoveryError}</span>}
+          </div>}
+        </form>
+      </div>}
 
       <div className="card-gold" style={{ padding: 24 }}>
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Current plan</div>
