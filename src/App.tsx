@@ -862,7 +862,7 @@ function Broadcasts({ customer }) {
   };
 
   const statusFor = (broadcast) => {
-    if (broadcast.status === "completed") return { label: "SENT", cls: "badge-green" };
+    if (broadcast.status === "completed") return { label: "PROCESSED", cls: "badge-green" };
     if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
     if (broadcast.status === "pending" || broadcast.status === "sending") return { label: "SCHEDULED", cls: "badge-gold" };
     return null;
@@ -906,7 +906,7 @@ function Broadcasts({ customer }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Broadcast Activity</div>
-        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sent","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["processed","Processed"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
       </div>
       <div className="card">
         {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
