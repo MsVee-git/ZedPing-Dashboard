@@ -588,6 +588,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "messages", label: "Team Inbox", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
     { id: "templates", label: "WhatsApp Templates", icon: "messages" },
+    { id: "content", label: "Content Library", icon: "catalog" },
     { id: "settings", label: "Settings", icon: "settings" },
   ];
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
@@ -1742,6 +1743,157 @@ function WhatsAppTemplates({ customer }) {
   );
 }
 
+
+
+// ── CONTENT LIBRARY ───────────────────────────────────────────────────────────
+function ContentLibrary({ customer }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [type, setType] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [templateError, setTemplateError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [form, setForm] = useState({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
+  const [file, setFile] = useState(null);
+  const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const response = await apiFetch(\`\${API}/content\`);
+      const result = await response.json();
+      setItems(result.items || []);
+    } catch (loadError) {
+      setError(loadError?.message || "We could not load your Content Library.");
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const begin = async (nextType) => {
+    setType(nextType); setActionError(""); setFile(null);
+    setForm({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
+    if (nextType !== "WHATSAPP_TEMPLATE_REFERENCE" || templates.length) return;
+    setTemplateError("");
+    try {
+      const response = await apiFetch(\`\${API}/templates\`);
+      const result = await response.json();
+      setTemplates(result.templates || []);
+    } catch (templateLoadError) {
+      setTemplateError(templateLoadError?.message || "WhatsApp templates could not be loaded.");
+    }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!type) return;
+    setSaving(true); setActionError("");
+    try {
+      const body = new FormData();
+      body.set("content_type", type);
+      body.set("name", form.name);
+      if (form.description) body.set("description", form.description);
+      if (type === "TEXT") body.set("text_content", form.text_content);
+      if (type === "LINK") body.set("link_url", form.link_url);
+      if (type === "WHATSAPP_TEMPLATE_REFERENCE") body.set("template_id", form.template_id);
+      if (["DOCUMENT", "IMAGE"].includes(type) && file) body.set("file", file);
+      const response = await apiFetch(\`\${API}/content\`, { method: "POST", body });
+      const result = await response.json();
+      setItems((current) => [result.item, ...current]);
+      setSelected(result.item); setCreating(false); setType(null);
+    } catch (submitError) {
+      setActionError(submitError?.message || "We could not save this content.");
+    } finally { setSaving(false); }
+  };
+
+  const archive = async (item) => {
+    if (!window.confirm(\`Archive “\${item.name}”? It will no longer be available for new uses.\`)) return;
+    setActionError("");
+    try {
+      await apiFetch(\`\${API}/content/\${item.id}/archive\`, { method: "POST" });
+      setItems((current) => current.filter((entry) => entry.id !== item.id));
+      if (selected?.id === item.id) setSelected(null);
+    } catch (archiveError) { setActionError(archiveError?.message || "We could not archive this content."); }
+  };
+
+  const secureOpen = async (item) => {
+    setActionError("");
+    try {
+      const response = await apiFetch(\`\${API}/content/\${item.id}/download\`);
+      const result = await response.json();
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (openError) { setActionError(openError?.message || "We could not open this secure file."); }
+  };
+
+  const refreshTemplate = async (item) => {
+    setActionError("");
+    try {
+      const response = await apiFetch(\`\${API}/content/\${item.id}/refresh-template\`, { method: "POST" });
+      const result = await response.json();
+      setItems((current) => current.map((entry) => entry.id === item.id ? result.item : entry));
+      setSelected(result.item);
+    } catch (refreshError) { setActionError(refreshError?.message || "We could not refresh this template reference."); }
+  };
+
+  const visible = items.filter((item) => (filter === "ALL" || item.content_type === filter) && item.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const filters = [["ALL", "All"], ["TEXT", "Text"], ["DOCUMENT", "Documents"], ["IMAGE", "Images"], ["LINK", "Links"], ["WHATSAPP_TEMPLATE_REFERENCE", "WhatsApp Templates"]];
+  const icon = (contentType) => ({ TEXT: "✦", DOCUMENT: "▤", IMAGE: "▧", LINK: "↗", WHATSAPP_TEMPLATE_REFERENCE: "◌" }[contentType] || "•");
+  const typeLabel = (contentType) => ({ TEXT: "Text", DOCUMENT: "Document", IMAGE: "Image", LINK: "Link", WHATSAPP_TEMPLATE_REFERENCE: "WhatsApp Template" }[contentType] || contentType);
+  const preview = (item) => {
+    if (item.content_type === "TEXT") return String(item.text_content || "").slice(0, 110);
+    if (item.content_type === "DOCUMENT") return [item.mime_type?.split("/").pop()?.toUpperCase(), item.file_size ? \`\${Math.ceil(item.file_size / 1024)} KB\` : null].filter(Boolean).join(" · ");
+    if (item.content_type === "IMAGE") return item.mime_type?.replace("image/", "").toUpperCase() || "Image";
+    if (item.content_type === "LINK") { try { return new URL(item.link_url).hostname; } catch (_) { return item.link_url; } }
+    return [item.template_status, item.template_language].filter(Boolean).join(" · ");
+  };
+
+  return <div className="pad" style={{ padding: 28 }}>
+    <PageHead label="Reusable content" title="Content Library." sub="Save messages, documents, images and links once, then reuse them across ZedPing." action={canManage ? <button className="btn btn-gold" onClick={() => { setCreating(true); setType(null); setActionError(""); }}><Ic n="plus" s={13} c="var(--ink)" /> Add Content</button> : null} />
+    {actionError && <div className="card" role="alert" style={{ padding: 13, marginBottom: 16, color: "var(--error-text)" }}>{actionError}</div>}
+    <div className="card" style={{ padding: 14, marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>{filters.map(([key, label]) => <button key={key} className={filter === key ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(key)} style={{ padding: "7px 10px", fontSize: 10 }}>{label}</button>)}</div>
+      <input className="input" aria-label="Search Content Library" placeholder="Search content" value={search} onChange={(event) => setSearch(event.target.value)} style={{ width: 210 }} />
+    </div>
+    {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "var(--error-text)" }}>{error}</div> : !visible.length ? <div className="card" style={{ padding: 28, color: "var(--mist)", textAlign: "center" }}>No content saved here yet.{canManage ? " Add a reusable message, file, link or WhatsApp template reference." : ""}</div> : <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, .8fr)", gap: 16 }}>
+      <div className="card" style={{ overflow: "hidden" }}>{visible.map((item) => <button key={item.id} onClick={() => setSelected(item)} style={{ width: "100%", textAlign: "left", background: selected?.id === item.id ? "rgba(196,154,61,.08)" : "transparent", border: 0, borderBottom: "1px solid var(--wire)", padding: "15px 17px", cursor: "pointer", color: "inherit", display: "flex", gap: 12 }}>
+        <div style={{ width: 30, height: 30, display: "grid", placeItems: "center", border: "1px solid var(--wire2)", color: "var(--gold2)", flexShrink: 0 }}>{icon(item.content_type)}</div>
+        <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: "var(--cream)", fontWeight: 600, fontSize: 13 }}>{item.name}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview(item)}</div></div>
+        <span className="mono" style={{ color: "var(--gold2)", fontSize: 8, letterSpacing: 1, alignSelf: "center" }}>{typeLabel(item.content_type)}</span>
+      </button>)}</div>
+      <div className="card" style={{ padding: 20, minHeight: 230 }}>{!selected ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose an item to view its details.</div> : <>
+        <div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 1.5 }}>{typeLabel(selected.content_type)}</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 21, marginTop: 7 }}>{selected.name}</h3>
+        {selected.description && <p style={{ color: "var(--mist)", fontSize: 12, lineHeight: 1.5, marginTop: 10 }}>{selected.description}</p>}
+        {selected.content_type === "TEXT" && <div style={{ whiteSpace: "pre-wrap", color: "var(--cream2)", fontSize: 12, lineHeight: 1.55, marginTop: 15 }}>{selected.text_content}</div>}
+        {selected.content_type === "LINK" && <a href={selected.link_url} target="_blank" rel="noreferrer" style={{ color: "var(--gold2)", display: "block", fontSize: 12, marginTop: 15, wordBreak: "break-all" }}>{selected.link_url}</a>}
+        {["DOCUMENT","IMAGE"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>Open secure {selected.content_type.toLowerCase()}</button>}
+        {selected.content_type === "WHATSAPP_TEMPLATE_REFERENCE" && <><div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 15 }}>{selected.template_name} · {selected.template_language || "language unavailable"} · {selected.template_status || "status unavailable"}</div>{canManage && <button className="btn btn-wire" onClick={() => refreshTemplate(selected)} style={{ marginTop: 13 }}>Refresh from Meta</button>}</>}
+        {canManage && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
+      </>}</div>
+    </div>}
+
+    {creating && <div className="modal-bg"><div className="modal" style={{ maxWidth: 620 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
+      {!type ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginTop: 20 }}>{[["TEXT","Text"],["DOCUMENT","Document"],["IMAGE","Image"],["LINK","Link"],["WHATSAPP_TEMPLATE_REFERENCE","WhatsApp Template"]].map(([key,label]) => <button key={key} className="btn btn-wire" onClick={() => begin(key)} style={{ minHeight: 72, justifyContent: "center" }}>{label}</button>)}</div> :
+      <form onSubmit={submit} style={{ marginTop: 20 }}>
+        <label className="label">Name</label><input className="input" required maxLength="160" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Give this content a clear name" />
+        <label className="label" style={{ marginTop: 13 }}>Description <span style={{ color: "var(--mist)" }}>optional</span></label><input className="input" maxLength="500" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="A short note for your team" />
+        {type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={form.text_content} onChange={(event) => setForm((current) => ({ ...current, text_content: event.target.value }))} placeholder="Write reusable information for your team" /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{form.text_content.length}/20,000</div></>}
+        {type === "LINK" && <><label className="label" style={{ marginTop: 13 }}>Destination URL</label><input className="input" type="url" required value={form.link_url} onChange={(event) => setForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="https://…" /></>}
+        {["DOCUMENT","IMAGE"].includes(type) && <><label className="label" style={{ marginTop: 13 }}>{type === "IMAGE" ? "Image file" : "Document file"}</label><input className="input" type="file" required accept={type === "IMAGE" ? "image/jpeg,image/png,image/webp" : ".pdf,.doc,.docx,.xls,.xlsx,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"} onChange={(event) => setFile(event.target.files?.[0] || null)} /><div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>Allowed types only, up to 10 MB. Files stay private to this workspace.</div></>}
+        {type === "WHATSAPP_TEMPLATE_REFERENCE" && <><label className="label" style={{ marginTop: 13 }}>Live WhatsApp template</label>{templateError ? <div role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>{templateError}</div> : <select className="input" required value={form.template_id} onChange={(event) => setForm((current) => ({ ...current, template_id: event.target.value }))}><option value="">Choose a template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.status} · {template.language}</option>)}</select>}<div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>This saves a validated reference, not a copy of the Meta template.</div></>}
+        {actionError && <div role="alert" style={{ color: "var(--error-text)", fontSize: 12, marginTop: 13 }}>{actionError}</div>}
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={() => setType(null)}>Back</button><button type="submit" className="btn btn-gold" disabled={saving || (type === "WHATSAPP_TEMPLATE_REFERENCE" && !!templateError)}>{saving ? (["DOCUMENT","IMAGE"].includes(type) ? "Uploading…" : "Saving…") : "Save content"}</button></div>
+      </form>}
+    </div></div>}
+  </div>
+}
+
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [view, setView] = useState(window.location.search.includes("signup") ? "signup" : "login");
@@ -1933,6 +2085,7 @@ export default function App() {
     messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
+    content:     { title: "Content Library", comp: <ContentLibrary customer={customer} /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
