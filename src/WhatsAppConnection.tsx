@@ -137,7 +137,17 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       if (!payload || typeof payload !== "object" || payload.type !== "WA_EMBEDDED_SIGNUP") return;
 
       const phoneNumberId = String(payload.data?.phone_number_id || "");
-      if (["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", "FINISH_ONLY_WABA"].includes(payload.event)) {
+      const finishReceived = ["FINISH", "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING", "FINISH_ONLY_WABA"].includes(payload.event);
+      console.info("[zedping_embedded_signup_event]", {
+        event: typeof payload.event === "string" ? payload.event : "unknown",
+        session_info_version: typeof (payload.version ?? payload.data?.version) === "string" || typeof (payload.version ?? payload.data?.version) === "number"
+          ? String(payload.version ?? payload.data?.version)
+          : null,
+        has_phone_number_id: Boolean(phoneNumberId),
+        has_waba_id: Boolean(payload.data?.waba_id),
+        finish_received: finishReceived
+      });
+      if (finishReceived) {
         if (!/^[0-9]{5,32}$/.test(phoneNumberId)) {
           pending.current = { session: null, code: null, phoneNumberId: null };
           setPhase("error");
