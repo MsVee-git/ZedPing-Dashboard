@@ -196,7 +196,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
         config_id: embeddedSignupConfigId,
         response_type: "code",
         override_default_response_type: true,
-        extras: { sessionInfoVersion: 2, feature: "whatsapp_embedded_signup" }
+        extras: { version: "v4" }
       });
     } catch (error) {
       pending.current = { session: null, code: null, phoneNumberId: null };
