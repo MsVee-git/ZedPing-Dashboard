@@ -7,6 +7,12 @@ function displayRole(role) {
   return role === "owner" ? "Owner" : role === "admin" ? "Admin" : "Member";
 }
 
+function invitationDate(value) {
+  if (!value) return "date unavailable";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "date unavailable" : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
 export function TeamMembers({ customer, apiFetch }) {
   const [members, setMembers] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -131,9 +137,13 @@ export function TeamMembers({ customer, apiFetch }) {
         <h2 className="editorial" style={{ fontSize: 28, fontWeight: 600 }}>Pending invitations</h2>
         <span className="mono" style={{ fontSize: 10, color: "var(--mist)", alignSelf: "center" }}>{pending.length} PENDING</span>
       </div>
-      {!pending.length ? <div style={{ padding: 20, color: "var(--mist)", fontSize: 13 }}>No pending invitations.</div> : pending.map((item) => <div key={item.id} style={{ padding: "16px 20px", borderBottom: "1px solid var(--wire)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 220px" }}><div style={{ fontWeight: 600 }}>{item.email_normalized}</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 3 }}>{displayRole(item.intended_role)} · Expires {new Date(item.expires_at).toLocaleDateString()}</div></div>
-        <button type="button" className="btn btn-wire" disabled={busy === `resend-${item.id}`} onClick={() => act(`resend-${item.id}`, `/team/invitations/${encodeURIComponent(item.id)}/resend`, { method: "POST" })}>{busy === `resend-${item.id}` ? "Sending…" : "Resend"}</button>
+      {!pending.length ? <div style={{ padding: 20, color: "var(--mist)", fontSize: 13 }}>No pending invitations.</div> : pending.map((item) => <div key={item.id} style={{ padding: "18px 20px", borderBottom: "1px solid var(--wire)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 280px", minWidth: 0 }}>
+          <div style={{ color: "var(--cream)", fontWeight: 600, fontSize: 14, overflowWrap: "anywhere" }}>{item.email_normalized}</div>
+          <div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 6 }}>{displayRole(item.intended_role)} <span style={{ color: "var(--mist)" }}>·</span> <span style={{ color: "var(--gold2)" }}>Pending</span></div>
+          <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 5 }}>Invited {invitationDate(item.created_at)} · Expires {invitationDate(item.expires_at)}</div>
+        </div>
+        <button type="button" className="btn btn-wire" disabled={busy === `resend-${item.id}`} onClick={() => act(`resend-${item.id}`, `/team/invitations/${encodeURIComponent(item.id)}/resend`, { method: "POST" })}>{busy === `resend-${item.id}` ? "Sending…" : "Resend invitation"}</button>
         <button type="button" className="btn btn-danger" disabled={busy === `revoke-${item.id}`} onClick={() => { if (window.confirm(`Revoke the invitation for ${item.email_normalized}?`)) act(`revoke-${item.id}`, `/team/invitations/${encodeURIComponent(item.id)}/revoke`, { method: "POST" }); }}>Revoke</button>
       </div>)}
     </section>}
