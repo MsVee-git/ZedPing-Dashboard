@@ -1941,6 +1941,8 @@ function ContentLibrary({ customer }) {
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
   const invitationTokenRef = useRef(pendingInvitationToken());
+  const invitationValidityRef = useRef(invitationTokenRef.current ? "pending" : "none");
+  const invitationPreviewRef = useRef(Promise.resolve());
   const authLoadRef = useRef(null);
   const [view, setView] = useState(invitationTokenRef.current || window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
@@ -1966,7 +1968,23 @@ export default function App() {
     const token = invitationTokenRef.current;
     if (!token) { setInvitationLoading(false); return; }
     let cancelled = false;
-    previewInvitation(token).then(context => { if (!cancelled) setInvitation(context); }).catch(error => { if (!cancelled) setAuthError(error?.message || "This invitation is no longer available."); }).finally(() => { if (!cancelled) setInvitationLoading(false); });
+    const preview = previewInvitation(token)
+      .then(context => {
+        invitationValidityRef.current = "valid";
+        if (!cancelled) setInvitation(context);
+      })
+      .catch(error => {
+        // A revoked/expired link must never keep an authenticated user trapped
+        // in invitation acceptance. Remove this unusable capability and permit
+        // the normal workspace loader to continue.
+        invitationValidityRef.current = "invalid";
+        invitationTokenRef.current = null;
+        clearPendingInvitationToken();
+        removeInvitationFragment();
+        if (!cancelled) setAuthError(error?.message || "This invitation is no longer available.");
+      })
+      .finally(() => { if (!cancelled) setInvitationLoading(false); });
+    invitationPreviewRef.current = preview;
     return () => { cancelled = true; };
   }, []);
 
@@ -1979,7 +1997,11 @@ export default function App() {
           setCustomer(null); setWorkspaces([]); setNeedsVerification(true); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); return;
         }
         setWorkspaceChanging(true);
-        const token = invitationTokenRef.current;
+        // Wait for the capability preview before deciding whether there is an
+        // invitation to accept. This stops an old or revoked fragment from
+        // racing normal session/workspace restoration.
+        await invitationPreviewRef.current;
+        const token = invitationValidityRef.current === "valid" ? invitationTokenRef.current : null;
         const acceptedInvitation = token ? await acceptInvitationToken(token) : null;
         if (acceptedInvitation) { invitationTokenRef.current = null; setInvitation(null); }
         const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
