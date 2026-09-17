@@ -136,6 +136,6 @@ export function TeamMembers({ customer, apiFetch }) {
         <button type="button" className="btn btn-wire" disabled={busy === `resend-${item.id}`} onClick={() => act(`resend-${item.id}`, `/team/invitations/${encodeURIComponent(item.id)}/resend`, { method: "POST" })}>{busy === `resend-${item.id}` ? "Sending…" : "Resend"}</button>
         <button type="button" className="btn btn-danger" disabled={busy === `revoke-${item.id}`} onClick={() => { if (window.confirm(`Revoke the invitation for ${item.email_normalized}?`)) act(`revoke-${item.id}`, `/team/invitations/${encodeURIComponent(item.id)}/revoke`, { method: "POST" }); }}>Revoke</button>
       </div>)}
-    </section>
+    </section>}
   </div>;
 }
