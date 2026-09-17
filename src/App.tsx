@@ -605,6 +605,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "automations", label: "Automations", icon: "auto" },
     { id: "templates", label: "WhatsApp Templates", icon: "messages" },
     { id: "content", label: "Content Library", icon: "catalog" },
+    { id: "team", label: "Team Members", icon: "contacts" },
     { id: "settings", label: "Settings", icon: "settings" },
   ];
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
