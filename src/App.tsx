@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { WhatsAppConnection } from "./WhatsAppConnection";
 import { TeamMembers } from "./TeamMembers";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
+import { captureInvitationToken, clearInvitationToken } from "./lib/invitationFlow";
 import * as XLSX from "xlsx";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -33,24 +34,32 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   return response;
 };
 
-function invitationTokenFromLocation() {
-  const hash = window.location.hash || "";
-  const match = hash.match(/(?:^#|[?&])invite=([^&]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
+function pendingInvitationToken() {
+  try { return captureInvitationToken(window.sessionStorage, window.location.hash || ""); } catch { return null; }
 }
-
-async function acceptInvitationFromLocation() {
-  const token = invitationTokenFromLocation();
+function clearPendingInvitationToken() {
+  try { clearInvitationToken(window.sessionStorage); } catch {}
+}
+function removeInvitationFragment() {
+  if (window.location.hash.includes("invite=")) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+}
+async function previewInvitation(token) {
+  const response = await nativeRequest(API + "/invitations/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error || "This invitation is no longer available.");
+  }
+  return response.json();
+}
+async function acceptInvitationToken(token) {
   if (!token) return null;
-  const response = await apiFetch(API + "/invitations/accept", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token })
-  });
+  const response = await apiFetch(API + "/invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
   const accepted = await response.json();
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  clearPendingInvitationToken();
+  removeInvitationFragment();
   return accepted;
 }
+
 async function provisionWorkspace(user, details: any = {}) {
   const gateway = {
     async findOwnedWorkspace(userId) {
@@ -346,7 +355,8 @@ function AuthWrap({ children }) {
 }
 
 // ── SIGNUP ────────────────────────────────────────────────────────────────────
-function SignUp({ onSwitch, onAuth }) {
+function SignUp({ onSwitch, onAuth, invitation }) {
+  const invited = Boolean(invitation?.email);
   const [f, setF] = useState({ name:"", business_name:"", email:"", phone:"", password:"" });
   const [plan, setPlan] = useState("business");
   const [loading, setLoading] = useState(false);
@@ -356,6 +366,7 @@ function SignUp({ onSwitch, onAuth }) {
   const [resending, setResending] = useState(false);
   const [resendStatus, setResendStatus] = useState("");
   const set = (k,v) => setF(p => ({ ...p, [k]: v }));
+  useEffect(() => { if (invitation?.email) setF(current => ({ ...current, email: invitation.email })); }, [invitation?.email]);
 
   const resendVerification = async () => {
     if (!verificationEmail) return;
@@ -374,11 +385,11 @@ function SignUp({ onSwitch, onAuth }) {
   };
 
   const submit = async () => {
-    if (!f.name||!f.business_name||!f.email||!f.password) { setErr("Please fill in all required fields."); return; }
+    if (!f.name||!f.email||!f.password||(!invited&&!f.business_name)) { setErr("Please fill in all required fields."); return; }
     if (f.password.length < 6) { setErr("Password must be at least 6 characters."); return; }
     setLoading(true); setErr("");
     try {
-      const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password, options: { data: { name: f.name, business_name: f.business_name, phone: f.phone, subscription_plan: plan } } });
+      const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password, options: { data: invited ? { name: f.name } : { name: f.name, business_name: f.business_name, phone: f.phone, subscription_plan: plan }, emailRedirectTo: window.location.origin } });
       if (error) throw error;
       if (!data.user) throw new Error("Sign up did not return a user.");
       if (!data.session) {
@@ -399,16 +410,17 @@ function SignUp({ onSwitch, onAuth }) {
   return (
     <AuthWrap>
       <div className="auth-card">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>GET STARTED</div>
-        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>Create your ZedPing account</h2>
-        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32, lineHeight: 1.7 }}>Build smarter customer communication with ZedPing.</p>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{invited ? "WORKSPACE INVITATION" : "GET STARTED"}</div>
+        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>{invited ? "Create your account" : "Create your ZedPing account"}</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 22, lineHeight: 1.7 }}>{invited ? "You’ve been invited to join " + (invitation.business_name || "a ZedPing workspace") + ". Create your own password; after email verification, the invitation will resume automatically." : "Build smarter customer communication with ZedPing."}</p>
+        {invited && <div role="status" style={{ marginBottom: 18, padding: "12px 14px", border: "1px solid var(--wire2)", background: "rgba(184,146,42,0.05)", color: "var(--cream2)", fontSize: 12 }}>{invitation.email}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div><label className="label">Your Name *</label><input aria-label="Your name" autoComplete="name" className="input" placeholder="Your name" value={f.name} onChange={e=>set("name",e.target.value)} /></div>
-            <div><label className="label">Business Name *</label><input aria-label="Business name" className="input" placeholder="My Business" value={f.business_name} onChange={e=>set("business_name",e.target.value)} /></div>
+            {!invited && <div><label className="label">Business Name *</label><input aria-label="Business name" className="input" placeholder="My Business" value={f.business_name} onChange={e=>set("business_name",e.target.value)} /></div>}
           </div>
-          <div><label className="label">Email *</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} /></div>
-          <div><label className="label">Phone</label><input className="input" placeholder="+260971234567" value={f.phone} onChange={e=>set("phone",e.target.value)} /></div>
+          <div><label className="label">Email *</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} readOnly={invited} onChange={e=>set("email",e.target.value)} /></div>
+          {!invited && <div><label className="label">Phone</label><input className="input" placeholder="+260971234567" value={f.phone} onChange={e=>set("phone",e.target.value)} /></div>}
           <div>
             <label className="label">Password *</label>
             <div style={{ position: "relative" }}>
@@ -418,7 +430,7 @@ function SignUp({ onSwitch, onAuth }) {
               </button>
             </div>
           </div>
-          <div>
+          {!invited && <div>
             <label className="label">Choose Plan</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
               {plans.map(p => (
@@ -429,7 +441,7 @@ function SignUp({ onSwitch, onAuth }) {
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
           {verificationEmail && <div className="mono" role="status" style={{ color: "var(--success-text)", fontSize: 11, lineHeight: 1.6 }}>
             Account created. Verify <strong>{verificationEmail}</strong> before signing in.
             <button type="button" onClick={resendVerification} disabled={resending} style={{ display: "block", marginTop: 8, padding: 0, border: 0, background: "transparent", color: "var(--gold2)", cursor: "pointer", fontFamily: "inherit", fontSize: 10 }}>
@@ -452,7 +464,8 @@ function SignUp({ onSwitch, onAuth }) {
 }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
-function Login({ onSwitch, onAuth }) {
+function Login({ onSwitch, onAuth, invitation }) {
+  const invited = Boolean(invitation?.email);
   const [f, setF] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -460,6 +473,7 @@ function Login({ onSwitch, onAuth }) {
   const [reset, setReset] = useState(false);
   const [forgot, setForgot] = useState(false);
   const set = (k,v) => setF(p => ({ ...p, [k]: v }));
+  useEffect(() => { if (invitation?.email) setF(current => ({ ...current, email: invitation.email })); }, [invitation?.email]);
 
   const submit = async () => {
     if (!f.email||!f.password) { setErr("Please enter your email and password."); return; }
@@ -487,11 +501,12 @@ function Login({ onSwitch, onAuth }) {
   return (
     <AuthWrap>
       <div className="auth-card">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{forgot ? "RESET PASSWORD" : "WELCOME BACK"}</div>
-        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>{forgot ? "Forgot your password?" : "Sign in to your account"}</h2>
-        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32 }}>{forgot ? "Enter your email and we’ll send you a link to reset your password." : "Keep your business conversations moving — smarter, faster, on WhatsApp."}</p>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{forgot ? "RESET PASSWORD" : invited ? "WORKSPACE INVITATION" : "WELCOME BACK"}</div>
+        <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>{forgot ? "Forgot your password?" : invited ? "Sign in to join" : "Sign in to your account"}</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 32 }}>{forgot ? "Enter your email and we’ll send you a link to reset your password." : invited ? "Sign in with the invited email. Your invitation will resume automatically." : "Keep your business conversations moving — smarter, faster, on WhatsApp."}</p>
+        {invited && <div role="status" style={{ marginBottom: 18, padding: "12px 14px", border: "1px solid var(--wire2)", background: "rgba(184,146,42,0.05)", color: "var(--cream2)", fontSize: 12 }}>You’ve been invited to join {invitation.business_name || "a ZedPing workspace"}<br />{invitation.email}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div><label className="label">Email</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} onChange={e=>set("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&(forgot ? sendReset() : submit())} /></div>
+          <div><label className="label">Email</label><input aria-label="Email" autoComplete="email" className="input" type="email" placeholder="you@business.com" value={f.email} readOnly={invited} onChange={e=>set("email",e.target.value)} onKeyDown={e=>e.key==="Enter"&&(forgot ? sendReset() : submit())} /></div>
           {!forgot && <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
               <label className="label" style={{ margin: 0 }}>Password</label>
@@ -558,7 +573,7 @@ function ResetPass({ onDone }) {
 }
 
 // ── EMAIL VERIFICATION ────────────────────────────────────────────────────────
-function VerifyEmail({ user, onLogout }) {
+function VerifyEmail({ user, onLogout, invitation }) {
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -583,7 +598,7 @@ function VerifyEmail({ user, onLogout }) {
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, marginBottom: 6 }}>Verify your email</div>
         <h2 className="editorial" style={{ fontSize: 36, color: "var(--cream)", marginBottom: 12, fontWeight: 600 }}>One more step.</h2>
         <p style={{ color: "var(--mist)", fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
-          Verify <strong style={{ color: "var(--cream)" }}>{user.email}</strong> before completing setup or connecting WhatsApp.
+          Verify <strong style={{ color: "var(--cream)" }}>{user.email}</strong> before completing setup or connecting WhatsApp.{invitation?.business_name ? " After verification, your invitation to " + invitation.business_name + " will resume automatically." : ""}
         </p>
         {status && <div className="mono" role="status" style={{ color: status.includes("resent") ? "var(--success-text)" : "var(--error-text)", fontSize: 11, marginBottom: 16 }}>{status}</div>}
         <button className="btn btn-gold" onClick={resend} disabled={sending} style={{ width: "100%", padding: "13px", fontSize: 11 }}>
@@ -1925,7 +1940,9 @@ function ContentLibrary({ customer }) {
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState(window.location.search.includes("signup") ? "signup" : "login");
+  const invitationTokenRef = useRef(pendingInvitationToken());
+  const authLoadRef = useRef(null);
+  const [view, setView] = useState(invitationTokenRef.current || window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
   const [workspaces, setWorkspaces] = useState([]);
@@ -1936,6 +1953,8 @@ export default function App() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [invitation, setInvitation] = useState(null);
+  const [invitationLoading, setInvitationLoading] = useState(Boolean(invitationTokenRef.current));
   const [whatsappConnectionState, setWhatsAppConnectionState] = useState(null);
   const [reset, setReset] = useState(() => {
     const hash = window.location.hash || "";
@@ -1943,52 +1962,46 @@ export default function App() {
     return hash.includes("type=recovery") || search.includes("type=recovery") || (hash.includes("access_token") && hash.includes("recovery"));
   });
 
-  const loadAuthenticatedContext = useCallback(async (sessionUser) => {
-    try {
-      setAuthError("");
-      setUser(sessionUser);
-
-      if (!sessionUser.email_confirmed_at) {
-        setCustomer(null);
-        setWorkspaces([]);
-        setNeedsVerification(true);
-        setWorkspaceChanging(false);
-        setWorkspaceSwitchTarget(null);
-        return;
-      }
-
-      // An invitation is accepted before the normal workspace loader runs. This
-      // prevents an invited user from being provisioned as an unrelated owner.
-      const acceptedInvitation = await acceptInvitationFromLocation();
-      const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
-      if (!authorizedWorkspaces.length) throw new Error("No workspace is available for this account. Please contact support.");
-
-      const storedId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
-      const selected = authorizedWorkspaces.find(workspace => workspace.id === acceptedInvitation?.workspace_id)
-        || authorizedWorkspaces.find(workspace => workspace.id === storedId)
-        || authorizedWorkspaces.find(workspace => workspace.id === ownedWorkspace?.id)
-        || authorizedWorkspaces[0];
-
-      setWorkspaces(authorizedWorkspaces);
-      setWorkspaceChanging(true);
-      const verified = await verifyWorkspaceSelection(authorizedWorkspaces, selected.id);
-      setWorkspaces((current) => current.map((item) => item.id === verified.workspace.id ? verified.workspace : item));
-      setCustomer(verified.workspace);
-      setNeedsVerification(false);
-      setActive("overview");
-      setWorkspaceSwitchTarget(null);
-      setWorkspaceChanging(false);
-    } catch (error) {
-      console.error("Workspace loading failed", error);
-      setUser(null);
-      setCustomer(null);
-      setWorkspaces([]);
-      setNeedsVerification(false);
-      setWorkspaceSwitchTarget(null);
-      setWorkspaceChanging(false);
-      setAuthError(error?.message || "We could not load your workspace. Please sign in again or contact support.");
-    }
+  useEffect(() => {
+    const token = invitationTokenRef.current;
+    if (!token) { setInvitationLoading(false); return; }
+    let cancelled = false;
+    previewInvitation(token).then(context => { if (!cancelled) setInvitation(context); }).catch(error => { if (!cancelled) setAuthError(error?.message || "This invitation is no longer available."); }).finally(() => { if (!cancelled) setInvitationLoading(false); });
+    return () => { cancelled = true; };
   }, []);
+
+  const loadAuthenticatedContext = useCallback((sessionUser) => {
+    if (authLoadRef.current?.userId === sessionUser.id && authLoadRef.current.promise) return authLoadRef.current.promise;
+    const task = (async () => {
+      try {
+        setAuthError(""); setUser(sessionUser);
+        if (!sessionUser.email_confirmed_at) {
+          setCustomer(null); setWorkspaces([]); setNeedsVerification(true); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); return;
+        }
+        setWorkspaceChanging(true);
+        const token = invitationTokenRef.current;
+        const acceptedInvitation = token ? await acceptInvitationToken(token) : null;
+        if (acceptedInvitation) { invitationTokenRef.current = null; setInvitation(null); }
+        const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
+        if (!authorizedWorkspaces.length) throw new Error("No workspace is available for this account. Please contact support.");
+        const storedId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
+        const selected = authorizedWorkspaces.find(workspace => workspace.id === acceptedInvitation?.workspace_id) || authorizedWorkspaces.find(workspace => workspace.id === storedId) || authorizedWorkspaces.find(workspace => workspace.id === ownedWorkspace?.id) || authorizedWorkspaces[0];
+        setWorkspaces(authorizedWorkspaces);
+        const verified = await verifyWorkspaceSelection(authorizedWorkspaces, selected.id);
+        setWorkspaces(current => current.map(item => item.id === verified.workspace.id ? verified.workspace : item));
+        setCustomer(verified.workspace); setNeedsVerification(false); setActive("overview"); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
+      } catch (error) {
+        console.error("Workspace loading failed", error);
+        // Keep the active Auth identity. Clearing it while a Supabase session
+        // remains triggers another auth callback and caused the redirect loop.
+        setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
+        setAuthError(error?.message || "We could not load your workspace. Please try again or contact support.");
+      }
+    })();
+    authLoadRef.current = { userId: sessionUser.id, promise: task };
+    task.finally(() => { if (authLoadRef.current?.promise === task) authLoadRef.current = null; });
+    return task;
+  }, []);;
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -2019,7 +2032,7 @@ export default function App() {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
         setReset(true);
         setUser(null);
@@ -2027,7 +2040,7 @@ export default function App() {
         return;
       }
       if (session?.user) {
-        await loadAuthenticatedContext(session.user);
+        window.setTimeout(() => { loadAuthenticatedContext(session.user); }, 0);
       } else {
         setUser(null);
         setCustomer(null);
@@ -2123,7 +2136,7 @@ export default function App() {
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
-  if (loading) return (
+  if (loading || invitationLoading) return (
     <div style={{ minHeight: "100vh", background: "var(--ink)", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <style>{css}</style>
       <div className="spin" style={{ width: 24, height: 24 }} />
@@ -2132,13 +2145,13 @@ export default function App() {
   );
 
   if (reset) return <><style>{css}</style><ResetPass onDone={() => setReset(false)} /></>;
-  if (needsVerification && user) return <><style>{css}</style><VerifyEmail user={user} onLogout={onLogout} /></>;
+  if (needsVerification && user) return <><style>{css}</style><VerifyEmail user={user} onLogout={onLogout} invitation={invitation} /></>;
 
   if (!user) return (
     <>
       <style>{css}</style>
       {authError && <div className="mono" role="alert" style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, maxWidth: 520, padding: "10px 14px", background: "var(--panel)", border: "1px solid rgba(239,68,68,0.35)", color: "var(--error-text)", fontSize: 10, letterSpacing: 0.5, textAlign: "center" }}>{authError}</div>}
-      {view === "signup" ? <SignUp onSwitch={() => setView("login")} onAuth={loadAuthenticatedContext} /> : <Login onSwitch={() => setView("signup")} onAuth={loadAuthenticatedContext} />}
+      {view === "signup" ? <SignUp onSwitch={() => setView("login")} onAuth={loadAuthenticatedContext} invitation={invitation} /> : <Login onSwitch={() => setView("signup")} onAuth={loadAuthenticatedContext} invitation={invitation} />}
     </>
   );
 
