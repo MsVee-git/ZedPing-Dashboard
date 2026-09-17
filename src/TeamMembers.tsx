@@ -26,7 +26,12 @@ export function TeamMembers({ customer, apiFetch }) {
   const canManage = ["owner", "admin"].includes(customer?.role);
 
   const load = async () => {
-    if (!customer?.id) return;
+    if (!customer?.id) {
+      setMembers([]);
+      setInvitations([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
