@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { WhatsAppConnection } from "./WhatsAppConnection";
+import { TeamMembers } from "./TeamMembers";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 import * as XLSX from "xlsx";
 
@@ -31,6 +32,25 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   }
   return response;
 };
+
+function invitationTokenFromLocation() {
+  const hash = window.location.hash || "";
+  const match = hash.match(/(?:^#|[?&])invite=([^&]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function acceptInvitationFromLocation() {
+  const token = invitationTokenFromLocation();
+  if (!token) return null;
+  const response = await apiFetch(API + "/invitations/accept", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  });
+  const accepted = await response.json();
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return accepted;
+}
 async function provisionWorkspace(user, details: any = {}) {
   const gateway = {
     async findOwnedWorkspace(userId) {
@@ -1936,11 +1956,15 @@ export default function App() {
         return;
       }
 
+      // An invitation is accepted before the normal workspace loader runs. This
+      // prevents an invited user from being provisioned as an unrelated owner.
+      const acceptedInvitation = await acceptInvitationFromLocation();
       const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
       if (!authorizedWorkspaces.length) throw new Error("No workspace is available for this account. Please contact support.");
 
       const storedId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
-      const selected = authorizedWorkspaces.find(workspace => workspace.id === storedId)
+      const selected = authorizedWorkspaces.find(workspace => workspace.id === acceptedInvitation?.workspace_id)
+        || authorizedWorkspaces.find(workspace => workspace.id === storedId)
         || authorizedWorkspaces.find(workspace => workspace.id === ownedWorkspace?.id)
         || authorizedWorkspaces[0];
 
@@ -2094,6 +2118,7 @@ export default function App() {
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     content:     { title: "Content Library", comp: <ContentLibrary customer={customer} /> },
+    team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
