@@ -5,6 +5,7 @@ import { WhatsAppConnection } from "./WhatsAppConnection";
 import { TeamMembers } from "./TeamMembers";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 import { captureInvitationToken, clearInvitationToken } from "./lib/invitationFlow";
+import { emitInvitationAuthDiagnostic } from "./lib/invitationDiagnostics";
 import * as XLSX from "xlsx";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -1971,6 +1972,7 @@ export default function App() {
     const preview = previewInvitation(token)
       .then(context => {
         invitationValidityRef.current = "valid";
+        emitInvitationAuthDiagnostic("invitation_previewed");
         if (!cancelled) setInvitation(context);
       })
       .catch(error => {
@@ -1994,6 +1996,7 @@ export default function App() {
       try {
         setAuthError(""); setUser(sessionUser);
         if (!sessionUser.email_confirmed_at) {
+          emitInvitationAuthDiagnostic("email_unverified");
           setCustomer(null); setWorkspaces([]); setNeedsVerification(true); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); return;
         }
         setWorkspaceChanging(true);
@@ -2002,6 +2005,7 @@ export default function App() {
         // racing normal session/workspace restoration.
         await invitationPreviewRef.current;
         const token = invitationValidityRef.current === "valid" ? invitationTokenRef.current : null;
+        if (token) emitInvitationAuthDiagnostic("accept_attempted");
         const acceptedInvitation = token ? await acceptInvitationToken(token) : null;
         if (acceptedInvitation) { invitationTokenRef.current = null; setInvitation(null); }
         const { workspaces: authorizedWorkspaces, ownedWorkspace } = await getAuthorizedWorkspaces(sessionUser);
@@ -2044,7 +2048,12 @@ export default function App() {
 
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) throw error;
-      if (session?.user) await loadAuthenticatedContext(session.user);
+      if (session?.user) {
+        emitInvitationAuthDiagnostic("initial_session");
+        await loadAuthenticatedContext(session.user);
+      } else {
+        emitInvitationAuthDiagnostic("no_session");
+      }
       setLoading(false);
     };
 
@@ -2061,6 +2070,8 @@ export default function App() {
         window.history.replaceState(null, "", window.location.pathname);
         return;
       }
+      if (event === "INITIAL_SESSION") emitInvitationAuthDiagnostic(session?.user ? "initial_session" : "no_session");
+      if (event === "SIGNED_IN") emitInvitationAuthDiagnostic("signed_in");
       if (session?.user) {
         window.setTimeout(() => { loadAuthenticatedContext(session.user); }, 0);
       } else {
