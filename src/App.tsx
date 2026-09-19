@@ -6,6 +6,7 @@ import { TeamMembers } from "./TeamMembers";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 import { captureInvitationToken, clearInvitationToken } from "./lib/invitationFlow";
 import { emitInvitationAuthDiagnostic } from "./lib/invitationDiagnostics";
+import { invitationAccountState } from "./lib/invitationIdentity";
 import * as XLSX from "xlsx";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -530,6 +531,21 @@ function Login({ onSwitch, onAuth, invitation }) {
           {forgot ? "Remember your password?" : "Don’t have an account?"}{" "}
           <button className="text-button" onClick={()=>{if(forgot){setForgot(false);setErr("");}else onSwitch();}}>{forgot ? "Back to sign in" : "Create account"}</button>
         </p>
+      </div>
+    </AuthWrap>
+  );
+}
+
+
+// ── INVITATION ACCOUNT MISMATCH ──────────────────────────────────────────────
+function InvitationAccountMismatch({ invitation, onSignOut }) {
+  return (
+    <AuthWrap>
+      <div className="auth-card">
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>WORKSPACE INVITATION</div>
+        <h2 className="editorial" style={{ fontSize: 34, color: "var(--cream)", marginBottom: 10, letterSpacing: -0.5, fontWeight: 600 }}>You’re signed in with a different ZedPing account.</h2>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 20 }}>This invitation was sent to <strong style={{ color: "var(--cream2)", overflowWrap: "anywhere" }}>{invitation.email}</strong>. Sign out and continue with the invited account to join this workspace.</p>
+        <button type="button" className="btn btn-gold" onClick={onSignOut} style={{ width: "100%", padding: "13px", fontSize: 11 }}>Sign out and continue →</button>
       </div>
     </AuthWrap>
   );
@@ -1944,6 +1960,7 @@ export default function App() {
   const invitationTokenRef = useRef(pendingInvitationToken());
   const invitationValidityRef = useRef(invitationTokenRef.current ? "pending" : "none");
   const invitationPreviewRef = useRef(Promise.resolve());
+  const invitationContextRef = useRef(null);
   const authLoadRef = useRef(null);
   const [view, setView] = useState(invitationTokenRef.current || window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
@@ -1957,6 +1974,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
   const [invitation, setInvitation] = useState(null);
+  const [invitationAccountMismatch, setInvitationAccountMismatch] = useState(false);
   const [invitationLoading, setInvitationLoading] = useState(Boolean(invitationTokenRef.current));
   const [whatsappConnectionState, setWhatsAppConnectionState] = useState(null);
   const [reset, setReset] = useState(() => {
@@ -1972,6 +1990,7 @@ export default function App() {
     const preview = previewInvitation(token)
       .then(context => {
         invitationValidityRef.current = "valid";
+        invitationContextRef.current = context;
         emitInvitationAuthDiagnostic("invitation_previewed");
         if (!cancelled) setInvitation(context);
       })
@@ -2005,6 +2024,13 @@ export default function App() {
         // racing normal session/workspace restoration.
         await invitationPreviewRef.current;
         const token = invitationValidityRef.current === "valid" ? invitationTokenRef.current : null;
+        const accountState = invitationAccountState(invitationContextRef.current?.email, sessionUser.email);
+        if (token && accountState === "different_session") {
+          setInvitationAccountMismatch(true);
+          setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
+          return;
+        }
+        setInvitationAccountMismatch(false);
         if (token) emitInvitationAuthDiagnostic("accept_attempted");
         const acceptedInvitation = token ? await acceptInvitationToken(token) : null;
         if (acceptedInvitation) { invitationTokenRef.current = null; setInvitation(null); }
@@ -2081,6 +2107,7 @@ export default function App() {
         setNeedsVerification(false);
         setWorkspaceChanging(false);
         setWorkspaceSwitchTarget(null);
+        setInvitationAccountMismatch(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -2142,6 +2169,12 @@ export default function App() {
     setWorkspaces((current) => current.map((item) => item.id === workspace.id ? { ...item, ...workspace } : item));
   };
 
+  const signOutAndContinueInvitation = async () => {
+    await supabase.auth.signOut({ scope: "local" });
+    window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); setInvitationAccountMismatch(false); setView("signup");
+  };
+
   const onLogout = async () => {
     await supabase.auth.signOut();
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
@@ -2179,6 +2212,7 @@ export default function App() {
 
   if (reset) return <><style>{css}</style><ResetPass onDone={() => setReset(false)} /></>;
   if (needsVerification && user) return <><style>{css}</style><VerifyEmail user={user} onLogout={onLogout} invitation={invitation} /></>;
+  if (invitationAccountMismatch && invitation?.email && user) return <><style>{css}</style><InvitationAccountMismatch invitation={invitation} onSignOut={signOutAndContinueInvitation} /></>;
 
   if (!user) return (
     <>
