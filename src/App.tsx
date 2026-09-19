@@ -414,7 +414,7 @@ function SignUp({ onSwitch, onAuth, invitation }) {
       <div className="auth-card">
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>{invited ? "WORKSPACE INVITATION" : "GET STARTED"}</div>
         <h2 className="editorial" style={{ fontSize: 38, color: "var(--cream)", marginBottom: 6, letterSpacing: -0.5, fontWeight: 600 }}>{invited ? "Create your account" : "Create your ZedPing account"}</h2>
-        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 22, lineHeight: 1.7 }}>{invited ? "You’ve been invited to join " + (invitation.business_name || "a ZedPing workspace") + ". Create your own password; after email verification, the invitation will resume automatically." : "Build smarter customer communication with ZedPing."}</p>
+        <p style={{ color: "var(--mist)", fontSize: 14, marginBottom: 22, lineHeight: 1.7 }}>{invited ? "You’ve been invited to join ZedPing. Create your account to get started. After email verification, your invitation will resume automatically." : "Build smarter customer communication with ZedPing."}</p>
         {invited && <div role="status" style={{ marginBottom: 18, padding: "12px 14px", border: "1px solid var(--wire2)", background: "rgba(184,146,42,0.05)", color: "var(--cream2)", fontSize: 12 }}>{invitation.email}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
