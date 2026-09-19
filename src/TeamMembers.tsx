@@ -123,10 +123,11 @@ export function TeamMembers({ customer, apiFetch }) {
         <span className="mono" style={{ fontSize: 10, color: "var(--mist)", alignSelf: "center" }}>{members.length} MEMBER{members.length === 1 ? "" : "S"}</span>
       </div>
       {loading ? <div style={{ padding: 24, color: "var(--mist)" }}>Loading team…</div> : members.map((member) => <div key={member.id} style={{ padding: "16px 20px", borderBottom: "1px solid var(--wire)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 240px" }}>
+        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div style={{ fontWeight: 600 }}>{member.name || member.email || "Workspace member"}</div>
-          <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 3 }}>{member.email || "Email unavailable"}</div>
+          <div style={{ color: "var(--cream2)", fontSize: 13, fontWeight: 500, marginTop: 4, overflowWrap: "anywhere" }}>{member.email || "Email unavailable"}</div>
         </div>
+        <span className="badge" style={{ color: "var(--sage)", border: "1px solid var(--wire)" }}>Active</span>
         <span className="badge" style={{ color: member.role === "owner" ? "var(--gold2)" : "var(--cream2)", border: "1px solid var(--wire)" }}>{displayRole(member.role)}</span>
         {canManage && member.role !== "owner" && <div style={{ display: "flex", gap: 8 }}>
           <select className="input" aria-label={`Change ${member.email || "member"} role`} value={member.role} disabled={busy === `role-${member.id}`} onChange={(event) => act(`role-${member.id}`, `/team/members/${encodeURIComponent(member.id)}/role`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: event.target.value }) })} style={{ width: 110, padding: "8px 9px", fontSize: 12 }}>
