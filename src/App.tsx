@@ -1287,6 +1287,7 @@ function TeamInbox({ customer, user }) {
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
 function Automations({ customer }) {
   const { data, loading, refetch } = useAPI("/automations");
+  const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
   const [form, setForm] = useState({ keyword: "", reply: "" });
   const [saving, setSaving] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -1312,7 +1313,7 @@ function Automations({ customer }) {
   return (
     <div className="pad" style={{ padding: 28 }}>
       <PageHead label="Engine" title="Automations." sub="Keyword triggers and auto-replies" />
-      <div className="card" style={{ padding: 22, marginBottom: 20, position: "relative" }}>
+      {canManage && <div className="card" style={{ padding: 22, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold2), transparent)", opacity: 0.3 }} />
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Add Keyword</div>
         <div className="automation-form" style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 12, alignItems: "flex-end" }}>
@@ -1322,18 +1323,18 @@ function Automations({ customer }) {
             <Ic n="plus" s={12} c="var(--ink)" />{saving?"...":"Add"}
           </button>
         </div>
-      </div>
+      </div>}
       <div className="card">
-        <div className="row th" style={{ gridTemplateColumns: "1fr 3fr 100px 80px", gap: 12 }}>
-          {["Keyword","Reply","Status",""].map(h=><div key={h}>{h}</div>)}
+        <div className="row th" style={{ gridTemplateColumns: canManage ? "1fr 3fr 100px 80px" : "1fr 3fr 100px", gap: 12 }}>
+          {(canManage ? ["Keyword","Reply","Status",""] : ["Keyword","Reply","Status"]).map(h=><div key={h}>{h}</div>)}
         </div>
         {loading ? <Loader /> : !keywords.length ? <Empty msg="No keywords yet" /> :
           keywords.map((k,i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: "1fr 3fr 100px 80px", gap: 12 }}>
+            <div key={i} className="row" style={{ gridTemplateColumns: canManage ? "1fr 3fr 100px 80px" : "1fr 3fr 100px", gap: 12 }}>
               <div className="kw-tag"><span className="mono" style={{ fontSize: 11, color: "var(--gold2)" }}>{k.trigger_value}</span></div>
               <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.message_template}</div>
               <div className={`badge ${k.is_active?"badge-green":"badge-cream"}`}>{k.is_active?"Active":"Off"}</div>
-              <button className="btn btn-wire" style={{ fontSize: 9, padding: "4px 10px" }} onClick={()=>toggle(k.id,k.is_active)}>{k.is_active?"Pause":"Enable"}</button>
+              {canManage && <button className="btn btn-wire" style={{ fontSize: 9, padding: "4px 10px" }} onClick={()=>toggle(k.id,k.is_active)}>{k.is_active?"Pause":"Enable"}</button>}
             </div>
           ))
         }
