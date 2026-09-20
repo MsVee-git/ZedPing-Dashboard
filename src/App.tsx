@@ -1286,64 +1286,123 @@ function TeamInbox({ customer, user }) {
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
 function Automations({ customer }) {
-  const { data, loading, refetch } = useAPI("/automations");
+  const workspaceKey = customer?.id || "";
+  const { data: automationData, loading, error, refetch } = useAPI("/automations", [workspaceKey]);
+  const { data: contentData, loading: contentLoading } = useAPI("/content", [workspaceKey]);
+  const { data: historyData, loading: historyLoading, error: historyError, refetch: refetchHistory } = useAPI("/automations/history", [workspaceKey]);
+  const { data: settingsData, refetch: refetchSettings } = useAPI("/automations/settings", [workspaceKey]);
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
-  const [form, setForm] = useState({ keyword: "", reply: "" });
+  const [composer, setComposer] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [sourceMode, setSourceMode] = useState("message");
+  const [contentId, setContentId] = useState("");
+  const [form, setForm] = useState({ phrases: "", response: "", priority: 100, topic: "" });
+  const [timezone, setTimezone] = useState("Africa/Lusaka");
+  const [hours, setHours] = useState({});
   const [saving, setSaving] = useState(false);
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const [notice, setNotice] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
-  const add = async () => {
-    if (!form.keyword||!form.reply) return;
-    setSaving(true);
+  const types = {
+    welcome: { icon: "👋", title: "Welcome Message", text: "Greet a customer when they first contact this business number." },
+    away: { icon: "🌙", title: "Away Message", text: "Reply when a customer writes outside your business hours." },
+    keyword: { icon: "🔑", title: "Keyword Response", text: "Reply when customers use words or phrases you choose." },
+    faq: { icon: "❓", title: "FAQ Response", text: "Answer common questions using exact phrases you set." },
+    lead_capture: { icon: "📝", title: "Lead Capture", text: "Collect useful customer details in a guided conversation.", comingSoon: true },
+    human_handoff: { icon: "🙋", title: "Human Handoff", text: "Pause automation and send a customer conversation to your team." },
+    custom: { icon: "⚙️", title: "Custom Rule", text: "Create more tailored automation behaviour for your business.", comingSoon: true }
+  };
+  const days = [["monday","Monday"],["tuesday","Tuesday"],["wednesday","Wednesday"],["thursday","Thursday"],["friday","Friday"],["saturday","Saturday"],["sunday","Sunday"]];
+  const items = (contentData?.items || contentData || []).filter((item) => !item.archived_at && ["TEXT","LINK"].includes(String(item.content_type || "").toUpperCase()));
+  const automations = Array.isArray(automationData) ? automationData : [];
+  const phrases = (text) => [...new Set(String(text || "").split(/\n|,/).map((value) => value.trim()).filter(Boolean))];
+  const isLegacyDefault = (item) => !item?.automation_type && String(item?.trigger_value || "").toUpperCase() === "DEFAULT";
+  const nameFor = (item) => item?.automation_type && types[item.automation_type] ? types[item.automation_type].title : isLegacyDefault(item) ? "Default reply" : item?.trigger_value ? "Keyword: " + item.trigger_value : "Automation";
+  const typeFor = (item) => item?.automation_type && types[item.automation_type] ? types[item.automation_type].title : isLegacyDefault(item) ? "Default reply" : "Keyword response";
+  const summaryFor = (item) => {
+    if (item.automation_type === "human_handoff") return "Pauses automation and sends the conversation to your team.";
+    if (item.automation_type === "welcome") return "Welcomes each customer once on this business number.";
+    if (item.automation_type === "away") return "Replies when your business is outside configured hours.";
+    if (item.content_library_item_id) return "Replies with a selected Content Library item.";
+    const message = item.message_template || "Configured automation response.";
+    return message.length > 110 ? message.slice(0, 107) + "…" : message;
+  };
+  const reset = () => { setComposer(null); setEditing(null); setSourceMode("message"); setContentId(""); setForm({ phrases: "", response: "", priority: 100, topic: "" }); setNotice(""); };
+  const openComposer = (type, item = null) => {
+    if (!canManage || types[type]?.comingSoon) return;
+    const config = item?.trigger_config || {};
+    setComposer(type); setEditing(item); setSourceMode(item?.content_library_item_id ? "content" : "message"); setContentId(item?.content_library_item_id || "");
+    setForm({ phrases: (config.phrases || (item?.trigger_value && !isLegacyDefault(item) ? [item.trigger_value] : [])).join("\n"), response: item?.message_template || "", priority: item?.priority ?? 100, topic: "" });
+    setTimezone(settingsData?.timezone || "Africa/Lusaka"); setHours(settingsData?.business_hours || {}); setNotice("");
+  };
+  const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const setDay = (day, key, value) => setHours((current) => ({ ...current, [day]: { enabled: current[day]?.enabled ?? true, start: current[day]?.start || "08:00", end: current[day]?.end || "17:00", [key]: value } }));
+  const save = async () => {
+    const list = phrases(form.phrases);
+    if (["keyword","faq","human_handoff"].includes(composer) && !list.length) return setNotice("Add at least one phrase a customer might use.");
+    if (composer !== "human_handoff" && sourceMode === "message" && !form.response.trim()) return setNotice("Write the response you want customers to receive.");
+    if (composer !== "human_handoff" && sourceMode === "content" && !contentId) return setNotice("Choose a Text or Link item from Content Library.");
+    setSaving(true); setNotice("");
     try {
-      await apiFetch(`${API}/automations`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trigger_type:"keyword",trigger_value:form.keyword.toUpperCase().trim(),message_template:form.reply})});
-      setForm({keyword:"",reply:""});
-      refetch();
-    } catch(e) { alert("Error: "+e.message); }
-    finally { setSaving(false); }
+      if (composer === "away") await apiFetch(API + "/automations/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ timezone, business_hours: hours }) });
+      const legacy = isLegacyDefault(editing);
+      const payload = legacy ? { trigger_type: "keyword", trigger_value: "DEFAULT", message_template: form.response, priority: Number(form.priority) } : {
+        automation_type: composer, trigger_type: "keyword", trigger_value: list[0] || composer.toUpperCase(),
+        trigger_config: ["keyword","faq","human_handoff"].includes(composer) ? { phrases: list } : {},
+        condition_config: {}, action_config: { kind: composer === "human_handoff" ? "human_handoff" : sourceMode === "content" ? "content_library" : "send_text" },
+        message_template: composer === "human_handoff" || sourceMode === "content" ? "" : form.response,
+        content_library_item_id: sourceMode === "content" ? contentId : null, priority: Number(form.priority)
+      };
+      await apiFetch(API + "/automations" + (editing ? "/" + editing.id : ""), { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      await Promise.all([refetch(), refetchSettings()]); reset();
+    } catch (err) { setNotice(err?.message || "We could not save this automation."); } finally { setSaving(false); }
   };
-
-  const toggle = async (id,cur) => {
-    await apiFetch(`${API}/automations/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:!cur})});
-    refetch();
+  const toggle = async (item) => {
+    try { await apiFetch(API + "/automations/" + item.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: !item.is_active }) }); refetch(); }
+    catch (err) { setNotice(err?.message || "We could not update this automation."); }
   };
+  const eventLabel = (event) => {
+    const outcome = String(event?.outcome || event?.event_type || "").toLowerCase();
+    if (outcome.includes("handoff")) return "Handed to team";
+    if (outcome.includes("sent") || outcome.includes("response")) return "Response sent";
+    if (outcome.includes("skip") || outcome.includes("suppress")) return "Skipped";
+    if (outcome.includes("error") || outcome.includes("fail")) return "Error";
+    return "Triggered";
+  };
+  const eventClass = (label) => label === "Error" ? "badge-red" : label === "Skipped" ? "badge-cream" : label === "Handed to team" ? "badge-blue" : "badge-green";
+  const when = (date) => date ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(date)) : "No activity yet";
 
-  const keywords = (data||[]).filter(a=>a.trigger_type==="keyword");
+  return <div className="pad" style={{ padding: 28, maxWidth: 1240, margin: "0 auto" }}>
+    <PageHead label="Customer conversations" title="Automations" sub="Let ZedPing handle repetitive WhatsApp conversations automatically." />
+    {!canManage && <div className="card" style={{ padding: 16, marginBottom: 20, borderColor: "var(--wire2)" }}><div className="mono" style={{ fontSize: 10, color: "var(--gold2)", letterSpacing: 1.2 }}>VIEW ONLY</div><div style={{ color: "var(--cream2)", fontSize: 13, marginTop: 6 }}>An owner or admin manages this workspace's automations. You can still see their status and activity.</div></div>}
 
-  return (
-    <div className="pad" style={{ padding: 28 }}>
-      <PageHead label="Engine" title="Automations." sub="Keyword triggers and auto-replies" />
-      {canManage && <div className="card" style={{ padding: 22, marginBottom: 20, position: "relative" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold2), transparent)", opacity: 0.3 }} />
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Add Keyword</div>
-        <div className="automation-form" style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 12, alignItems: "flex-end" }}>
-          <div><label className="label">Keyword</label><input className="input" placeholder="e.g. PRICING" value={form.keyword} onChange={e=>set("keyword",e.target.value)} /></div>
-          <div><label className="label">Auto-reply</label><input className="input" placeholder="Message sent when keyword received" value={form.reply} onChange={e=>set("reply",e.target.value)} /></div>
-          <button className="btn btn-gold" onClick={add} disabled={saving} style={{ padding:"11px 16px", alignSelf:"flex-end" }}>
-            <Ic n="plus" s={12} c="var(--ink)" />{saving?"...":"Add"}
-          </button>
-        </div>
-      </div>}
-      <div className="card">
-        <div className="row th" style={{ gridTemplateColumns: canManage ? "1fr 3fr 100px 80px" : "1fr 3fr 100px", gap: 12 }}>
-          {(canManage ? ["Keyword","Reply","Status",""] : ["Keyword","Reply","Status"]).map(h=><div key={h}>{h}</div>)}
-        </div>
-        {loading ? <Loader /> : !keywords.length ? <Empty msg="No keywords yet" /> :
-          keywords.map((k,i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: canManage ? "1fr 3fr 100px 80px" : "1fr 3fr 100px", gap: 12 }}>
-              <div className="kw-tag"><span className="mono" style={{ fontSize: 11, color: "var(--gold2)" }}>{k.trigger_value}</span></div>
-              <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k.message_template}</div>
-              <div className={`badge ${k.is_active?"badge-green":"badge-cream"}`}>{k.is_active?"Active":"Off"}</div>
-              {canManage && <button className="btn btn-wire" style={{ fontSize: 9, padding: "4px 10px" }} onClick={()=>toggle(k.id,k.is_active)}>{k.is_active?"Pause":"Enable"}</button>}
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  );
+    <section style={{ marginBottom: 30 }}><div className="mono" style={{ fontSize: 10, color: "var(--gold2)", letterSpacing: 1.6, textTransform: "uppercase" }}>Quick Start</div><div style={{ color: "var(--cream2)", fontSize: 13, margin: "5px 0 14px" }}>Choose a ready-made automation and make it yours.</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>{Object.entries(types).map(([type, definition]) => <button key={type} type="button" onClick={() => openComposer(type)} disabled={!canManage || definition.comingSoon} className="card" style={{ color: "inherit", textAlign: "left", padding: 18, cursor: !canManage || definition.comingSoon ? "default" : "pointer", opacity: !canManage || definition.comingSoon ? .65 : 1, minHeight: 150, background: "var(--panel)" }}><div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 22 }}>{definition.icon}</span>{definition.comingSoon && <span className="badge badge-cream">Coming soon</span>}</div><div style={{ fontSize: 15, fontWeight: 600, marginTop: 13 }}>{definition.title}</div><div style={{ fontSize: 12, color: "var(--mist)", lineHeight: 1.5, marginTop: 6 }}>{definition.text}</div><div className="mono" style={{ color: definition.comingSoon ? "var(--mist)" : "var(--gold2)", fontSize: 9, letterSpacing: 1.1, textTransform: "uppercase", marginTop: 14 }}>{definition.comingSoon ? "Not yet available" : "Set up"}</div></button>)}</div>
+      <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 10 }}>Lead Capture needs the next conversational collection runtime. Custom Rule will follow when more useful, safe options are available.</div>
+    </section>
+
+    <section className="card" style={{ marginBottom: 22 }}><div style={{ padding: "18px 20px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><div><div style={{ fontSize: 16, fontWeight: 600 }}>Your Automations</div><div style={{ fontSize: 12, color: "var(--mist)", marginTop: 4 }}>Only rules belonging to this workspace are shown.</div></div><button className="btn btn-wire" onClick={refetch} disabled={loading}><Ic n="refresh" s={12} /> Refresh</button></div>
+      {notice && <div role="alert" style={{ margin: "14px 20px 0", color: "var(--error-text)", fontSize: 12 }}>{notice}</div>}
+      {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 24, color: "var(--error-text)", fontSize: 13 }}>We could not load automations. <button className="btn btn-wire" onClick={refetch} style={{ marginLeft: 8 }}>Try again</button></div> : !automations.length ? <div style={{ textAlign: "center", padding: "52px 24px" }}><div style={{ fontSize: 20 }}>Put your WhatsApp on autopilot</div><div style={{ color: "var(--mist)", fontSize: 13, margin: "9px auto 18px", maxWidth: 420 }}>Start with a ready-made automation and customize it for your business.</div>{canManage && <button className="btn btn-gold" onClick={() => openComposer("keyword")}>Create your first response</button>}</div> : <div><div className="row th hide-m" style={{ gridTemplateColumns: "1.3fr 2.4fr 100px 86px 116px", gap: 14 }}><div>Automation</div><div>What it does</div><div>Status</div><div>Priority</div><div /></div>{automations.map((item) => <div key={item.id} className="row" style={{ gridTemplateColumns: "1.3fr 2.4fr 100px 86px 116px", gap: 14 }}><div><div style={{ fontWeight: 600 }}>{nameFor(item)}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 4 }}>{typeFor(item)}</div></div><div style={{ color: "var(--cream2)", fontSize: 12, lineHeight: 1.4 }}>{summaryFor(item)}</div><div><span className={"badge " + (item.is_active ? "badge-green" : "badge-cream")}>{item.is_active ? "Active" : "Paused"}</span></div><div className="mono" style={{ color: "var(--mist)", fontSize: 11 }}>{item.priority ?? 100}</div><div style={{ display: "flex", justifyContent: "flex-end", gap: 7 }}>{canManage && <><button className="btn btn-wire" onClick={() => openComposer(item.automation_type || "keyword", item)} style={{ padding: "6px 9px", fontSize: 8 }}>Edit</button><button className="btn btn-wire" onClick={() => toggle(item)} style={{ padding: "6px 9px", fontSize: 8 }}>{item.is_active ? "Pause" : "Activate"}</button></>}</div></div>)}</div>}
+    </section>
+
+    <section className="card"><button type="button" onClick={() => setShowHistory((value) => !value)} style={{ width: "100%", background: "transparent", color: "inherit", border: 0, padding: "18px 20px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", textAlign: "left" }}><div><div style={{ fontSize: 16, fontWeight: 600 }}>Automation activity</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>Recent activity is kept for 90 days.</div></div><span className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{showHistory ? "Hide" : "View activity"}</span></button>
+      {showHistory && <div style={{ borderTop: "1px solid var(--wire)" }}><div style={{ padding: "12px 20px", display: "flex", justifyContent: "flex-end" }}><button className="btn btn-wire" onClick={refetchHistory} disabled={historyLoading}><Ic n="refresh" s={12} /> Refresh</button></div>{historyLoading ? <Loader /> : historyError ? <div role="alert" style={{ padding: 20, color: "var(--error-text)", fontSize: 13 }}>We could not load activity.</div> : !(historyData || []).length ? <Empty msg="Automation activity will appear here once your automations start handling conversations." /> : (historyData || []).map((event) => { const label = eventLabel(event); return <div key={event.id} className="row" style={{ gridTemplateColumns: "120px 1fr 180px", gap: 12 }}><div><span className={"badge " + eventClass(label)}>{label}</span></div><div style={{ color: "var(--cream2)", fontSize: 12 }}>{event.automation_id ? "An automation handled a customer conversation." : "Automation activity recorded."}</div><div className="mono" style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{when(event.created_at)}</div></div> })}</div>}
+    </section>
+
+    {composer && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Automation setup"><div className="modal" style={{ maxWidth: 680, maxHeight: "90vh", overflowY: "auto" }}><div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", marginBottom: 20 }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 10, letterSpacing: 1.4, textTransform: "uppercase" }}>{editing ? "Edit automation" : "Quick Start"}</div><h2 className="editorial" style={{ fontSize: 34, marginTop: 7 }}>{types[composer]?.icon} {editing ? nameFor(editing) : types[composer]?.title}</h2></div><button className="btn btn-wire" onClick={reset} style={{ padding: "6px 9px" }}>Close</button></div>
+      {composer === "welcome" && <div style={{ color: "var(--cream2)", fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>ZedPing sends this welcome once when a customer first contacts this business number. Editing it does not reset who is already eligible.</div>}
+      {composer === "away" && <div style={{ color: "var(--cream2)", fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>This is an inbound reply, not a scheduled message. It is sent only when a customer writes outside your business hours.</div>}
+      {composer === "human_handoff" && <div style={{ color: "var(--cream2)", fontSize: 13, lineHeight: 1.5, marginBottom: 16 }}>When customers use these phrases, ZedPing pauses automation and puts the conversation in your Team Inbox for a team member.</div>}
+      {["keyword","faq","human_handoff"].includes(composer) && <div><label className="label">{composer === "faq" ? "Question or topic" : "When a customer says"}</label>{composer === "faq" && <input className="input" placeholder="e.g. Business hours" value={form.topic} onChange={(event) => setField("topic", event.target.value)} style={{ marginBottom: 10 }} />}<textarea className="textarea" value={form.phrases} onChange={(event) => setField("phrases", event.target.value)} placeholder="One exact phrase per line, e.g.&#10;fees&#10;pricing" /><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 6 }}>Use exact phrases, one per line. Up to 10 phrases.</div></div>}
+      {composer !== "human_handoff" && <div style={{ marginTop: 18 }}><label className="label">Respond with</label><div style={{ display: "flex", gap: 8, marginBottom: 12 }}><button className={"btn " + (sourceMode === "message" ? "btn-gold" : "btn-wire")} onClick={() => setSourceMode("message")}>Write a message</button><button className={"btn " + (sourceMode === "content" ? "btn-gold" : "btn-wire")} onClick={() => setSourceMode("content")}>Content Library</button></div>{sourceMode === "message" ? <textarea className="textarea" maxLength={4096} value={form.response} onChange={(event) => setField("response", event.target.value)} placeholder="Write the reply a customer should receive" /> : <div><label className="label">Text or Link from this workspace</label>{contentLoading ? <Loader /> : <select className="input" value={contentId} onChange={(event) => setContentId(event.target.value)}><option value="">Choose Content Library item</option>{items.map((item) => <option value={item.id} key={item.id}>{item.name} · {String(item.content_type).toLowerCase()}</option>)}</select>}<div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.4, marginTop: 7 }}>Only Text and Link items are available here. Documents, images and WhatsApp template references are not supported for this response.</div></div>}</div>}
+      {composer === "away" && <div style={{ marginTop: 20, borderTop: "1px solid var(--wire)", paddingTop: 18 }}><label className="label">Workspace timezone</label><input className="input" value={timezone} onChange={(event) => setTimezone(event.target.value)} placeholder="Africa/Lusaka" /><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7 }}>Use an IANA timezone, for example Africa/Lusaka.</div><div style={{ marginTop: 18, fontWeight: 600 }}>Your business hours</div><div style={{ color: "var(--mist)", fontSize: 12, margin: "5px 0 12px" }}>Close a day when you do not take customer messages. An end time earlier than the start time is treated as overnight hours.</div>{days.map(([key, title]) => { const day = hours[key] || { enabled: true, start: "08:00", end: "17:00" }; return <div key={key} style={{ display: "grid", gridTemplateColumns: "104px 74px 1fr 1fr", gap: 8, alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--wire)" }}><div style={{ fontSize: 13 }}>{title}</div><label style={{ fontSize: 11, color: "var(--cream2)", display: "flex", alignItems: "center", gap: 6 }}><input type="checkbox" checked={day.enabled !== false} onChange={(event) => setDay(key, "enabled", event.target.checked)} /> Open</label><input className="input" type="time" disabled={day.enabled === false} value={day.start || "08:00"} onChange={(event) => setDay(key, "start", event.target.value)} /><input className="input" type="time" disabled={day.enabled === false} value={day.end || "17:00"} onChange={(event) => setDay(key, "end", event.target.value)} /></div> })}</div>}
+      {composer !== "welcome" && <div style={{ marginTop: 18 }}><label className="label">Priority</label><input className="input" type="number" min="0" max="100000" value={form.priority} onChange={(event) => setField("priority", event.target.value)} /><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 6 }}>Lower numbers are considered first among rules of the same kind.</div></div>}
+      {notice && <div role="alert" style={{ color: "var(--error-text)", fontSize: 12, marginTop: 16 }}>{notice}</div>}<div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24 }}><button className="btn btn-wire" onClick={reset}>Cancel</button><button className="btn btn-gold" onClick={save} disabled={saving}>{saving ? "Saving…" : editing ? "Save changes" : "Activate automation"}</button></div>
+    </div></div>}
+  </div>;
 }
 
-// ── SETTINGS ──────────────────────────────────────────────────────────────────
 function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange }) {
   const { data, loading, error, refetch } = useAPI("/workspace", [customer?.id]);
   const workspace = data?.workspace || customer || {};
