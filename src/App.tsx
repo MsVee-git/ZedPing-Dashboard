@@ -230,6 +230,11 @@ const css = `
   .card { background: var(--panel); border: 1px solid var(--wire); }
   .card-gold { background: var(--panel); border: 1px solid var(--wire2); }
 
+  /* Modal */
+  .modal-bg { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0,0,0,0.72); backdrop-filter: blur(5px); }
+  .modal { width: min(680px, 100%); padding: 24px; background: var(--panel); border: 1px solid var(--wire2); box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+  @media (max-width: 768px) { .modal-bg { align-items: flex-start; overflow-y: auto; padding: 12px; } .modal { margin: 0; padding: 18px; } }
+
   /* Spinner */
   .spin { width: 18px; height: 18px; border: 1px solid rgba(255,255,255,0.08); border-top-color: var(--gold2); border-radius: 50%; animation: rot 0.7s linear infinite; }
   @keyframes rot { to { transform: rotate(360deg); } }
