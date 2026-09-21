@@ -1349,7 +1349,8 @@ function Automations({ customer }) {
     setSaving(true); setNotice("");
     try {
       const result = await apiFetch(API + "/automations/library/preflight", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ library_template_id:composer.id, library_template_version:composer.version, automation_type:composer.automation_type, phrases:list, exclude_id:editing?.id || null }) });
-      setConflicts(result?.conflicts || []); setReviewing(true);
+      const preflight = await result.json();
+      setConflicts(preflight?.conflicts || []); setReviewing(true);
     } catch (failure) { setNotice(failure?.message || "We could not check this automation."); } finally { setSaving(false); }
   };
   const activate = async () => {
