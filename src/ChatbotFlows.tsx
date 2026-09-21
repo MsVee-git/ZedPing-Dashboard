@@ -251,7 +251,8 @@ export function ChatbotFlows({ customer, apiFetch }) {
   </div>
 }
 
-function FlowEmpty({ msg }) { return <div style={{ padding: "38px 20px", textAlign: "center" }}><span className="mono" style={{ color: "var(--mist)", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase" }}>{msg}</span></div> }\nfunction Section({ title, subtitle, children }) { return <section style={{ marginTop: 32 }}><div style={{ marginBottom: 13 }}><h2 className="editorial" style={{ color: "var(--cream)", fontSize: 28, fontWeight: 500 }}>{title}</h2>{subtitle && <p style={{ color: "var(--mist)", fontSize: 13, marginTop: 4 }}>{subtitle}</p>}</div>{children}</section> }
+function FlowEmpty({ msg }) { return <div style={{ padding: "38px 20px", textAlign: "center" }}><span className="mono" style={{ color: "var(--mist)", fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase" }}>{msg}</span></div> }
+function Section({ title, subtitle, children }) { return <section style={{ marginTop: 32 }}><div style={{ marginBottom: 13 }}><h2 className="editorial" style={{ color: "var(--cream)", fontSize: 28, fontWeight: 500 }}>{title}</h2>{subtitle && <p style={{ color: "var(--mist)", fontSize: 13, marginTop: 4 }}>{subtitle}</p>}</div>{children}</section> }
 function RecipeCard({ recipe, canManage, onPreview, onUse }) { return <div className="card" style={{ padding: 18, minHeight: 175, display: "flex", flexDirection: "column", alignItems: "flex-start" }}><span className="badge badge-gold">Ready-made</span><h3 style={{ color: "var(--cream)", marginTop: 14, fontSize: 16 }}>{recipe.title}</h3><p style={{ color: "var(--mist)", fontSize: 13, lineHeight: 1.5, marginTop: 8, flex: 1 }}>{recipe.description}</p><div style={{ display: "flex", gap: 8, marginTop: 16 }}><button className="btn btn-wire" onClick={onPreview}>Preview</button>{canManage && <button className="btn btn-gold" onClick={onUse}>Use template</button>}</div></div> }
 
 function FlowBuilder(props) {
