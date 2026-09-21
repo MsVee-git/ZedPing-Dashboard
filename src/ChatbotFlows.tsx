@@ -237,7 +237,7 @@ export function ChatbotFlows({ customer, apiFetch }) {
     {error && <div role="alert" style={{ border: "1px solid rgba(239,68,68,.35)", color: "var(--error-text)", padding: 12, marginBottom: 16, fontSize: 13 }}>{error}</div>}
     {!canManage && <div className="card" style={{ padding: 14, color: "var(--cream2)", fontSize: 13, marginBottom: 18 }}>You can view flows and activity. An owner or admin can create and publish changes.</div>}
     <Section title="Recommended Flows" subtitle="Suggestions based on your business workspace.">
-      <div className="flow-grid">{recommended.map(recipe => <RecipeCard key={recipe.id} recipe={recipe} canManage={canManage} onPreview={() => setMode("library")} onUse={() => createFlow(recipe)} />)}</div>
+      <div className="flow-grid">{recommended.map(recipe => <RecipeCard key={recipe.id} recipe={recipe} canManage={canManage} onPreview={() => { setSelected({ name: recipe.title, draft_definition: recipe.build(), lifecycle_status: "template" }); setDraft(recipe.build()); setMode("builder") }} onUse={() => createFlow(recipe)} />)}</div>
     </Section>
     <Section title="Flow Library" subtitle="Ready-made conversation starters.">
       <div className="flow-grid">{recipes.map(recipe => <RecipeCard key={recipe.id} recipe={recipe} canManage={canManage} onPreview={() => { setSelected({ name: recipe.title, draft_definition: recipe.build(), lifecycle_status: "template" }); setDraft(recipe.build()); setMode("builder") }} onUse={() => createFlow(recipe)} />)}</div>
