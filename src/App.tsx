@@ -1903,6 +1903,10 @@ function ContentLibrary({ customer }) {
   const [form, setForm] = useState({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [editingContent, setEditingContent] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", description: "", text_content: "", link_url: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editNotice, setEditNotice] = useState("");
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
 
   const load = useCallback(async () => {
@@ -1964,6 +1968,42 @@ function ContentLibrary({ customer }) {
     } catch (archiveError) { setActionError(archiveError?.message || "We could not archive this content."); }
   };
 
+  const beginEdit = (item) => {
+    if (!canManage || !["TEXT", "LINK"].includes(item.content_type)) return;
+    setEditNotice("");
+    setEditForm({ name: item.name || "", description: item.description || "", text_content: item.text_content || "", link_url: item.link_url || "" });
+    setEditingContent(item);
+  };
+  const editDirty = editingContent && ["name", "description", "text_content", "link_url"].some((key) => String(editForm[key] || "") !== String(editingContent[key] || ""));
+  const closeEdit = () => {
+    if (editSaving) return;
+    if (editDirty && !window.confirm("Discard unsaved changes?")) return;
+    setEditingContent(null); setEditNotice("");
+  };
+  useEffect(() => {
+    if (!editDirty) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editDirty]);
+  const saveEdit = async (event) => {
+    event.preventDefault();
+    if (!editingContent || !canManage) return;
+    setEditSaving(true); setEditNotice("");
+    try {
+      const payload = { name: editForm.name, description: editForm.description };
+      if (editingContent.content_type === "TEXT") payload.text_content = editForm.text_content;
+      if (editingContent.content_type === "LINK") payload.link_url = editForm.link_url;
+      const response = await apiFetch(`${API}/content/${editingContent.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      setItems((current) => current.map((entry) => entry.id === result.item.id ? result.item : entry));
+      setSelected(result.item); setEditingContent(result.item); setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" });
+      setEditNotice("Changes saved");
+    } catch (_) {
+      setEditNotice("We couldn't save your changes. Please try again.");
+    } finally { setEditSaving(false); }
+  };
+
   const secureOpen = async (item) => {
     setActionError("");
     try {
@@ -2016,10 +2056,22 @@ function ContentLibrary({ customer }) {
         {selected.content_type === "LINK" && <a href={selected.link_url} target="_blank" rel="noreferrer" style={{ color: "var(--gold2)", display: "block", fontSize: 12, marginTop: 15, wordBreak: "break-all" }}>{selected.link_url}</a>}
         {["DOCUMENT","IMAGE"].includes(selected.content_type) && <><button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>{selected.content_type === "IMAGE" ? "Preview secure image" : "Open secure document"}</button>{selected.content_type === "IMAGE" && previewUrl && <img src={previewUrl} alt={selected.name} style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "contain", marginTop: 14, border: "1px solid var(--wire)" }} />}</>}
         {selected.content_type === "WHATSAPP_TEMPLATE_REFERENCE" && <><div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 15 }}>{selected.template_name} · {selected.template_language || "language unavailable"} · {selected.template_status || "status unavailable"}</div>{canManage && <button className="btn btn-wire" onClick={() => refreshTemplate(selected)} style={{ marginTop: 13 }}>Refresh from Meta</button>}</>}
-        {canManage && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
+        {canManage && ["TEXT", "LINK"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => beginEdit(selected)} style={{ marginTop: 18 }}>Edit</button>}
+        {canManage && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, marginLeft: ["TEXT", "LINK"].includes(selected.content_type) ? 8 : 0, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
       </>}</div>
     </div>}
 
+    {editingContent && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Edit content"><div className="modal" style={{ maxWidth: 620, maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>Edit {typeLabel(editingContent.content_type)}</h3></div><button type="button" className="btn btn-wire" onClick={closeEdit}>Close</button></div>
+      <form onSubmit={saveEdit} style={{ marginTop: 20 }}>
+        <label className="label">Name</label><input className="input" required maxLength="160" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} />
+        <label className="label" style={{ marginTop: 13 }}>Description <span style={{ color: "var(--mist)" }}>optional</span></label><input className="input" maxLength="500" value={editForm.description} onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))} />
+        {editingContent.content_type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={editForm.text_content} onChange={(event) => setEditForm((current) => ({ ...current, text_content: event.target.value }))} /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{editForm.text_content.length}/20,000</div></>}
+        {editingContent.content_type === "LINK" && <><label className="label" style={{ marginTop: 13 }}>Destination URL</label><input className="input" type="url" required value={editForm.link_url} onChange={(event) => setEditForm((current) => ({ ...current, link_url: event.target.value }))} /></>}
+        {editNotice && <div role="status" style={{ color: editNotice === "Changes saved" ? "var(--gold2)" : "var(--error-text)", fontSize: 12, marginTop: 13 }}>{editNotice}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={closeEdit} disabled={editSaving}>Cancel</button><button type="submit" className="btn btn-gold" disabled={editSaving}>{editSaving ? "Saving…" : "Save changes"}</button></div>
+      </form>
+    </div></div>}
     {creating && <div className="modal-bg"><div className="modal" style={{ maxWidth: 620 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
       {!type ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginTop: 20 }}>{[["TEXT","Text"],["DOCUMENT","Document"],["IMAGE","Image"],["LINK","Link"],["WHATSAPP_TEMPLATE_REFERENCE","WhatsApp Template"]].map(([key,label]) => <button key={key} className="btn btn-wire" onClick={() => begin(key)} style={{ minHeight: 72, justifyContent: "center" }}>{label}</button>)}</div> :
