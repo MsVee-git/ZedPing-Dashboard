@@ -1041,54 +1041,71 @@ function Contacts({ customer }) {
   const [toast, setToast] = useState(null);
 
   const notify = (text, ok = true) => { setToast({ text, ok }); setTimeout(() => setToast(null), 3000); };
+  const groupRequest = async (path = "", init: RequestInit = {}) => {
+    const response = await apiFetch(`${API}/contact-groups${path}`, init);
+    return response.json();
+  };
   const filtered = (data || []).filter(c => (c.name || "").toLowerCase().includes(search.toLowerCase()) || (c.phone_number || "").includes(search));
 
   async function loadGroups() {
     if (!customer?.id) return;
     setGroupsLoading(true);
-    const { data: groupRows, error } = await supabase.from("contact_groups").select("id,name,description,color,created_at").eq("customer_id", customer.id).order("created_at", { ascending: false });
-    if (error) notify("Could not load groups", false);
-    const { data: links } = await supabase.from("contact_group_members").select("group_id,contact_id");
-    // Counts reflect distinct contacts, so an accidental duplicate membership link
-    // cannot inflate the recipient count shown to the user.
-    const counts = (links || []).reduce((result, link) => {
-      if (!result[link.group_id]) result[link.group_id] = new Set();
-      result[link.group_id].add(link.contact_id);
-      return result;
-    }, {});
-    setGroups((groupRows || []).map(group => ({ ...group, member_count: counts[group.id]?.size || 0 })));
-    setGroupsLoading(false);
+    try {
+      setGroups(await groupRequest());
+    } catch (error) {
+      notify(error.message || "Could not load groups", false);
+      setGroups([]);
+    } finally {
+      setGroupsLoading(false);
+    }
   }
   useEffect(() => { if (tab === "groups") loadGroups(); }, [tab, customer?.id]);
 
   async function createGroup() {
     const name = groupName.trim();
     if (!name) return;
-    const { error } = await supabase.from("contact_groups").insert({ customer_id: customer.id, name, total_contacts: 0 });
-    if (error) return notify("Could not create group", false);
-    setGroupName(""); setShowGroupForm(false); notify("Contact list created"); loadGroups();
+    try {
+      await groupRequest("", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+      setGroupName(""); setShowGroupForm(false); notify("Contact list created"); loadGroups();
+    } catch (error) {
+      notify(error.message || "Could not create group", false);
+    }
   }
   async function openGroup(group) {
     setActiveGroup(group); setSelectedContactId("");
-    const { data: links, error } = await supabase.from("contact_group_members").select("id,contact_id").eq("group_id", group.id);
-    if (error) return notify("Could not load group members", false);
-    setMembers((links || []).map(link => ({ ...link, contact: (data || []).find(contact => contact.id === link.contact_id) })).filter(link => link.contact));
+    try {
+      const result = await groupRequest(`/${group.id}/members`);
+      setMembers(result.members || []);
+    } catch (error) {
+      setActiveGroup(null);
+      notify(error.message || "Could not load group members", false);
+    }
   }
   async function addMember() {
     if (!activeGroup || !selectedContactId) return;
-    const { error } = await supabase.from("contact_group_members").insert({ group_id: activeGroup.id, contact_id: selectedContactId });
-    if (error) return notify("Could not add contact to this list", false);
-    notify("Contact added"); await openGroup(activeGroup); loadGroups();
+    try {
+      await groupRequest(`/${activeGroup.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contact_id: selectedContactId }) });
+      notify("Contact added"); await openGroup(activeGroup); loadGroups();
+    } catch (error) {
+      notify(error.message || "Could not add contact to this list", false);
+    }
   }
   async function removeMember(member) {
-    const { error } = await supabase.from("contact_group_members").delete().eq("id", member.id).eq("group_id", activeGroup.id);
-    if (error) return notify("Could not remove contact", false);
-    notify("Contact removed"); await openGroup(activeGroup); loadGroups();
+    try {
+      await groupRequest(`/${activeGroup.id}/members/${member.id}`, { method: "DELETE" });
+      notify("Contact removed"); await openGroup(activeGroup); loadGroups();
+    } catch (error) {
+      notify(error.message || "Could not remove contact", false);
+    }
   }
   async function deleteGroup(group) {
-    const { error } = await supabase.from("contact_groups").delete().eq("id", group.id).eq("customer_id", customer.id);
-    if (error) return notify("Could not delete group", false);
-    notify("Contact list deleted"); loadGroups();
+    try {
+      await groupRequest(`/${group.id}`, { method: "DELETE" });
+      if (activeGroup?.id === group.id) setActiveGroup(null);
+      notify("Contact list deleted"); loadGroups();
+    } catch (error) {
+      notify(error.message || "Could not delete group", false);
+    }
   }
 
   return <div className="pad" style={{ padding: 28 }}>
