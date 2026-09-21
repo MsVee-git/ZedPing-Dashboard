@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { WhatsAppConnection } from "./WhatsAppConnection";
-import { ChatbotFlows } from "./ChatbotFlows";\nimport { ZoeAI } from "./ZoeAI";
+import { ChatbotFlows } from "./ChatbotFlows";
+import { ZoeAI } from "./ZoeAI";
 import { TeamMembers } from "./TeamMembers";
 import { ContactsImport } from "./ContactsImport";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
