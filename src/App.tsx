@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { WhatsAppConnection } from "./WhatsAppConnection";
-import { ChatbotFlows } from "./ChatbotFlows";
+import { ChatbotFlows } from "./ChatbotFlows";\nimport { ZoeAI } from "./ZoeAI";
 import { TeamMembers } from "./TeamMembers";
 import { ContactsImport } from "./ContactsImport";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
@@ -643,7 +643,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "contacts", label: "Contacts", icon: "contacts" },
     { id: "messages", label: "Team Inbox", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
-    { id: "chatbotFlows", label: "Chatbot Flows", icon: "flow" },
+    { id: "chatbotFlows", label: "Chatbot Flows", icon: "flow" },\n    { id: "zoeAi", label: "Zoe AI", icon: "auto" },
     { id: "templates", label: "WhatsApp Templates", icon: "messages" },
     { id: "content", label: "Content Library", icon: "catalog" },
     { id: "team", label: "Team Members", icon: "contacts" },
@@ -2276,7 +2276,7 @@ export default function App() {
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
+    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },\n    zoeAi: { title: "Zoe AI", comp: <ZoeAI customer={customer} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     content:     { title: "Content Library", comp: <ContentLibrary customer={customer} /> },
     team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
