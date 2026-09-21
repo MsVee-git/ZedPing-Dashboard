@@ -98,6 +98,7 @@ function readableType(type) {
 export function ChatbotFlows({ customer, apiFetch }) {
   const [flows, setFlows] = useState([])
   const [setup, setSetup] = useState({ numbers: [], discovery: null })
+  const [selectedNumberId, setSelectedNumberId] = useState("")
   const [activity, setActivity] = useState([])
   const [content, setContent] = useState([])
   const [loading, setLoading] = useState(true)
@@ -125,7 +126,9 @@ export function ChatbotFlows({ customer, apiFetch }) {
         apiFetch("/chatbot-flows"), apiFetch("/chatbot-flows/setup"), apiFetch("/chatbot-flows/activity"), apiFetch("/content")
       ])
       setFlows(await flowResponse.json())
-      setSetup(await setupResponse.json())
+      const setupData = await setupResponse.json()
+      setSetup(setupData)
+      setSelectedNumberId(current => (setupData.numbers || []).some(number => number.id === current) ? current : ((setupData.numbers || []).length === 1 ? setupData.numbers[0].id : ""))
       setActivity(await activityResponse.json())
       const items = await contentResponse.json()
       setContent((items.items || []).filter(item => ["TEXT", "LINK"].includes(item.content_type) && !item.archived_at))
@@ -145,18 +148,24 @@ export function ChatbotFlows({ customer, apiFetch }) {
 
   const createFlow = async (recipe) => {
     if (!canManage) return
-    if (!setup.numbers?.length) { setError("Connect a WhatsApp number before creating a Chatbot Flow."); return }
+    const numberId = selectedNumberId || (setup.numbers?.length === 1 ? setup.numbers[0].id : "")
+    if (!numberId) { setError(setup.numbers?.length ? "Choose the WhatsApp number this flow will use." : "Connect a WhatsApp number before creating a Chatbot Flow."); return }
     setSaving(true)
+    setError("")
     try {
       // Library selections send only their stable selector. The backend owns
       // the recipe definition and creates the workspace-scoped draft.
       const path = recipe ? "/chatbot-flows/from-library" : "/chatbot-flows"
       const body = recipe
-        ? { template_id: recipe.id, whatsapp_number_id: setup.numbers[0].id }
-        : { name: "Untitled flow", whatsapp_number_id: setup.numbers[0].id, draft_definition: blankFlow() }
+        ? { template_id: recipe.id, whatsapp_number_id: numberId }
+        : { name: "Untitled flow", whatsapp_number_id: numberId, draft_definition: blankFlow() }
       const response = await apiFetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      await openFlow(await response.json())
-      await load()
+      const created = await response.json()
+      // Open the returned, server-created draft directly. A second request
+      // must not strand the owner in the preview after a successful create.
+      setFlows(current => [created, ...current.filter(flow => flow.id !== created.id)])
+      setSelected(created); setDraft(clone(created.draft_definition)); setDraftDirty(false)
+      setMode("builder"); setTestResult(null); setReviewOpen(false)
     } catch (err) { setError(err.message || "Unable to create this flow") }
     finally { setSaving(false) }
   }
@@ -237,12 +246,12 @@ export function ChatbotFlows({ customer, apiFetch }) {
   }
 
   if (loading) return <div className="pad" style={{ padding: 32 }}><div className="spin" /></div>
-  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, onBack: () => { setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
+  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack: () => { setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
 
   return <div className="pad" style={{ padding: 32, maxWidth: 1280, margin: "0 auto" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 26 }}>
       <div><div className="mono" style={{ color: "var(--gold2)", fontSize: 10, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Chatbot Flows</div><h1 className="editorial" style={{ fontSize: 42, color: "var(--cream)", fontWeight: 500 }}>Guide every conversation</h1><p style={{ color: "var(--mist)", marginTop: 8, maxWidth: 640, fontSize: 14 }}>Build guided WhatsApp conversations that ask questions, collect information and route customers to the right next step.</p></div>
-      {canManage && <button className="btn btn-gold" onClick={() => createFlow(null)}>+ Create flow</button>}
+      {canManage && <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>{setup.numbers?.length > 1 && <label className="label" style={{ margin: 0, minWidth: 230 }}>WhatsApp number<select className="input" value={selectedNumberId} onChange={event => setSelectedNumberId(event.target.value)}><option value="">Choose a connected WhatsApp number</option>{setup.numbers.map(number => <option key={number.id} value={number.id}>{number.display_name || number.phone_number || "Connected WhatsApp number"}</option>)}</select></label>}<button className="btn btn-gold" onClick={() => createFlow(null)}>+ Create flow</button></div>}
     </div>
     {error && <div role="alert" style={{ border: "1px solid rgba(239,68,68,.35)", color: "var(--error-text)", padding: 12, marginBottom: 16, fontSize: 13 }}>{error}</div>}
     {!canManage && <div className="card" style={{ padding: 14, color: "var(--cream2)", fontSize: 13, marginBottom: 18 }}>You can view flows and activity. An owner or admin can create and publish changes.</div>}
@@ -266,7 +275,7 @@ function Section({ title, subtitle, children }) { return <section style={{ margi
 function RecipeCard({ recipe, canManage, onPreview, onUse }) { return <div className="card" style={{ padding: 18, minHeight: 175, display: "flex", flexDirection: "column", alignItems: "flex-start" }}><span className="badge badge-gold">Ready-made</span><h3 style={{ color: "var(--cream)", marginTop: 14, fontSize: 16 }}>{recipe.title}</h3><p style={{ color: "var(--mist)", fontSize: 13, lineHeight: 1.5, marginTop: 8, flex: 1 }}>{recipe.description}</p><div style={{ display: "flex", gap: 8, marginTop: 16 }}><button className="btn btn-wire" onClick={onPreview}>Preview</button>{canManage && <button className="btn btn-gold" onClick={onUse}>Use template</button>}</div></div> }
 
 function FlowBuilder(props) {
-  const { selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, onBack } = props
+  const { selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack } = props
   const steps = draft.steps || []
   const isTemplate = !selected.id
   const stepOptions = (current) => steps.filter(step => step.id !== current).map(step => ({ value: step.id, label: readableType(step.type) + " · Step " + (steps.indexOf(step) + 1) }))
@@ -276,6 +285,8 @@ function FlowBuilder(props) {
   const canEdit = canManage && !isTemplate
   return <div className="pad" style={{ padding: 24, maxWidth: 1040, margin: "0 auto" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center", flexWrap: "wrap", marginBottom: 18 }}><button className="btn btn-wire" onClick={onBack}>← Back to flows</button><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{isTemplate && canManage && <button className="btn btn-gold" disabled={saving} onClick={() => useTemplate(selected.library_template_id)}>{saving ? "Creating…" : "Use template"}</button>}{canEdit && <><button className="btn btn-wire" disabled={saving} onClick={saveDraft}>{saving ? "Saving…" : draftDirty ? "Save draft" : "Saved"}</button><button className="btn btn-wire" disabled={saving} onClick={runTest}>Test flow</button><button className="btn btn-gold" disabled={saving} onClick={() => setReviewOpen(true)}>Review & publish</button></>}</div></div>
+    {error && <div role="alert" style={{ border: "1px solid rgba(239,68,68,.35)", color: "var(--error-text)", padding: 12, marginBottom: 16, fontSize: 13 }}>{error}</div>}
+    {isTemplate && canManage && setup.numbers?.length > 1 && <label className="label" style={{ marginBottom: 16 }}>WhatsApp number for this flow<select className="input" value={selectedNumberId} onChange={event => setSelectedNumberId(event.target.value)}><option value="">Choose a connected WhatsApp number</option>{setup.numbers.map(number => <option key={number.id} value={number.id}>{number.display_name || number.phone_number || "Connected WhatsApp number"}</option>)}</select></label>}
     <div className="card" style={{ padding: 20, marginBottom: 16 }}><span className={"badge " + statusColor(selected.lifecycle_status)}>{isTemplate ? "Template preview" : flowStatus(selected.lifecycle_status)}</span><input aria-label="Flow name" className="input" disabled={!canEdit} value={selected.name || ""} onChange={event => { setSelected({ ...selected, name: event.target.value }); changeDraft(draft) }} style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 32, border: "none", padding: "12px 0 2px", background: "transparent" }} /><p style={{ color: "var(--mist)", fontSize: 13 }}>Message → Question → Choice → Next step → Hand to team or finish.</p></div>
     {isTemplate && <div className="card" style={{ padding: 16, color: "var(--cream2)", marginBottom: 16 }}>This is an approximate conversation preview. Use this template to create a private draft for your workspace. It will not publish or send anything automatically.</div>}
     {steps.map((step, index) => <div key={step.id} style={{ marginBottom: 12 }}><StepCard {...{ step, index, steps, updateStep, moveStep, removeStep, addStep, canEdit, content, stepOptions, updateChoice }} /></div>)}
