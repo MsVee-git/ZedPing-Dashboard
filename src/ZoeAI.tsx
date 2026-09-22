@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 const styles = ["professional", "friendly", "warm", "concise"];
 
-export function ZoeAI({ customer, apiFetch }) {
+export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, onRouteUnavailable }) {
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
   const [templates,setTemplates]=useState([]);
   const [agents,setAgents]=useState([]);
@@ -35,7 +35,13 @@ export function ZoeAI({ customer, apiFetch }) {
     try { const response=await apiFetch("/ai-agents/"+agentId+"/test-contacts"); const result=await response.json(); setTestContacts(result.test_contacts || []); }
     catch (error) { setNotice(error?.message || "We could not load approved test contacts."); }
   }
-  function openAgent(agent) { setSelected(agent); setTestContacts([]); loadTestContacts(agent?.id); }
+  function openAgent(agent, { updateRoute = true } = {}) { if (updateRoute) onRouteOpen?.(agent?.id); setSelected(agent); setTestContacts([]); loadTestContacts(agent?.id); }
+  useEffect(() => {
+    if (!routeAgentId || !agents.length) return;
+    const agent = agents.find((item) => String(item.id) === String(routeAgentId));
+    if (!agent) { onRouteUnavailable?.(); return; }
+    if (String(selected?.id) !== String(agent.id)) openAgent(agent, { updateRoute: false });
+  }, [routeAgentId, agents, selected?.id]);
   function start(template, agent) {
     if (!canManage) return;
     const source=agent || {};
