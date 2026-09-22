@@ -1888,7 +1888,7 @@ function WhatsAppTemplates({ customer }) {
 
 
 // ── CONTENT LIBRARY ───────────────────────────────────────────────────────────
-function ContentLibrary({ customer }) {
+function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteUnavailable }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1922,6 +1922,12 @@ function ContentLibrary({ customer }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!routeContentId || loading) return;
+    const item = items.find((entry) => String(entry.id) === String(routeContentId));
+    if (!item) { onRouteUnavailable?.(); return; }
+    setSelected(item);
+  }, [routeContentId, items, loading]);
 
   const begin = async (nextType) => {
     setType(nextType); setActionError(""); setFile(null);
@@ -1953,7 +1959,7 @@ function ContentLibrary({ customer }) {
       const response = await apiFetch(`${API}/content`, { method: "POST", body });
       const result = await response.json();
       setItems((current) => [result.item, ...current]);
-      setSelected(result.item); setCreating(false); setType(null);
+      setSelected(result.item); onRouteOpen?.(result.item.id); setCreating(false); setType(null);
     } catch (submitError) {
       setActionError(submitError?.message || "We could not save this content.");
     } finally { setSaving(false); }
@@ -1998,7 +2004,7 @@ function ContentLibrary({ customer }) {
       const response = await apiFetch(`${API}/content/${editingContent.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const result = await response.json();
       setItems((current) => current.map((entry) => entry.id === result.item.id ? result.item : entry));
-      setSelected(result.item); setEditingContent(result.item); setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" });
+      setSelected(result.item); onRouteOpen?.(result.item.id); setEditingContent(result.item); setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" });
       setEditNotice("Changes saved");
     } catch (_) {
       setEditNotice("We couldn't save your changes. Please try again.");
@@ -2045,7 +2051,7 @@ function ContentLibrary({ customer }) {
       <input className="input" aria-label="Search Content Library" placeholder="Search content" value={search} onChange={(event) => setSearch(event.target.value)} style={{ width: 210 }} />
     </div>
     {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "var(--error-text)" }}>{error}</div> : !visible.length ? <div className="card" style={{ padding: 28, color: "var(--mist)", textAlign: "center" }}>No content saved here yet.{canManage ? " Add a reusable message, file, link or WhatsApp template reference." : ""}</div> : <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, .8fr)", gap: 16 }}>
-      <div className="card" style={{ overflow: "hidden" }}>{visible.map((item) => <button key={item.id} onClick={() => setSelected(item)} style={{ width: "100%", textAlign: "left", background: selected?.id === item.id ? "rgba(196,154,61,.08)" : "transparent", border: 0, borderBottom: "1px solid var(--wire)", padding: "15px 17px", cursor: "pointer", color: "inherit", display: "flex", gap: 12 }}>
+      <div className="card" style={{ overflow: "hidden" }}>{visible.map((item) => <button key={item.id} onClick={() => { setSelected(item); onRouteOpen?.(item.id); }} style={{ width: "100%", textAlign: "left", background: selected?.id === item.id ? "rgba(196,154,61,.08)" : "transparent", border: 0, borderBottom: "1px solid var(--wire)", padding: "15px 17px", cursor: "pointer", color: "inherit", display: "flex", gap: 12 }}>
         <div style={{ width: 30, height: 30, display: "grid", placeItems: "center", border: "1px solid var(--wire2)", color: "var(--gold2)", flexShrink: 0 }}>{icon(item.content_type)}</div>
         <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: "var(--cream)", fontWeight: 600, fontSize: 13 }}>{item.name}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview(item)}</div></div>
         <span className="mono" style={{ color: "var(--gold2)", fontSize: 8, letterSpacing: 1, alignSelf: "center" }}>{typeLabel(item.content_type)}</span>
@@ -2348,7 +2354,7 @@ export default function App() {
     chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "chatbotFlows", resourceId, resourceKind: "flow" })} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
     zoeAi: { title: "Zoe AI", comp: <ZoeAI customer={customer} routeAgentId={route.resourceKind === "agent" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "zoeAi", resourceId, resourceKind: "agent" })} onRouteUnavailable={() => navigate({ section: "zoeAi", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
-    content:     { title: "Content Library", comp: <ContentLibrary customer={customer} /> },
+    content:     { title: "Content Library", comp: <ContentLibrary customer={customer} routeContentId={route.resourceKind === "content" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "content", resourceId, resourceKind: "content" })} onRouteUnavailable={() => navigate({ section: "content", resourceId: null, resourceKind: null }, { replace: true })} /> },
     team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
     settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
