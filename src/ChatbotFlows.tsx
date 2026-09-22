@@ -95,7 +95,7 @@ function readableType(type) {
   return ({ send_message: "Send a message", ask_capture: "Ask & capture", choose_option: "Give choices", content: "Share content", human_handoff: "Hand to team", end: "End flow" })[type] || type
 }
 
-export function ChatbotFlows({ customer, apiFetch }) {
+export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOpen, onRouteUnavailable }) {
   const [flows, setFlows] = useState([])
   const [setup, setSetup] = useState({ numbers: [], discovery: null })
   const [selectedNumberId, setSelectedNumberId] = useState("")
@@ -138,13 +138,22 @@ export function ChatbotFlows({ customer, apiFetch }) {
   }
   useEffect(() => { load() }, [customer?.id])
 
-  const openFlow = async (flow) => {
+  const openFlow = async (flow, { updateRoute = true } = {}) => {
+    if (updateRoute) onRouteOpen?.(flow?.id);
     try {
       const response = await apiFetch(`/chatbot-flows/${flow.id}`)
       const detail = await response.json()
       setSelected(detail); setDraft(clone(detail.draft_definition)); setDraftDirty(false); setMode("builder"); setTestResult(null)
     } catch (err) { setError(err.message || "Unable to open this flow") }
   }
+
+  useEffect(() => {
+    if (!routeFlowId || loading) return;
+    const flow = flows.find((item) => String(item.id) === String(routeFlowId));
+    if (!flow) { onRouteUnavailable?.(); return; }
+    if (String(selected?.id) === String(routeFlowId)) return;
+    void openFlow(flow, { updateRoute: false });
+  }, [routeFlowId, flows, loading, selected?.id]);
 
   const createFlow = async (recipe) => {
     if (!canManage) return
