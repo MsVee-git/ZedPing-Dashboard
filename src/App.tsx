@@ -10,6 +10,7 @@ import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 import { captureInvitationToken, clearInvitationToken } from "./lib/invitationFlow";
 import { emitInvitationAuthDiagnostic } from "./lib/invitationDiagnostics";
 import { invitationAccountState } from "./lib/invitationIdentity";
+import { parseDashboardRoute, routeToPath, safeParentRoute, isResourceRoute } from "./lib/dashboardRouting";
 import * as XLSX from "xlsx";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
@@ -2103,7 +2104,14 @@ export default function App() {
   const [workspaceChanging, setWorkspaceChanging] = useState(false);
   const [workspaceSwitchTarget, setWorkspaceSwitchTarget] = useState(null);
   const [needsVerification, setNeedsVerification] = useState(false);
-  const [active, setActive] = useState("overview");
+  const [route, setRoute] = useState(() => parseDashboardRoute(window.location.pathname));
+  const active = route.section;
+  const navigate = useCallback((next, { replace = false } = {}) => {
+    const nextRoute = typeof next === "string" ? { section: next, resourceId: null, resourceKind: null } : next;
+    const pathname = routeToPath(nextRoute);
+    if (pathname !== window.location.pathname) window.history[replace ? "replaceState" : "pushState"](null, "", pathname);
+    setRoute(parseDashboardRoute(pathname));
+  }, []);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState("");
@@ -2116,6 +2124,12 @@ export default function App() {
     const search = window.location.search || "";
     return hash.includes("type=recovery") || search.includes("type=recovery") || (hash.includes("access_token") && hash.includes("recovery"));
   });
+
+  useEffect(() => {
+    const onPopState = () => setRoute(parseDashboardRoute(window.location.pathname));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   useEffect(() => {
     const token = invitationTokenRef.current;
@@ -2175,7 +2189,7 @@ export default function App() {
         setWorkspaces(authorizedWorkspaces);
         const verified = await verifyWorkspaceSelection(authorizedWorkspaces, selected.id);
         setWorkspaces(current => current.map(item => item.id === verified.workspace.id ? verified.workspace : item));
-        setCustomer(verified.workspace); setNeedsVerification(false); setActive("overview"); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
+        setCustomer(verified.workspace); setNeedsVerification(false); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
       } catch (error) {
         console.error("Workspace loading failed", error);
         // Keep the active Auth identity. Clearing it while a Supabase session
@@ -2270,7 +2284,8 @@ export default function App() {
     setWorkspaceChanging(true);
     setWorkspaceSwitchTarget(nextWorkspace.id);
     setCustomer(null);
-    setActive("overview");
+    // A resource belongs to the previous workspace. Keep only its safe parent section.
+    if (isResourceRoute(route)) navigate(safeParentRoute(route), { replace: true });
     setOpen(false);
 
     try {
@@ -2312,7 +2327,7 @@ export default function App() {
   const onLogout = async () => {
     await supabase.auth.signOut();
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
-    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null); setActive("overview");
+    setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null);
   };
 
   const updateWhatsAppConnectionState = (nextState) => {
@@ -2325,13 +2340,13 @@ export default function App() {
   };
 
   const pages = {
-    overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={setActive} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
+    overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={navigate} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
     broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
     messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
-    zoeAi: { title: "Zoe AI", comp: <ZoeAI customer={customer} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
+    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
+    zoeAi: { title: "Zoe AI", comp: <ZoeAI customer={customer} routeAgentId={route.resourceKind === "agent" ? route.resourceId : null} onRouteUnavailable={() => navigate({ section: "zoeAi", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     content:     { title: "Content Library", comp: <ContentLibrary customer={customer} /> },
     team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
@@ -2364,7 +2379,7 @@ export default function App() {
     <>
       <style>{css}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
-        <Sidebar active={active} setActive={setActive} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
+        <Sidebar active={active} setActive={navigate} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
         <div className="main workspace">
           <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
