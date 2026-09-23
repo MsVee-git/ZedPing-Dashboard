@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 51408)
-Total output lines: 2452
-
 // @ts-nocheck
 // Contact-group bulk selection is intentionally rendered from this existing
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
@@ -1177,7 +1174,309 @@ function Contacts({ customer }) {
     {tab === "contacts" && <>
       <div style={{ position:"relative",marginBottom:16 }}><input className="input" placeholder="Search contacts..." value={search} onChange={event => setSearch(event.target.value)} /></div>
       {canManageGroups && selectedContactIds.size > 0 && <div className="card-gold" style={{padding:"12px 14px",marginBottom:12,display:"flex",gap:10,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:13,color:"var(--cream)"}}>{selectedContactIds.size} contacts selected</span><div style={{display:"flex",gap:8}}><button className="btn btn-gold" onClick={()=>setShowAddToGroup(true)}>Add to Group</button><button className="btn btn-wire" onClick={()=>clearSelection(setSelectedContactIds)}>Clear selection</button></div></div>}
-      <div className="card"><div className="row th" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr 1fr 1fr":"2fr 1.5fr 1fr 1fr",gap:12}}>{canManageGroups&&<div><input aria-label="…11408 tokens truncated… this conflict first.</b>{conflicts.map((conflict)=><div key={conflict.id} style={{marginTop:6}}>An active workspace automation already uses {conflict.phrase ? "the phrase “"+conflict.phrase+"”" : "this single-use setup"}.</div>)}</div>:<div className="card" style={{padding:14,marginTop:14,color:"var(--cream2)"}}>No active workspace rule conflicts with this setup.</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={()=>setReviewing(false)}>Back</button><button className="btn btn-gold" disabled={saving||conflicts.length>0} onClick={activate}>{saving?"Activating…":"Activate automation"}</button></div></>:<><p style={{color:"var(--cream2)",fontSize:13,lineHeight:1.5}}>{composer.limitations}</p>{["keyword","faq","human_handoff"].includes(composer.automation_type)&&<div><label className="label">{composer.automation_type==="faq"?"Question or topic":"When a customer says"}</label>{composer.automation_type==="faq"&&<input className="input" value={form.topic} onChange={(event)=>setForm(current=>({...current,topic:event.target.value}))} placeholder="e.g. Business hours" style={{marginBottom:10}}/>}<textarea className="textarea" value={form.phrases} onChange={(event)=>setForm(current=>({...current,phrases:event.target.value}))} placeholder="One exact phrase per line" /><div style={{fontSize:11,color:"var(--mist)",marginTop:6}}>Use exact phrases, one per line. Up to 10 phrases.</div></div>}{composer.automation_type!=="human_handoff"&&<div style={{marginTop:18}}><label className="label">Respond with</label><div style={{display:"flex",gap:8,marginBottom:12}}><button className={"btn "+(sourceMode==="message"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("message")}>Write a message</button>{composer.content_library_supported&&<button className={"btn "+(sourceMode==="content"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("content")}>Content Library</button>}</div>{sourceMode==="message"?<textarea className="textarea" maxLength={4096} value={form.response} onChange={(event)=>setForm(current=>({...current,response:event.target.value}))}/>:<div>{contentLoading?<Loader/>:<select className="input" value={contentId} onChange={(event)=>setContentId(event.target.value)}><option value="">Choose Text or Link content</option>{contentItems.map((item)=><option key={item.id} value={item.id}>{item.name} · {String(item.content_type).toLowerCase()}</option>)}</select>}<div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Only active Text and Link content is supported.</div></div>}</div>}{composer.automation_type==="away"&&<div style={{marginTop:18,borderTop:"1px solid var(--wire)",paddingTop:16}}><label className="label">Workspace timezone</label><input className="input" value={timezone} onChange={(event)=>setTimezone(event.target.value)} placeholder="Africa/Lusaka"/><div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Use an IANA timezone. An end time earlier than its start means the business is open overnight.</div><div style={{marginTop:16,fontWeight:600}}>Business hours</div>{days.map(([key,label])=>{const interval=firstInterval(key), open=(hours[key]||[]).length>0;return <div key={key} style={{display:"grid",gridTemplateColumns:"104px 70px 1fr 1fr",gap:8,alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--wire)"}}><div style={{fontSize:13}}>{label}</div><label style={{fontSize:11,display:"flex",gap:5,alignItems:"center"}}><input type="checkbox" checked={open} onChange={(event)=>closeDay(key,event.target.checked)}/> Open</label><input className="input" type="time" disabled={!open} value={interval.start} onChange={(event)=>changeHours(key,"start",event.target.value)}/><input className="input" type="time" disabled={!open} value={interval.end} onChange={(event)=>changeHours(key,"end",event.target.value)}/></div>})}</div>}{notice&&<div role="alert" style={{color:"var(--error-text)",fontSize:12,marginTop:14}}>{notice}</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={reset}>Cancel</button><button className="btn btn-gold" disabled={saving} onClick={submitReview}>{saving?"Checking…":"Review"}</button></div></>}</div></div>}
+      <div className="card"><div className="row th" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr 1fr 1fr":"2fr 1.5fr 1fr 1fr",gap:12}}>{canManageGroups&&<div><input aria-label="Select all matching contacts" type="checkbox" checked={filtered.length>0&&filtered.every(contact=>selectedContactIds.has(contact.id))} onChange={event=>event.target.checked?selectAll(setSelectedContactIds,filtered):clearSelection(setSelectedContactIds)}/></div>}{["Name","Phone","Tag","Added"].map(h => <div key={h}>{h}</div>)}</div>{loading?<Loader/>:!filtered.length?<Empty msg="No contacts found"/>:filtered.map(contact => <div key={contact.id} className="row" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr 1fr 1fr":"2fr 1.5fr 1fr 1fr",gap:12}}>{canManageGroups&&<input aria-label={`Select ${contact.name || contact.phone_number}`} type="checkbox" checked={selectedContactIds.has(contact.id)} onChange={()=>toggleSelection(setSelectedContactIds,contact.id)}/>}<div style={{color:"var(--cream)",fontSize:13}}>{contact.name}</div><div style={{color:"var(--mist)",fontSize:12}}>{contact.phone_number}</div><div className="badge badge-cream">{contact.tag || "Contact"}</div><div style={{color:"var(--mist)",fontSize:11}}>{contact.created_at ? new Date(contact.created_at).toLocaleDateString() : "—"}</div></div>)}</div>
+    </>}
+    {tab === "groups" && (groupsLoading?<Loader/>:!groups.length?<Empty msg="No contact groups yet"/>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>{groups.map(group=><div key={group.id} className="card" style={{padding:"18px 20px"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:14}}><div><div style={{fontSize:13,fontWeight:600,color:"var(--cream)"}}>{group.name}</div>{group.description&&<div style={{fontSize:11,color:"var(--mist)"}}>{group.description}</div>}</div><div className="mono" style={{fontSize:10,color:"var(--gold2)"}}>{group.member_count} CONTACTS</div></div><div style={{display:"flex",gap:8}}><button className="btn btn-gold" style={{flex:1,fontSize:9,padding:"7px 10px"}} onClick={()=>openGroup(group)}>{canManageGroups ? "Manage" : "View"}</button>{canManageGroups && <button className="btn btn-danger" style={{fontSize:9,padding:"7px 10px"}} onClick={()=>deleteGroup(group)}>Delete</button>}</div></div>)}</div>)}
+    {showGroupForm && <div className="modal-bg" role="dialog" aria-modal="true"><div className="modal" style={{maxWidth:520}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>NEW CONTACT LIST</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Create a group.</h3><label className="label">List name</label><input className="input" value={groupName} onChange={event=>setGroupName(event.target.value)} placeholder="e.g. Facebook Leads"/><p style={{fontSize:12,color:"var(--mist)",margin:"14px 0 8px"}}>What would you like to do next?</p><div style={{display:"grid",gap:8}}>{[["select","Select Existing Contacts","Search and select contacts in this workspace."],["upload","Upload Contacts","Import a file using the existing secure import flow."],["empty","Create Empty Group","Create the list without contacts for now."]].map(([id,label,copy])=><button key={id} className={groupCreateAction===id?"btn btn-gold":"btn btn-wire"} style={{textAlign:"left",padding:12}} onClick={()=>setGroupCreateAction(id)}><strong>{label}</strong><span style={{display:"block",fontSize:11,opacity:.75,marginTop:3}}>{copy}</span></button>)}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}><button className="btn btn-wire" onClick={()=>setShowGroupForm(false)}>Cancel</button><button className="btn btn-gold" onClick={()=>createGroup()} disabled={!groupName.trim()}>Create group</button></div></div></div>}
+    {showAddToGroup && <div className="modal-bg" role="dialog" aria-modal="true"><div className="modal" style={{maxWidth:520}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT GROUPS</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Add {selectedContactIds.size} contacts to group.</h3><label className="label">Group</label><select className="input" value={targetGroupId} onChange={event=>setTargetGroupId(event.target.value)}><option value="">Choose a group…</option>{groups.map(group=><option key={group.id} value={group.id}>{group.name}</option>)}<option value="__new">Create a new group</option></select>{targetGroupId==="__new"&&<><label className="label" style={{marginTop:12}}>New group name</label><input className="input" value={newTargetGroupName} onChange={event=>setNewTargetGroupName(event.target.value)} placeholder="e.g. Facebook Leads"/></>}<div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}><button className="btn btn-wire" onClick={()=>setShowAddToGroup(false)}>Cancel</button><button className="btn btn-gold" onClick={applySelectedToGroup}>Add contacts</button></div></div></div>}
+    {showContactPicker && <div className="modal-bg" role="dialog" aria-modal="true"><div className="modal" style={{maxWidth:760,maxHeight:"90vh",overflowY:"auto"}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT GROUPS</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Add contacts to {pickerGroup?.name}.</h3><input className="input" placeholder="Search contacts..." value={pickerSearch} onChange={event=>setPickerSearch(event.target.value)} style={{margin:"10px 0"}}/><div style={{display:"flex",gap:8,marginBottom:10}}><button className="btn btn-wire" onClick={()=>selectAll(setPickerContactIds,pickerContacts)}>Select all matching ({pickerContacts.length})</button><button className="btn btn-wire" onClick={()=>clearSelection(setPickerContactIds)}>Clear</button></div><div className="card">{pickerContacts.map(contact=>{const already=members.some(member=>member.contact_id===contact.id);return <label key={contact.id} className="row" style={{gridTemplateColumns:"34px 2fr 1.5fr 100px",gap:12,cursor:"pointer"}}><input type="checkbox" disabled={already} checked={pickerContactIds.has(contact.id)} onChange={()=>toggleSelection(setPickerContactIds,contact.id)}/><span style={{color:"var(--cream)",fontSize:13}}>{contact.name||"Unnamed contact"}</span><span style={{color:"var(--mist)",fontSize:12}}>{contact.phone_number}</span><span className={already?"badge badge-cream":"mono"} style={{fontSize:9,color:already?undefined:"var(--mist)"}}>{already?"Already in group":""}</span></label>})}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:18}}><button className="btn btn-wire" onClick={()=>setShowContactPicker(false)}>Cancel</button><button className="btn btn-gold" disabled={!pickerContactIds.size} onClick={applyPickerSelection}>Add {pickerContactIds.size} contacts</button></div></div></div>}
+    {activeGroup && <div className="modal-bg" role="dialog" aria-modal="true"><div className="modal" style={{maxWidth:760,maxHeight:"90vh",overflowY:"auto"}}><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT LIST</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>{activeGroup.name}</h3><div style={{color:"var(--mist)",fontSize:12,marginTop:4}}>{members.length} members</div>{canManageGroups&&<div style={{display:"flex",justifyContent:"space-between",gap:8,margin:"16px 0",flexWrap:"wrap"}}><button className="btn btn-gold" onClick={()=>openContactPicker(activeGroup)}>Add Contacts</button>{selectedMemberIds.size>0&&<button className="btn btn-danger" onClick={()=>removeMembers([...selectedMemberIds])}>Remove {selectedMemberIds.size} from Group</button>}</div>}<input className="input" placeholder="Search group members..." value={memberSearch} onChange={event=>setMemberSearch(event.target.value)} style={{marginBottom:10}}/>{!members.length?<Empty msg="No contacts in this list yet"/>:<div className="card"><div className="row th" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr":"2fr 1.5fr",gap:12}}>{canManageGroups&&<input aria-label="Select all matching group members" type="checkbox" checked={filteredMembers.length>0&&filteredMembers.every(member=>selectedMemberIds.has(member.contact_id))} onChange={event=>event.target.checked?selectAll(setSelectedMemberIds,filteredMembers,member=>member.contact_id):clearSelection(setSelectedMemberIds)}/>}<div>Name</div><div>Phone</div></div>{filteredMembers.map(member=><div key={member.id} className="row" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr":"2fr 1.5fr",gap:12}}>{canManageGroups&&<input aria-label={`Select ${member.contact.name || member.contact.phone_number}`} type="checkbox" checked={selectedMemberIds.has(member.contact_id)} onChange={()=>toggleSelection(setSelectedMemberIds,member.contact_id)}/>}<div style={{color:"var(--cream)",fontSize:13}}>{member.contact.name||"Unnamed contact"}</div><div style={{color:"var(--mist)",fontSize:12}}>{member.contact.phone_number}</div></div>)}</div>}<div style={{display:"flex",justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={()=>setActiveGroup(null)}>Done</button></div></div></div>}    <ContactsImport open={showImport} onClose={() => { setShowImport(false); setImportGroup(null); }} fixedGroup={importGroup} apiFetch={apiFetch} apiBase={API} onImported={() => { refetch(); loadGroups(); if (importGroup) openGroup(importGroup); }} />
+
+  </div>;
+}
+
+// ── MESSAGE LOG ───────────────────────────────────────────────────────────────
+function TeamInbox({ customer, user }) {
+  const [filter, setFilter] = useState("all");
+  const conversationEndpoint = filter === "mine" ? "/conversations?view=assigned_to_me" : filter === "unassigned" ? "/conversations?view=unassigned_human" : "/conversations";
+  const { data: conversations, loading, error, refetch } = useAPI(conversationEndpoint, [customer?.id, filter]);
+  const { data: members } = useAPI("/conversations/members", [customer?.id]);
+
+  const [selectedId, setSelectedId] = useState("");
+  const [thread, setThread] = useState(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadError, setThreadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [reply, setReply] = useState("");
+  const [replying, setReplying] = useState(false);
+  const requestRef = useRef(0);
+
+  useEffect(() => {
+    requestRef.current += 1;
+    setSelectedId("");
+    setThread(null);
+    setThreadError("");
+    setActionError("");
+    setReply("");
+  }, [customer?.id]);
+
+  const openConversation = async (id) => {
+    const request = ++requestRef.current;
+    setSelectedId(id); setThread(null); setThreadError(""); setActionError(""); setReply(""); setThreadLoading(true);
+    try {
+      const response = await apiFetch(`${API}/conversations/${id}`);
+      const payload = await response.json();
+      if (request !== requestRef.current) return;
+      setThread(payload);
+      await apiFetch(`${API}/conversations/${id}/read`, { method: "POST" });
+      refetch();
+    } catch (failure) {
+      if (request === requestRef.current) setThreadError(failure?.message || "We could not load this conversation.");
+    } finally {
+      if (request === requestRef.current) setThreadLoading(false);
+    }
+  };
+
+  const refreshThread = async (id = selectedId) => {
+    if (!id) return;
+    await openConversation(id);
+  };
+
+  const runAction = async (path, options = {}) => {
+    if (!selectedId) return;
+    setActionError("");
+    try {
+      const response = await apiFetch(`${API}/conversations/${selectedId}${path}`, {
+        method: options.method || "POST",
+        headers: { "Content-Type": "application/json" },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      });
+      const payload = await response.json();
+      if (payload?.conversation) setThread((current) => current ? { ...current, conversation: payload.conversation } : current);
+      await refetch();
+      return payload;
+    } catch (failure) {
+      setActionError(failure?.message || "This action could not be completed.");
+      return null;
+    }
+  };
+
+  const sendReply = async (event) => {
+    event.preventDefault();
+    if (!reply.trim() || !selectedId) return;
+    setReplying(true); setActionError("");
+    try {
+      await apiFetch(`${API}/conversations/${selectedId}/reply`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: reply })
+      });
+      setReply("");
+      await refreshThread(selectedId);
+      await refetch();
+    } catch (failure) {
+      setActionError(failure?.message || "We could not send this reply.");
+    } finally {
+      setReplying(false);
+    }
+  };
+
+  const list = Array.isArray(conversations) ? conversations : [];
+  const filtered = list.filter((conversation) => {
+    if (filter === "unread") return Number(conversation.unread_count || 0) > 0;
+    if (filter === "attention") return conversation.status === "needs_attention" && conversation.control_mode === "needs_attention";
+    // The server has already derived these two views from the authenticated caller.
+    if (filter === "mine" || filter === "unassigned") return true;
+    if (filter === "resolved") return conversation.status === "resolved";
+    return true;
+  });
+  const active = thread?.conversation;
+  const canManageAssignment = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
+  const isHuman = active?.control_mode === "human" && active?.status !== "resolved";
+  const isAssignedToMe = active?.assigned_user_id === user?.id;
+  const assigneeName = (conversation) => (members || []).find((member) => member.id === conversation?.assigned_user_id)?.name || (members || []).find((member) => member.id === conversation?.assigned_user_id)?.email || "another team member";
+  const labelFor = (conversation) => {
+    if (conversation.status === "resolved") return "Resolved";
+    if (conversation.control_mode === "needs_attention") return conversation.assigned_user_id ? `Assigned to ${assigneeName(conversation)}` : "Waiting for a team member";
+    if (conversation.control_mode === "human") return conversation.assigned_user_id === user?.id ? "You're handling this conversation" : `Assigned to ${assigneeName(conversation)}`;
+    return "Automation active";
+  };
+
+  return <div className="pad" style={{ padding: 28 }}>
+    <PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." />
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      {[["all","All"],["unread","Unread"],["attention","Needs Attention"],["mine","Assigned to Me"],["unassigned","Unassigned"],["resolved","Resolved"]].map(([id,label]) =>
+        <button key={id} className={filter===id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(id)} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>
+      )}
+    </div>
+
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, .9fr) minmax(340px, 1.55fr) minmax(210px, .7fr)", gap: 14, alignItems: "stretch" }} className="team-inbox">
+      <div className="card" style={{ minHeight: 540 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, padding: "14px 16px", borderBottom: "1px solid var(--wire)" }}>{filter === "all" ? "CONVERSATIONS" : filter.toUpperCase()}</div>
+        {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 16, color: "var(--error-text)", fontSize: 12 }}>We could not load conversations: {error}</div> : !filtered.length ? <Empty msg={list.length ? "No conversations match this filter" : "No conversations yet"} /> :
+          filtered.map((conversation) => <button key={conversation.id} onClick={() => openConversation(conversation.id)} style={{ display: "block", width: "100%", border: "none", borderBottom: "1px solid var(--wire)", background: selectedId === conversation.id ? "rgba(184,146,42,.08)" : "transparent", color: "var(--cream)", textAlign: "left", padding: "14px 16px", cursor: "pointer" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <strong style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.contacts?.name || conversation.contacts?.phone_number || "Unknown contact"}</strong>
+              {Number(conversation.unread_count || 0) > 0 && <span className="badge badge-gold">{conversation.unread_count}</span>}
+            </div>
+            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{conversation.contacts?.phone_number || "No phone number"}</div>
+            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.last_message?.message_body || "No message preview"}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center" }}>
+              <span className={conversation.status === "needs_attention" ? "badge badge-red" : conversation.status === "resolved" ? "badge badge-cream" : conversation.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(conversation)}</span>
+              <span className="mono" style={{ color: "var(--mist)", fontSize: 9 }}>{conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleDateString() : "—"}</span>
+            </div>
+          </button>)}
+      </div>
+
+      <div className="card" style={{ minHeight: 540, display: "flex", flexDirection: "column" }}>
+        {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
+          <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
+            <span className={active.status === "needs_attention" ? "badge badge-red" : active.status === "resolved" ? "badge badge-cream" : active.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(active)}</span>
+          </div>
+          {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
+          <div style={{ flex: 1, padding: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+            {(thread.messages || []).map((message) => <div key={message.id} style={{ alignSelf: message.direction === "outbound" ? "flex-end" : "flex-start", maxWidth: "80%", background: message.direction === "outbound" ? "rgba(184,146,42,.16)" : "rgba(255,255,255,.05)", border: "1px solid var(--wire)", padding: "10px 12px" }}>
+              <div style={{ color: "var(--cream)", fontSize: 13, whiteSpace: "pre-wrap" }}>{message.message_body || "Unsupported message type"}</div>
+              <div className="mono" style={{ color: "var(--mist)", fontSize: 9, marginTop: 7 }}>{message.direction === "outbound" ? "OUTBOUND" : "INBOUND"} · {message.status || "—"} · {message.created_at ? new Date(message.created_at).toLocaleString() : "—"}</div>
+            </div>)}
+          </div>
+          <form onSubmit={sendReply} style={{ padding: 14, borderTop: "1px solid var(--wire)" }}>
+            <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
+              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Automation is paused. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Automation is paused while this conversation needs attention." : "Take or reopen this conversation before replying."}</span>
+              <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>
+            </div>
+          </form>
+        </>}
+      </div>
+
+      <div className="card" style={{ padding: 18, minHeight: 540 }}>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, marginBottom: 14 }}>CONVERSATION DETAILS</div>
+        {!active ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose a conversation to see contact details and controls.</div> : <>
+          <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{active.contacts?.name || "Unnamed contact"}</div>
+          <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{active.contacts?.phone_number || "No phone number"}</div>
+          {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
+          <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
+            <div className="label">Conversation status</div>
+            <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{labelFor(active)}</div>
+            {active.control_mode === "needs_attention" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused while this conversation needs attention.</div>}
+            {active.control_mode === "human" && active.status !== "resolved" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused.</div>}
+          </div>
+          <div style={{ display: "grid", gap: 9 }}>
+            {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
+            {active.control_mode === "needs_attention" && (!active.assigned_user_id || active.assigned_user_id === user?.id) && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take Conversation</button>}
+            {active.status === "resolved" && <button className="btn btn-gold" onClick={() => runAction("/reopen")}>Reopen Conversation</button>}
+            {active.control_mode === "human" && active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve Conversation</button>}
+          </div>
+          {canManageAssignment && active.status !== "resolved" && <div style={{ borderTop: "1px solid var(--wire)", marginTop: 18, paddingTop: 16 }}>
+            <label className="label" htmlFor="conversation-assignee">Assign to</label>
+            <select id="conversation-assignee" className="input" value={active.assigned_user_id || ""} onChange={(event) => runAction("/assignment", { method: "PATCH", body: { assigned_user_id: event.target.value || null } })}>
+              <option value="">Waiting for a team member</option>
+              {(members || []).map((member) => <option key={member.id} value={member.id}>{member.name || member.email || member.id} · {member.role}</option>)}
+            </select>
+          </div>}
+        </>}
+      </div>
+    </div>
+  </div>
+}
+
+// ── AUTOMATIONS ───────────────────────────────────────────────────────────────
+function Automations({ customer }) {
+  const workspaceKey = customer?.id || "";
+  const { data: automationData, loading, error, refetch } = useAPI("/automations", [workspaceKey]);
+  const { data: libraryData, loading: libraryLoading, error: libraryError, refetch: refetchLibrary } = useAPI("/automations/library", [workspaceKey]);
+  const { data: contentData, loading: contentLoading } = useAPI("/content", [workspaceKey]);
+  const { data: historyData, loading: historyLoading, error: historyError, refetch: refetchHistory } = useAPI("/automations/history", [workspaceKey]);
+  const { data: settingsData, refetch: refetchSettings } = useAPI("/automations/settings", [workspaceKey]);
+  const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
+  const [preview, setPreview] = useState(null);
+  const [composer, setComposer] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [sourceMode, setSourceMode] = useState("message");
+  const [contentId, setContentId] = useState("");
+  const [form, setForm] = useState({ phrases: "", response: "", priority: 100, topic: "" });
+  const [timezone, setTimezone] = useState("Africa/Lusaka");
+  const [hours, setHours] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [reviewing, setReviewing] = useState(false);
+  const [conflicts, setConflicts] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const days = [["mon","Monday"],["tue","Tuesday"],["wed","Wednesday"],["thu","Thursday"],["fri","Friday"],["sat","Saturday"],["sun","Sunday"]];
+  const icons = { welcome:"👋", away:"🌙", keyword:"🔑", faq:"❓", human_handoff:"🙋" };
+  const titles = { welcome:"Welcome Message", away:"Away Message", keyword:"Keyword Response", faq:"FAQ Response", human_handoff:"Human Handoff" };
+  const automations = Array.isArray(automationData) ? automationData : [];
+  const templates = Array.isArray(libraryData?.templates) ? libraryData.templates : [];
+  const recommended = Array.isArray(libraryData?.recommendations) ? libraryData.recommendations : [];
+  const available = templates.filter((item) => item.availability === "available");
+  const comingSoon = templates.filter((item) => item.availability === "coming_soon");
+  const contentItems = (contentData?.items || contentData || []).filter((item) => !item.archived_at && ["TEXT","LINK"].includes(String(item.content_type || "").toUpperCase()));
+  const parsePhrases = (value) => [...new Set(String(value || "").split(/\n|,/).map((item) => item.trim()).filter(Boolean))];
+  const isLegacyDefault = (item) => !item?.automation_type && String(item?.trigger_value || "").toUpperCase() === "DEFAULT";
+  const nameFor = (item) => titles[item?.automation_type] || (isLegacyDefault(item) ? "Default reply" : item?.trigger_value ? "Keyword: " + item.trigger_value : "Automation");
+  const summaryFor = (item) => item?.automation_type === "human_handoff" ? "Pauses automation and sends the conversation to your team." : item?.automation_type === "welcome" ? "Welcomes each customer once on this business number." : item?.automation_type === "away" ? "Replies outside your configured business hours." : item?.content_library_item_id ? "Replies with a selected Content Library item." : String(item?.message_template || "Configured automation response.").slice(0, 110);
+  const normalHours = (value) => days.reduce((all, [key]) => ({ ...all, [key]: Array.isArray(value?.[key]) ? value[key] : [] }), {});
+  const firstInterval = (key) => hours[key]?.[0] || { start:"08:00", end:"17:00" };
+  const changeHours = (key, field, value) => setHours((current) => ({ ...current, [key]: [{ ...firstInterval(key), [field]: value }] }));
+  const closeDay = (key, open) => setHours((current) => ({ ...current, [key]: open ? [{ start:"08:00", end:"17:00" }] : [] }));
+  const reset = () => { setPreview(null); setComposer(null); setEditing(null); setSourceMode("message"); setContentId(""); setForm({ phrases:"", response:"", priority:100, topic:"" }); setNotice(""); setConflicts([]); setReviewing(false); };
+  const configured = (template) => automations.find((item) => item.is_active && item.automation_type === template.automation_type && ["single"].includes(template.duplicate_strategy));
+  const openPreview = (template) => { setPreview(template); setNotice(""); };
+  const openComposer = (template, item = null) => {
+    if (!canManage || !template || template.availability !== "available") return;
+    const config = item?.trigger_config || {};
+    setPreview(null); setComposer(template); setEditing(item);
+    setSourceMode(item?.content_library_item_id ? "content" : "message"); setContentId(item?.content_library_item_id || "");
+    setForm({ phrases:(config.phrases || template.suggested_phrases || (item?.trigger_value ? [item.trigger_value] : [])).join("\n"), response:item?.message_template || template.suggested_response || "", priority:item?.priority ?? 100, topic:config.topic || "" });
+    setTimezone(settingsData?.timezone || "Africa/Lusaka"); setHours(normalHours(settingsData?.business_hours)); setNotice(""); setConflicts([]); setReviewing(false);
+  };
+  const submitReview = async () => {
+    const list = parsePhrases(form.phrases);
+    if (["keyword","faq","human_handoff"].includes(composer.automation_type) && !list.length) return setNotice("Add at least one phrase a customer might use.");
+    if (composer.automation_type !== "human_handoff" && sourceMode === "message" && !form.response.trim()) return setNotice("Write the response customers should receive.");
+    if (composer.automation_type !== "human_handoff" && sourceMode === "content" && !contentId) return setNotice("Choose a Text or Link item from Content Library.");
+    setSaving(true); setNotice("");
+    try {
+      const result = await apiFetch(API + "/automations/library/preflight", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ library_template_id:composer.id, library_template_version:composer.version, automation_type:composer.automation_type, phrases:list, exclude_id:editing?.id || null }) });
+      const preflight = await result.json();
+      setConflicts(preflight?.conflicts || []); setReviewing(true);
+    } catch (failure) { setNotice(failure?.message || "We could not check this automation."); } finally { setSaving(false); }
+  };
+  const activate = async () => {
+    if (conflicts.length) return setNotice("Resolve the listed conflict before activating this automation.");
+    const list = parsePhrases(form.phrases);
+    setSaving(true); setNotice("");
+    try {
+      if (composer.automation_type === "away") await apiFetch(API + "/automations/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ timezone, business_hours:normalHours(hours) }) });
+      const payload = {
+        automation_type:composer.automation_type, trigger_type:"keyword", trigger_value:list[0] || composer.automation_type.toUpperCase(),
+        trigger_config:["keyword","faq","human_handoff"].includes(composer.automation_type) ? { phrases:list, ...(composer.automation_type === "faq" && form.topic.trim() ? { topic:form.topic.trim() } : {}) } : {},
+        condition_config:{}, action_config:{ kind:composer.automation_type === "human_handoff" ? "human_handoff" : sourceMode === "content" ? "content_library" : "send_text" },
+        message_template:composer.automation_type === "human_handoff" || sourceMode === "content" ? "" : form.response,
+        content_library_item_id:sourceMode === "content" ? contentId : null, priority:Number(form.priority),
+        library_template_id:composer.id, library_template_version:composer.version
+      };
+      await apiFetch(API + "/automations" + (editing ? "/" + editing.id : ""), { method:editing ? "PATCH" : "POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+      await Promise.all([refetch(), refetchSettings()]); reset();
+    } catch (failure) { setNotice(failure?.message || "We could not activate this automation."); } finally { setSaving(false); }
+  };
+  const toggle = async (item) => { try { await apiFetch(API + "/automations/" + item.id, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify({is_active:!item.is_active}) }); refetch(); } catch (failure) { setNotice(failure?.message || "We could not update this automation."); } };
+  const categories = ["All","Customer Service","Sales & Leads","Bookings","Operations","Engagement","Industry Templates"];
+  const filtered = available.filter((item) => (category === "All" || item.category === category) && (!search.trim() || [item.title,item.description,item.category,...item.industries,...item.goals].join(" ").toLowerCase().includes(search.toLowerCase())));
+  const eventLabel = (event) => String(event?.outcome || event?.event_type || "").toLowerCase().includes("handoff") ? "Handed to team" : String(event?.outcome || "").toLowerCase().includes("error") ? "Error" : String(event?.outcome || "").toLowerCase().includes("skip") ? "Skipped" : "Triggered";
+  const when = (date) => date ? new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(date)) : "";
+  const reviewResponse = () => sourceMode === "content" ? (contentItems.find((item) => item.id === contentId)?.name || "Selected Content Library item") : form.response.trim();
+  const reviewHours = () => days.map(([key, label]) => {
+    const intervals = hours[key] || [];
+    return label + " · " + (intervals.length ? intervals.map((interval) => interval.start + "–" + interval.end).join(", ") : "Closed");
+  });
+  const reviewTrigger = () => {
+    if (composer?.automation_type === "welcome") return "When a customer contacts this business number for the first time.";
+    if (composer?.automation_type === "away") return "When a customer messages outside these business hours.";
+    if (composer?.automation_type === "human_handoff") return "When a customer uses: " + (parsePhrases(form.phrases).join(", ") || "your chosen phrases") + ".";
+    return "When a customer uses: " + (parsePhrases(form.phrases).join(", ") || "your chosen phrases") + ".";
+  };
+  const libraryCard = (template, recommendedCard = false) => { const existing = configured(template); return <article key={template.id} className="card" style={{ padding:16, minWidth:recommendedCard ? 260 : 0, display:"flex", flexDirection:"column", gap:10 }}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><span className="badge badge-blue">{template.category}</span>{existing && <span className="badge badge-green">Already active</span>}</div><div style={{fontWeight:650,fontSize:15}}>{template.title}</div><div style={{fontSize:12,color:"var(--mist)",lineHeight:1.5,flex:1}}>{template.description}</div>{recommendedCard && <div style={{fontSize:11,color:"var(--gold2)"}}>{template.recommendation_reason}</div>}<button className="btn btn-wire" onClick={() => existing && canManage ? openComposer(template, existing) : openPreview(template)}>{existing && canManage ? "View / Edit" : "Preview"}</button></article> };
+  return <div className="pad" style={{padding:28,maxWidth:1240,margin:"0 auto"}}><PageHead label="Customer conversations" title="Automations" sub="Choose a ready-made response, make it yours, and keep your team in control." />
+    {!canManage && <div className="card" style={{padding:16,marginBottom:20,borderColor:"var(--wire2)"}}><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.2}}>VIEW ONLY</div><div style={{color:"var(--cream2)",fontSize:13,marginTop:6}}>You can browse the Automation Library and view activity. An owner or admin manages this workspace's automations.</div></div>}
+    <section style={{marginBottom:30}}><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.6,textTransform:"uppercase"}}>Recommended for you</div><div style={{color:"var(--cream2)",fontSize:13,margin:"5px 0 14px"}}>Suggestions use your business industry and setup goals. Only working automations appear here.</div>{libraryLoading ? <Loader/> : <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:4}}>{recommended.map((template)=>libraryCard(template,true))}</div>}</section>
+    <section className="card" style={{padding:20,marginBottom:22}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"start",flexWrap:"wrap"}}><div><div style={{fontSize:17,fontWeight:650}}>Browse Automation Library</div><div style={{color:"var(--mist)",fontSize:12,marginTop:4}}>Every listed setup uses automation capabilities available today.</div></div><button className="btn btn-wire" onClick={refetchLibrary} disabled={libraryLoading}>Refresh</button></div><input className="input" value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Search automations" style={{margin:"18px 0 10px",maxWidth:420}}/><div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:6}}>{categories.map((item)=><button key={item} className={"btn "+(category===item?"btn-gold":"btn-wire")} onClick={()=>setCategory(item)} style={{whiteSpace:"nowrap",padding:"7px 10px"}}>{item}</button>)}</div>{libraryError ? <div role="alert" style={{color:"var(--error-text)",marginTop:14}}>We could not load the Automation Library.</div> : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:12,marginTop:18}}>{filtered.map((template)=>libraryCard(template))}</div>}<div style={{marginTop:20,borderTop:"1px solid var(--wire)",paddingTop:16}}><div className="mono" style={{fontSize:10,color:"var(--mist)",letterSpacing:1.2}}>COMING SOON</div><div style={{fontSize:12,color:"var(--mist)",margin:"6px 0 10px"}}>These need workflow capabilities ZedPing does not offer yet.</div><div style={{display:"flex",gap:8,overflowX:"auto"}}>{comingSoon.map((item)=><span className="badge badge-cream" key={item.id} style={{whiteSpace:"nowrap"}}>{item.title}</span>)}</div></div></section>
+    <section className="card" style={{marginBottom:22}}><div style={{padding:"18px 20px",borderBottom:"1px solid var(--wire)",display:"flex",justifyContent:"space-between",gap:12}}><div><div style={{fontSize:16,fontWeight:600}}>Your Automations</div><div style={{fontSize:12,color:"var(--mist)",marginTop:4}}>Workspace-scoped rules, including existing rules created before the Library.</div></div><button className="btn btn-wire" onClick={refetch} disabled={loading}>Refresh</button></div>{notice && <div role="alert" style={{margin:"14px 20px 0",color:"var(--error-text)",fontSize:12}}>{notice}</div>}{loading?<Loader/>:error?<div role="alert" style={{padding:24,color:"var(--error-text)"}}>We could not load automations.</div>:!automations.length?<Empty msg="Preview an Automation Library recipe to get started."/>:<div>{automations.map((item)=><div key={item.id} className="row" style={{gridTemplateColumns:"1.25fr 2.3fr 90px 116px",gap:12}}><div><div style={{fontWeight:600}}>{nameFor(item)}</div><div style={{fontSize:11,color:"var(--mist)",marginTop:4}}>{item.library_template_id ? "Library recipe" : "Existing rule"}</div></div><div style={{fontSize:12,color:"var(--cream2)"}}>{summaryFor(item)}</div><div><span className={"badge "+(item.is_active?"badge-green":"badge-cream")}>{item.is_active?"Active":"Paused"}</span></div><div style={{display:"flex",justifyContent:"flex-end",gap:7}}>{canManage && <><button className="btn btn-wire" onClick={()=> { const template=templates.find((value)=>value.id===item.library_template_id) || {id:"existing",version:1,automation_type:item.automation_type || "keyword",title:nameFor(item),availability:"available",suggested_phrases:[],suggested_response:"",content_library_supported:true,setup_fields:[],duplicate_strategy:"none"}; openComposer(template,item) }} style={{padding:"6px 9px",fontSize:8}}>Edit</button><button className="btn btn-wire" onClick={()=>toggle(item)} style={{padding:"6px 9px",fontSize:8}}>{item.is_active?"Pause":"Activate"}</button></>}</div></div>)}</div>}</section>
+    <section className="card"><button type="button" onClick={()=>setShowHistory(value=>!value)} style={{width:"100%",background:"transparent",color:"inherit",border:0,padding:"18px 20px",cursor:"pointer",display:"flex",justifyContent:"space-between",textAlign:"left"}}><div><div style={{fontSize:16,fontWeight:600}}>Activity</div><div style={{fontSize:12,color:"var(--mist)",marginTop:4}}>Recent automation activity is kept for 90 days.</div></div><span className="mono" style={{color:"var(--gold2)",fontSize:10}}>{showHistory?"Hide":"View activity"}</span></button>{showHistory&&<div style={{borderTop:"1px solid var(--wire)"}}><div style={{padding:"12px 20px",display:"flex",justifyContent:"flex-end"}}><button className="btn btn-wire" onClick={refetchHistory} disabled={historyLoading}>Refresh</button></div>{historyLoading?<Loader/>:historyError?<div role="alert" style={{padding:20,color:"var(--error-text)"}}>We could not load activity.</div>:!(historyData||[]).length?<Empty msg="Activity will appear once an automation handles a conversation."/>:(historyData||[]).map((event)=><div key={event.id} className="row" style={{gridTemplateColumns:"120px 1fr 180px",gap:12}}><div><span className="badge badge-blue">{eventLabel(event)}</span></div><div style={{fontSize:12,color:"var(--cream2)"}}>Automation activity recorded.</div><div className="mono" style={{fontSize:10,color:"var(--mist)",textAlign:"right"}}>{when(event.created_at)}</div></div>)}</div>}</section>
+    {preview&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Automation preview"><div className="modal" style={{maxWidth:620,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.3}}>AUTOMATION LIBRARY</div><h2 className="editorial" style={{fontSize:32,marginTop:8}}>{preview.title}</h2></div><button className="btn btn-wire" onClick={reset}>Close</button></div><p style={{color:"var(--cream2)",lineHeight:1.55}}>{preview.description}</p><div className="card" style={{padding:14,margin:"14px 0"}}><div className="label">What it handles</div><div style={{fontSize:13}}>{preview.required_capability}</div>{preview.suggested_phrases?.length>0&&<><div className="label" style={{marginTop:14}}>It listens for</div><div style={{fontSize:12,color:"var(--cream2)"}}>{preview.suggested_phrases.join(", ")}</div></>}{preview.suggested_response&&<><div className="label" style={{marginTop:14}}>Suggested response</div><div style={{fontSize:12,color:"var(--cream2)",lineHeight:1.5}}>{preview.suggested_response}</div></>}<div style={{fontSize:11,color:"var(--mist)",marginTop:14}}>Content Library: {preview.content_library_supported ? "You may choose an active Text or Link item." : "Not used by this automation."}</div></div><div style={{fontSize:12,color:"var(--mist)",lineHeight:1.5}}>{preview.limitations}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:22}}><button className="btn btn-wire" onClick={reset}>Close</button>{canManage&&<button className="btn btn-gold" onClick={()=>openComposer(preview)}>Use template</button>}</div></div></div>}
+    {composer&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Configure automation"><div className="modal" style={{maxWidth:680,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:14,alignItems:"start"}}><div><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.3}}>{reviewing?"REVIEW":"CUSTOMIZE"}</div><h2 className="editorial" style={{fontSize:31,marginTop:8}}>{icons[composer.automation_type]} {composer.title}</h2></div><button className="btn btn-wire" onClick={reset}>Close</button></div>{reviewing?<><div style={{color:"var(--cream2)",lineHeight:1.55,marginBottom:14}}>Review the customer-facing behaviour before activation.</div><div className="card" style={{padding:16,color:"var(--cream2)"}}>{composer.automation_type!=="human_handoff"&&<div><div className="label">Response</div><div style={{fontSize:13,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{reviewResponse() || "No customer message is sent."}</div></div>}{composer.automation_type==="away"&&<><div className="label" style={{marginTop:18}}>Business hours</div><div style={{display:"grid",gap:5,fontSize:12,lineHeight:1.45}}>{reviewHours().map((line)=><div key={line}>{line}</div>)}</div><div className="label" style={{marginTop:18}}>Timezone</div><div style={{fontSize:13}}>{timezone}</div></>}<div className="label" style={{marginTop:18}}>When this runs</div><div style={{fontSize:13,lineHeight:1.55}}>{reviewTrigger()}</div>{composer.automation_type==="human_handoff"&&<div style={{fontSize:12,color:"var(--mist)",marginTop:12}}>This sends the conversation to your Team Inbox and pauses automation until a team member handles it.</div>}</div>{conflicts.length>0?<div role="alert" className="card" style={{padding:14,marginTop:14,borderColor:"var(--error-text)",color:"var(--error-text)"}}><b>Resolve this conflict first.</b>{conflicts.map((conflict)=><div key={conflict.id} style={{marginTop:6}}>An active workspace automation already uses {conflict.phrase ? "the phrase “"+conflict.phrase+"”" : "this single-use setup"}.</div>)}</div>:<div className="card" style={{padding:14,marginTop:14,color:"var(--cream2)"}}>No active workspace rule conflicts with this setup.</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={()=>setReviewing(false)}>Back</button><button className="btn btn-gold" disabled={saving||conflicts.length>0} onClick={activate}>{saving?"Activating…":"Activate automation"}</button></div></>:<><p style={{color:"var(--cream2)",fontSize:13,lineHeight:1.5}}>{composer.limitations}</p>{["keyword","faq","human_handoff"].includes(composer.automation_type)&&<div><label className="label">{composer.automation_type==="faq"?"Question or topic":"When a customer says"}</label>{composer.automation_type==="faq"&&<input className="input" value={form.topic} onChange={(event)=>setForm(current=>({...current,topic:event.target.value}))} placeholder="e.g. Business hours" style={{marginBottom:10}}/>}<textarea className="textarea" value={form.phrases} onChange={(event)=>setForm(current=>({...current,phrases:event.target.value}))} placeholder="One exact phrase per line" /><div style={{fontSize:11,color:"var(--mist)",marginTop:6}}>Use exact phrases, one per line. Up to 10 phrases.</div></div>}{composer.automation_type!=="human_handoff"&&<div style={{marginTop:18}}><label className="label">Respond with</label><div style={{display:"flex",gap:8,marginBottom:12}}><button className={"btn "+(sourceMode==="message"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("message")}>Write a message</button>{composer.content_library_supported&&<button className={"btn "+(sourceMode==="content"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("content")}>Content Library</button>}</div>{sourceMode==="message"?<textarea className="textarea" maxLength={4096} value={form.response} onChange={(event)=>setForm(current=>({...current,response:event.target.value}))}/>:<div>{contentLoading?<Loader/>:<select className="input" value={contentId} onChange={(event)=>setContentId(event.target.value)}><option value="">Choose Text or Link content</option>{contentItems.map((item)=><option key={item.id} value={item.id}>{item.name} · {String(item.content_type).toLowerCase()}</option>)}</select>}<div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Only active Text and Link content is supported.</div></div>}</div>}{composer.automation_type==="away"&&<div style={{marginTop:18,borderTop:"1px solid var(--wire)",paddingTop:16}}><label className="label">Workspace timezone</label><input className="input" value={timezone} onChange={(event)=>setTimezone(event.target.value)} placeholder="Africa/Lusaka"/><div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Use an IANA timezone. An end time earlier than its start means the business is open overnight.</div><div style={{marginTop:16,fontWeight:600}}>Business hours</div>{days.map(([key,label])=>{const interval=firstInterval(key), open=(hours[key]||[]).length>0;return <div key={key} style={{display:"grid",gridTemplateColumns:"104px 70px 1fr 1fr",gap:8,alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--wire)"}}><div style={{fontSize:13}}>{label}</div><label style={{fontSize:11,display:"flex",gap:5,alignItems:"center"}}><input type="checkbox" checked={open} onChange={(event)=>closeDay(key,event.target.checked)}/> Open</label><input className="input" type="time" disabled={!open} value={interval.start} onChange={(event)=>changeHours(key,"start",event.target.value)}/><input className="input" type="time" disabled={!open} value={interval.end} onChange={(event)=>changeHours(key,"end",event.target.value)}/></div>})}</div>}{notice&&<div role="alert" style={{color:"var(--error-text)",fontSize:12,marginTop:14}}>{notice}</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={reset}>Cancel</button><button className="btn btn-gold" disabled={saving} onClick={submitReview}>{saving?"Checking…":"Review"}</button></div></>}</div></div>}
   </div>;
 }
 
@@ -2150,4 +2449,3 @@ export default function App() {
     </>
   );
 }
-
