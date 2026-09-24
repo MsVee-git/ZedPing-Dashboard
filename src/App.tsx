@@ -2074,12 +2074,13 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     if (editDirty && !window.confirm("Discard unsaved changes?")) return;
     setEditingContent(null); setEditNotice("");
   };
+  const hasUnsavedTextChanges = !!editDirty || (creating && type === "TEXT" && !!newTextDirty);
   useEffect(() => {
-    if (!editDirty) return undefined;
+    if (!hasUnsavedTextChanges) return undefined;
     const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [editDirty]);
+  }, [hasUnsavedTextChanges]);
   const persistExistingText = useCallback(async (snapshot = editForm, revision = editRevisionRef.current) => {
     if (!editingContent || !canManage || editingContent.content_type !== "TEXT" || editInFlightRef.current) return null;
     editInFlightRef.current = true;
