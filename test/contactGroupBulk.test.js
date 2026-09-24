@@ -36,6 +36,17 @@ test("existing group add flow chooses existing contacts or the shared importer b
   assert.match(importer, /Import & Add to \$\{fixedGroup\.name\}/);
 });
 
+test("group-bound upload is foregrounded from the routed detail view without a stacked group modal", () => {
+  const routedDetail = app.indexOf("if (activeGroup) return <div")
+  const ordinaryContactsPage = app.indexOf('  return <div className="pad"', routedDetail + 20)
+  const detailImporter = app.indexOf("<ContactsImport open={showImport}", routedDetail)
+  assert.ok(routedDetail >= 0, "group detail must render as a page")
+  assert.ok(detailImporter > routedDetail && detailImporter < ordinaryContactsPage, "the importer must belong to the routed detail view")
+  assert.match(app, /onRouteOpen\?\.\(group\.id\)/)
+  assert.match(app, /onRouteUnavailable\?\.\(\)/)
+  assert.match(app, /setShowGroupAddChoice\(false\);[\s\S]*?setImportGroup\(group\);\s*setShowImport\(true\)/)
+});
+
 test("large existing-contact selector has fixed close and completion controls", () => {
   assert.match(app, /aria-label="Close contact selector"/);
   assert.match(app, /overflowY:"auto",padding:"12px 20px",minHeight:0,flex:1/);
