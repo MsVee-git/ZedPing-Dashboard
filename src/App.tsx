@@ -1038,7 +1038,7 @@ function Broadcasts({ customer }) {
 }
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
-function Contacts({ customer, initialTab = "contacts" }) {
+function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRouteOpen, onRouteUnavailable }) {
   const { data, loading, refetch } = useAPI("/contacts");
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState("");
@@ -1113,23 +1113,43 @@ function Contacts({ customer, initialTab = "contacts" }) {
     try {
       const group = await groupRequest("", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
       setGroupName(""); setShowGroupForm(false); await loadGroups();
-      if (action === "select") openContactPicker(group);
-      else if (action === "upload") { setImportGroup(group); setShowImport(true); }
+      if (action === "select") { await openGroup(group); openContactPicker(group); }
+      else if (action === "upload") { await openGroup(group); setImportGroup(group); setShowImport(true); }
       else notify("Contact group created");
     } catch (error) {
       notify(error.message || "Could not create group", false);
     }
   }
-  async function openGroup(group) {
+  async function openGroup(group, updateRoute = true) {
     setActiveGroup(group); setMemberSearch(""); setSelectedMemberIds(new Set());
     try {
       const result = await groupRequest(`/${group.id}/members`);
       setMembers(result.members || []);
+      if (updateRoute) onRouteOpen?.(group.id);
     } catch (error) {
       setActiveGroup(null);
       notify(error.message || "Could not load group members", false);
     }
   }
+  useEffect(() => {
+    if (!routeGroupId) { setActiveGroup(null); return; }
+    if (!customer?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const available = groups.length ? groups : await groupRequest();
+        const group = available.find((item) => item.id === routeGroupId);
+        if (!group) {
+          if (!cancelled) { setActiveGroup(null); onRouteUnavailable?.(); }
+          return;
+        }
+        if (!cancelled) await openGroup(group, false);
+      } catch (error) {
+        if (!cancelled) { setActiveGroup(null); notify(error.message || "Could not load this contact group", false); onRouteUnavailable?.(); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [routeGroupId, customer?.id]);
   async function addContactsToGroup(group, contactIds) {
     if (!group || !contactIds.length) return null;
     try {
@@ -1163,6 +1183,8 @@ function Contacts({ customer, initialTab = "contacts" }) {
   }
   function chooseUploadContacts(group) {
     setShowGroupAddChoice(false);
+    // The group detail page remains the background route; no prior modal is
+    // left mounted beneath the importer.
     setImportGroup(group);
     setShowImport(true);
   }
@@ -1192,6 +1214,18 @@ function Contacts({ customer, initialTab = "contacts" }) {
       notify(error.message || "Could not delete group", false);
     }
   }
+
+  if (activeGroup) return <div className="pad" style={{ padding: 28 }}>
+    {toast && <div className="mono" style={{ position:"fixed",right:24,bottom:24,zIndex:2000,padding:"12px 16px",background:toast.ok?"#1A3A2A":"#7F1D1D",color:toast.ok?"var(--success-text)":"var(--error-text)",border:"1px solid var(--wire2)",fontSize:11 }}>{toast.text}</div>}
+    <button className="btn btn-wire" onClick={() => onRouteUnavailable?.()} style={{ marginBottom:18 }}>← Back to Contact Groups</button>
+    <PageHead label="Contact Groups" title={activeGroup.name} sub={`${members.length} contacts${activeGroup.description ? ` · ${activeGroup.description}` : ""}`} action={canManageGroups ? <button className="btn btn-gold" onClick={() => { setPickerGroup(activeGroup); setShowGroupAddChoice(true); }}>Add Contacts</button> : null} />
+    <input className="input" placeholder="Search group members..." value={memberSearch} onChange={event=>setMemberSearch(event.target.value)} style={{marginBottom:10}}/>
+    {canManageGroups && selectedMemberIds.size > 0 && <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}><button className="btn btn-danger" onClick={()=>removeMembers([...selectedMemberIds])}>Remove {selectedMemberIds.size} from Group</button></div>}
+    {!members.length?<Empty msg="No contacts in this group yet"/>:<div className="card"><div className="row th" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr":"2fr 1.5fr",gap:12}}>{canManageGroups&&<input aria-label="Select all matching group members" type="checkbox" checked={filteredMembers.length>0&&filteredMembers.every(member=>selectedMemberIds.has(member.contact_id))} onChange={event=>event.target.checked?selectAll(setSelectedMemberIds,filteredMembers,member=>member.contact_id):clearSelection(setSelectedMemberIds)}/>}<div>Name</div><div>Phone</div></div>{filteredMembers.map(member=><div key={member.id} className="row" style={{gridTemplateColumns:canManageGroups?"34px 2fr 1.5fr":"2fr 1.5fr",gap:12}}>{canManageGroups&&<input aria-label={`Select ${member.contact.name || member.contact.phone_number}`} type="checkbox" checked={selectedMemberIds.has(member.contact_id)} onChange={()=>toggleSelection(setSelectedMemberIds,member.contact_id)}/>}<div style={{color:"var(--cream)",fontSize:13}}>{member.contact.name||"Unnamed contact"}</div><div style={{color:"var(--mist)",fontSize:12}}>{member.contact.phone_number}</div></div>)}</div>}
+    {showGroupAddChoice && pickerGroup && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Add Contacts"><div className="modal" style={{maxWidth:520}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"start"}}><div><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT GROUP</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Add contacts to {pickerGroup.name}.</h3></div><button className="btn btn-wire" aria-label="Close" onClick={()=>setShowGroupAddChoice(false)}>×</button></div><p style={{color:"var(--mist)",fontSize:12,margin:"12px 0 16px"}}>Choose how you would like to add contacts to this group.</p><div style={{display:"grid",gap:8}}><button className="btn btn-gold" onClick={()=>chooseExistingContacts(pickerGroup)}>Select Existing Contacts</button><button className="btn btn-wire" onClick={()=>chooseUploadContacts(pickerGroup)}>Upload Contacts</button></div><div style={{display:"flex",justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={()=>setShowGroupAddChoice(false)}>Cancel</button></div></div></div>}
+    {showContactPicker && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Select existing contacts"><div className="modal" style={{maxWidth:760,maxHeight:"90vh",padding:0,display:"flex",flexDirection:"column",overflow:"hidden"}}><div style={{padding:"18px 20px 12px",borderBottom:"1px solid var(--wire)",flexShrink:0}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"start"}}><div><div className="mono" style={{fontSize:9,color:"var(--gold2)",letterSpacing:2}}>CONTACT GROUPS</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24}}>Add contacts to {pickerGroup?.name}.</h3></div><button className="btn btn-wire" aria-label="Close contact selector" onClick={()=>setShowContactPicker(false)}>×</button></div><input className="input" placeholder="Search contacts..." value={pickerSearch} onChange={event=>setPickerSearch(event.target.value)} style={{margin:"12px 0 0"}}/><div style={{display:"flex",gap:8,marginTop:10}}><button className="btn btn-wire" onClick={()=>selectAll(setPickerContactIds,pickerContacts.filter(contact=>!members.some(member=>member.contact_id===contact.id)))}>Select all matching ({pickerContacts.filter(contact=>!members.some(member=>member.contact_id===contact.id)).length})</button><button className="btn btn-wire" onClick={()=>clearSelection(setPickerContactIds)}>Clear</button></div></div><div style={{overflowY:"auto",padding:"12px 20px",minHeight:0,flex:1}}><div className="card">{pickerContacts.map(contact=>{const already=members.some(member=>member.contact_id===contact.id);return <label key={contact.id} className="row" style={{gridTemplateColumns:"34px 2fr 1.5fr 100px",gap:12,cursor:"pointer"}}><input type="checkbox" disabled={already} checked={pickerContactIds.has(contact.id)} onChange={()=>toggleSelection(setPickerContactIds,contact.id)}/><span style={{color:"var(--cream)",fontSize:13}}>{contact.name||"Unnamed contact"}</span><span style={{color:"var(--mist)",fontSize:12}}>{contact.phone_number}</span><span className={already?"badge badge-cream":"mono"} style={{fontSize:9,color:already?undefined:"var(--mist)"}}>{already?"Already in group":""}</span></label>})}</div></div><div style={{padding:"12px 20px 18px",borderTop:"1px solid var(--wire)",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}><button className="btn btn-wire" onClick={()=>setShowContactPicker(false)}>Cancel</button><button className="btn btn-gold" disabled={!pickerContactIds.size} onClick={applyPickerSelection}>Add selected ({pickerContactIds.size})</button></div></div></div>}
+    <ContactsImport open={showImport} onClose={() => { setShowImport(false); setImportGroup(null); }} fixedGroup={importGroup} apiFetch={apiFetch} apiBase={API} onImported={() => { refetch(); loadGroups(); if (importGroup) openGroup(importGroup, false); }} />
+  </div>;
 
   return <div className="pad" style={{ padding: 28 }}>
     {toast && <div className="mono" style={{ position:"fixed",right:24,bottom:24,zIndex:2000,padding:"12px 16px",background:toast.ok?"#1A3A2A":"#7F1D1D",color:toast.ok?"var(--success-text)":"var(--error-text)",border:"1px solid var(--wire2)",fontSize:11 }}>{toast.text}</div>}
@@ -2577,7 +2611,7 @@ export default function App() {
     overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={navigate} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
     broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
-    contactGroups: { title: "Contact Groups", comp: <Contacts customer={customer} initialTab="groups" /> },
+    contactGroups: { title: "Contact Groups", comp: <Contacts customer={customer} initialTab="groups" routeGroupId={route.resourceKind === "contactGroup" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "contactGroups", resourceId, resourceKind: "contactGroup" })} onRouteUnavailable={() => navigate({ section: "contactGroups", resourceId: null, resourceKind: null }, { replace: true })} /> },
     messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
     chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "chatbotFlows", resourceId, resourceKind: "flow" })} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
