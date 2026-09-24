@@ -872,104 +872,47 @@ function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
 }
 
 // ── BROADCASTS ────────────────────────────────────────────────────────────────
-function Broadcasts({ customer }) {
+function Broadcasts() {
   const { data: history, loading: historyLoading, refetch: refetchHistory } = useAPI("/broadcasts/scheduled");
-  const { data: contacts, loading: contactsLoading } = useAPI("/contacts");
-  const [mode, setMode] = useState("list");
-  const [message, setMessage] = useState("");
-  const [phone, setPhone] = useState("");
-  const [groups, setGroups] = useState([]);
-  const [selectedGroupId, setSelectedGroupId] = useState("");
-  const [recipients, setRecipients] = useState([]);
-  const [uploadReport, setUploadReport] = useState(null);
-  const [saveImported, setSaveImported] = useState(false);
+  const { data: setup, loading: setupLoading, error: setupError } = useAPI("/broadcasts/setup");
+  const [numberId, setNumberId] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [templates, setTemplates] = useState([]);
+  const [templateId, setTemplateId] = useState("");
+  const [mappings, setMappings] = useState({});
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [review, setReview] = useState(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
   const [activityFilter, setActivityFilter] = useState("all");
-  const uploadRef = useRef();
 
-  useEffect(() => {
-    let alive = true;
-    async function loadGroups() {
-      if (!customer?.id) return;
-      const { data } = await supabase.from("contact_groups").select("id,name,description,total_contacts").eq("customer_id", customer.id).order("name");
-      if (alive) setGroups(data || []);
-    }
-    loadGroups();
-    return () => { alive = false; };
-  }, [customer?.id]);
-
-  const normalizePhone = (value) => {
-    const raw = String(value || "").trim();
-    const digits = raw.replace(/\D/g, "");
-    if (!digits) return null;
-    if (raw.startsWith("+") && /^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
-    if (/^260\d{9}$/.test(digits)) return "+" + digits;
-    if (/^0\d{9}$/.test(digits)) return "+260" + digits.slice(1);
-    if (/^[79]\d{8}$/.test(digits)) return "+260" + digits;
-    if (/^[1-9]\d{7,14}$/.test(digits)) return "+" + digits;
-    return null;
-  };
-
-  const setGroup = async (groupId) => {
-    setSelectedGroupId(groupId);
-    setRecipients([]);
-    setNotice(null);
-    if (!groupId) return;
-    const { data: memberships, error } = await supabase.from("contact_group_members").select("contact_id").eq("group_id", groupId);
-    if (error) { setNotice({ ok: false, text: "Could not load this contact list." }); return; }
-    const ids = new Set((memberships || []).map(row => row.contact_id));
-    const selected = (contacts || []).filter(contact => ids.has(contact.id));
-    setRecipients(selected);
-  };
-
-  const parseUpload = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setUploadReport(null); setRecipients([]); setNotice(null);
-    if (file.size > 5 * 1024 * 1024) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: "File must be 5 MB or smaller" }] }); return; }
+  const selectedTemplate = templates.find((item) => String(item.id) === String(templateId));
+  const loadTemplates = async () => {
+    if (!numberId) return;
+    setLoadingTemplates(true); setNotice(null); setReview(null); setTemplateId(""); setMappings({});
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
-      const headers = (rows[0] || []).map(value => String(value).trim().toLowerCase());
-      const nameIndex = headers.findIndex(header => header.includes("name"));
-      const phoneIndex = headers.findIndex(header => header.includes("phone") || header.includes("number") || header.includes("mobile"));
-      if (nameIndex < 0 || phoneIndex < 0) throw new Error("Your file needs Name and Phone Number columns.");
-      const invalid = [], seen = new Set(), valid = [];
-      rows.slice(1).forEach((row, index) => {
-        if (!row.some(value => String(value).trim())) return;
-        const phone_number = normalizePhone(row[phoneIndex]);
-        const name = String(row[nameIndex] || "").trim();
-        if (!name || !phone_number) { invalid.push({ row: index + 2, reason: !name ? "Missing name" : "Invalid phone number" }); return; }
-        if (!seen.has(phone_number)) { seen.add(phone_number); valid.push({ name, phone_number }); }
-      });
-      setRecipients(valid); setUploadReport({ valid, invalid, file: file.name });
-    } catch (error) { setUploadReport({ valid: [], invalid: [{ row: 0, reason: error.message || "Could not read this file" }] }); }
+      const response = await apiFetch(`${API}/broadcasts/templates?whatsapp_number_id=${encodeURIComponent(numberId)}`);
+      setTemplates((await response.json()).templates || []);
+    } catch (error) { setTemplates([]); setNotice({ ok: false, text: error.message || "Could not load templates." }); }
+    finally { setLoadingTemplates(false); }
   };
-
-  const recipientsForMode = () => {
-    if (mode === "single") {
-      const phone_number = normalizePhone(phone);
-      return phone_number ? [{ name: "Contact", phone_number }] : [];
-    }
-    return recipients;
-  };
-
-  const send = async () => {
-    const selected = recipientsForMode();
-    if (!message.trim() || !selected.length) { setNotice({ ok: false, text: "Add a message and at least one valid recipient." }); return; }
+  useEffect(() => { if (numberId) loadTemplates(); else { setTemplates([]); setTemplateId(""); } }, [numberId]);
+  useEffect(() => { setReview(null); }, [groupId, templateId, mappings]);
+  const updateMapping = (number, source, value = "") => setMappings((current) => ({ ...current, [number]: { source, ...(source === "fixed" ? { value } : {}) } }));
+  const reviewBroadcast = async () => {
+    if (!numberId || !groupId || !templateId) return setNotice({ ok: false, text: "Choose a WhatsApp number, Contact Group and approved template." });
     setSending(true); setNotice(null);
     try {
-      if (mode === "upload" && saveImported && uploadReport?.valid?.length) {
-        await apiFetch(`${API}/contacts/upload`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: uploadReport.valid }) });
-      }
-      const response = await apiFetch(`${API}/broadcasts/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: selected, message: message.trim() }) });
-      const result = await response.json();
-      setNotice({ ok: result.failed === 0, text: `Sent: ${result.sent} · Failed: ${result.failed}` });
-      if (mode === "single") setPhone("");
-      if (mode === "upload") { setRecipients([]); setUploadReport(null); }
-      refetchHistory();
+      const response = await apiFetch(`${API}/broadcasts/review-template`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_number_id: numberId, contact_group_id: groupId, template_id: templateId, variable_mappings: mappings }) });
+      setReview(await response.json());
+    } catch (error) { setNotice({ ok: false, text: error.message || "Could not prepare the broadcast review." }); }
+    finally { setSending(false); }
+  };
+  const send = async () => {
+    setSending(true); setNotice(null);
+    try {
+      const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_number_id: numberId, contact_group_id: groupId, template_id: templateId, variable_mappings: mappings }) });
+      const result = await response.json(); setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted · ${result.failed} failed` }); setReview(null); refetchHistory();
     } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
     finally { setSending(false); }
   };
@@ -987,34 +930,16 @@ function Broadcasts({ customer }) {
       <PageHead label="WhatsApp" title="Broadcasts." sub="Send messages to your contact list" />
       <div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>Send Message</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {[["list", "Select Contact List"], ["upload", "Upload Contacts"], ["single", "Single Number"]].map(([id, label]) => <button key={id} className={mode === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => { setMode(id); setNotice(null); }} style={{ fontSize: 10, padding: "8px 12px" }}>{label}</button>)}
-        </div>
+        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>New Broadcast</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {mode === "list" && <div>
-            <label className="label">Contact List</label>
-            <select className="input" value={selectedGroupId} onChange={event => setGroup(event.target.value)} disabled={contactsLoading}>
-              <option value="">Select an existing list…</option>
-              {groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
-            </select>
-            {groups.length === 0 && <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>No contact lists with members are available yet. Create and populate a list in Contacts first.</div>}
-            {selectedGroupId && <div className="mono" style={{ fontSize: 10, color: "var(--gold2)", marginTop: 8 }}>{recipients.length} recipient{recipients.length === 1 ? "" : "s"} selected</div>}
-          </div>}
-          {mode === "upload" && <div>
-            <label className="label">CSV or XLSX file</label>
-            <input ref={uploadRef} type="file" accept=".csv,.xlsx" onChange={parseUpload} className="input" style={{ padding: 9 }} />
-            <div className="mono" style={{ fontSize: 10, color: "var(--mist)", marginTop: 8 }}>Required columns: Name, Phone Number · 5 MB maximum</div>
-            {uploadReport && <div style={{ marginTop: 10, padding: "10px 12px", border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}>
-              <div className="mono" style={{ fontSize: 10, color: "var(--success-text)" }}>{uploadReport.valid.length} valid recipient{uploadReport.valid.length === 1 ? "" : "s"}</div>
-              {uploadReport.invalid.length > 0 && <div className="mono" style={{ fontSize: 10, color: "var(--error-text)", marginTop: 5 }}>{uploadReport.invalid.length} invalid row{uploadReport.invalid.length === 1 ? "" : "s"} · {uploadReport.invalid.slice(0, 3).map(item => item.row ? `Row ${item.row}: ${item.reason}` : item.reason).join(" · ")}</div>}
-            </div>}
-            <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, fontSize: 12, color: "var(--mist)", cursor: "pointer" }}><input type="checkbox" checked={saveImported} onChange={event => setSaveImported(event.target.checked)} />Save these contacts to Contacts</label>
-          </div>}
-          {mode === "single" && <div><label className="label">Phone Number</label><input className="input" placeholder="+260971234567" value={phone} onChange={event => setPhone(event.target.value)} /></div>}
-          <div><label className="label">Message</label><textarea className="textarea" maxLength={4096} placeholder="Your message here..." value={message} onChange={event => setMessage(event.target.value)} /><div className="mono" style={{ fontSize: 10, color: "var(--mist)", textAlign: "right", marginTop: 5 }}>{message.length}/4096</div></div>
+          {setupError && <div className="mono" style={{ color: "var(--error-text)", fontSize: 11 }}>{setupError}</div>}
+          <div><label className="label">Sending WhatsApp number</label><select className="input" value={numberId} onChange={event => setNumberId(event.target.value)} disabled={setupLoading}><option value="">Select a connected number…</option>{(setup?.numbers || []).map(number => <option key={number.id} value={number.id}>{number.display_name || number.phone_number_id}</option>)}</select></div>
+          <div><label className="label">Contact Group</label><select className="input" value={groupId} onChange={event => setGroupId(event.target.value)} disabled={setupLoading}><option value="">Select a Contact Group…</option>{(setup?.groups || []).map(group => <option key={group.id} value={group.id}>{group.name}{group.total_contacts ? ` — ${group.total_contacts} contacts` : ""}</option>)}</select></div>
+          <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><label className="label">Approved WhatsApp template</label>{numberId && <button className="btn btn-wire" onClick={loadTemplates} disabled={loadingTemplates} style={{ padding: "5px 8px", fontSize: 9 }}>{loadingTemplates ? "Refreshing…" : "Refresh templates"}</button>}</div><select className="input" value={templateId} onChange={event => setTemplateId(event.target.value)} disabled={!numberId || loadingTemplates}><option value="">{numberId ? "Select a template…" : "Select a number first"}</option>{templates.map(template => <option key={template.id} value={template.id} disabled={!template.sendable}>{template.name} · {template.language} · {template.status}{template.sendable ? "" : " — unavailable"}</option>)}</select></div>
+          {selectedTemplate && <div style={{ padding: 12, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}><div className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{selectedTemplate.category} · {selectedTemplate.language} · {selectedTemplate.status}</div><div style={{ color: "var(--mist)", fontSize: 13, marginTop: 7, whiteSpace: "pre-wrap" }}>{selectedTemplate.body_preview || "This template has no text body preview."}</div>{selectedTemplate.unavailable_reason && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 8 }}>{selectedTemplate.unavailable_reason}</div>}</div>}
+          {selectedTemplate?.sendable && selectedTemplate.variables.map(number => <div key={number}><label className="label">Template variable {{{`{${number}}`}}</label><select className="input" value={mappings[number]?.source || ""} onChange={event => updateMapping(number, event.target.value)}><option value="">Choose a value…</option><option value="contact_name">Contact name</option><option value="contact_phone">Contact phone</option><option value="contact_email">Contact email</option><option value="fixed">Same text for every recipient</option></select>{mappings[number]?.source === "fixed" && <input className="input" style={{ marginTop: 8 }} value={mappings[number]?.value || ""} onChange={event => updateMapping(number, "fixed", event.target.value)} placeholder="Enter fixed text" />}</div>)}
           {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
-          <button className="btn btn-gold" onClick={send} disabled={sending} style={{ alignSelf: "flex-start", padding: "10px 22px" }}><Ic n="send" s={12} c="var(--ink)" />{sending ? "Sending..." : "Send Now"}</button>
+          {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 8 }}>{review.audience.name} · {review.total_selected} selected · {review.eligible_recipients} eligible · {review.skipped_recipients} unresolved/skipped</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? "Sending…" : "Send broadcast"}</button></div></div>}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
