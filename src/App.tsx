@@ -649,6 +649,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
     { id: "overview", label: "Dashboard", icon: "home" },
     { id: "broadcasts", label: "Broadcasts", icon: "broadcast" },
     { id: "contacts", label: "Contacts", icon: "contacts" },
+    { id: "contactGroups", label: "Contact Groups", icon: "contacts" },
     { id: "messages", label: "Team Inbox", icon: "messages" },
     { id: "automations", label: "Automations", icon: "auto" },
     { id: "chatbotFlows", label: "Chatbot Flows", icon: "flow" },
@@ -1037,9 +1038,9 @@ function Broadcasts({ customer }) {
 }
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
-function Contacts({ customer }) {
+function Contacts({ customer, initialTab = "contacts" }) {
   const { data, loading, refetch } = useAPI("/contacts");
-  const [tab, setTab] = useState("contacts");
+  const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState("");
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
@@ -1062,6 +1063,10 @@ function Contacts({ customer }) {
   const [toast, setToast] = useState(null);
   const [showImport, setShowImport] = useState(false);
   const [importGroup, setImportGroup] = useState(null);
+
+  // Contacts and Contact Groups are two views of the same workspace-scoped
+  // resource. Keep direct navigation to /contact-groups on the Groups view.
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
 
   const notify = (text, ok = true) => { setToast({ text, ok }); setTimeout(() => setToast(null), 3000); };
   const groupRequest = async (path = "", init: RequestInit = {}) => {
@@ -2572,6 +2577,7 @@ export default function App() {
     overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={navigate} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
     broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
+    contactGroups: { title: "Contact Groups", comp: <Contacts customer={customer} initialTab="groups" /> },
     messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
     automations: { title: "Automations",  comp: <Automations customer={customer} /> },
     chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "chatbotFlows", resourceId, resourceKind: "flow" })} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
