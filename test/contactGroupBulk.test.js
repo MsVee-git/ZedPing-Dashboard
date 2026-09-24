@@ -23,6 +23,25 @@ test("new groups offer existing-contact, upload, and empty creation paths", () =
   assert.match(app, /fixedGroup=\{importGroup\}/);
   assert.match(importer, /fixedGroup/);
   assert.match(importer, /group_id:fixedGroup\?\.id\|\|groupId\|\|null/);
+  assert.match(app, /Create & Continue/);
+  assert.match(app, /setImportGroup\(group\); setShowImport\(true\)/);
+});
+
+test("existing group add flow chooses existing contacts or the shared importer before mutating membership", () => {
+  assert.match(app, /showGroupAddChoice/);
+  assert.match(app, /Select Existing Contacts/);
+  assert.match(app, /chooseExistingContacts\(pickerGroup\)/);
+  assert.match(app, /chooseUploadContacts\(pickerGroup\)/);
+  assert.match(app, /setImportGroup\(group\)/);
+  assert.match(importer, /Import & Add to \$\{fixedGroup\.name\}/);
+});
+
+test("large existing-contact selector has fixed close and completion controls", () => {
+  assert.match(app, /aria-label="Close contact selector"/);
+  assert.match(app, /overflowY:"auto",padding:"12px 20px",minHeight:0,flex:1/);
+  assert.match(app, /Add selected \(\{pickerContactIds\.size\}\)/);
+  assert.match(app, /event\.key !== "Escape"/);
+  assert.match(app, /setShowContactPicker\(false\)/);
 });
 
 test("group detail supports member search, bulk selection, and membership-only removal", () => {
