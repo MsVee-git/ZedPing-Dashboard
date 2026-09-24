@@ -1972,6 +1972,8 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const [reviewingKnowledge, setReviewingKnowledge] = useState(null);
   const [knowledgeForm, setKnowledgeForm] = useState({ extracted_text: "", review_notes: "", valid_from: "", valid_until: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingContent, setDeletingContent] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
 
   const load = useCallback(async () => {
@@ -2090,9 +2092,20 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     catch (restoreError) { setActionError(restoreError?.message || "We could not restore this content."); }
   };
   const permanentlyDelete = async () => {
-    if (!deleteTarget) return;
-    try { const response = await apiFetch(`${API}/content/${deleteTarget.id}`, {method:"DELETE"}); const result = await response.json(); setItems(current=>current.filter(entry=>entry.id!==deleteTarget.id)); if(selected?.id===deleteTarget.id) setSelected(null); setDeleteTarget(null); if(result.storage_cleanup === "failed") setActionError(result.warning || "Content was deleted, but its private file needs cleanup."); }
-    catch (deleteError) { setActionError(deleteError?.message || "We couldn't permanently delete this content."); setDeleteTarget(null); }
+    if (!deleteTarget || deletingContent) return;
+    setDeletingContent(true); setDeleteError(""); setActionError("");
+    try {
+      const response = await apiFetch(`${API}/content/${deleteTarget.id}`, {method:"DELETE"});
+      const result = await response.json();
+      setItems(current=>current.filter(entry=>entry.id!==deleteTarget.id));
+      if(selected?.id===deleteTarget.id) setSelected(null);
+      setDeleteTarget(null);
+      await load();
+      if(result.storage_cleanup === "failed") setActionError(result.warning || "Content was deleted, but its private file needs cleanup.");
+    } catch (failure) {
+      const message = failure?.message || "We couldn't permanently delete this content.";
+      setDeleteError(message); setActionError(message);
+    } finally { setDeletingContent(false); }
   };
   const loadImageKnowledge = async (item) => {
     if (!item || item.content_type !== "IMAGE") return;
@@ -2172,11 +2185,11 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         {canManage && ["TEXT", "LINK"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => beginEdit(selected)} style={{ marginTop: 18 }}>Edit</button>}
         {canManage && !selected.archived_at && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, marginLeft: ["TEXT", "LINK"].includes(selected.content_type) ? 8 : 0, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
         {canManage && selected.archived_at && <button className="btn btn-wire" onClick={() => restore(selected)} style={{ marginTop: 18 }}>Restore content</button>}
-        {canManage && <button className="btn btn-wire" onClick={() => setDeleteTarget(selected)} style={{ marginTop: 18, marginLeft: 8, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>More actions · Delete permanently</button>}
+        {canManage && <button className="btn btn-wire" onClick={() => { setDeleteError(""); setDeleteTarget(selected); }} style={{ marginTop: 18, marginLeft: 8, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>More actions · Delete permanently</button>}
       </>}</div>
     </div>}
 
-    {deleteTarget && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Delete content permanently"><div className="modal" style={{maxWidth:520}}><div className="mono" style={{color:"var(--error-text)"}}>PERMANENT DELETION</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:25,marginTop:8}}>Delete “{deleteTarget.name}” permanently?</h3><p style={{color:"var(--cream2)",lineHeight:1.5}}>This cannot be undone. ZedPing will only delete it if it is not needed by an automation, AI configuration, or knowledge history.</p><div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={()=>setDeleteTarget(null)}>Cancel</button><button className="btn btn-wire" style={{color:"var(--error-text)",borderColor:"rgba(239,68,68,.35)"}} onClick={permanentlyDelete}>Delete permanently</button></div></div></div>}
+    {deleteTarget && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Delete content permanently"><div className="modal" style={{maxWidth:520}}><div className="mono" style={{color:"var(--error-text)"}}>PERMANENT DELETION</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:25,marginTop:8}}>Delete “{deleteTarget.name}” permanently?</h3><p style={{color:"var(--cream2)",lineHeight:1.5}}>This cannot be undone. ZedPing will only delete it if it is not needed by an automation, AI configuration, or knowledge history.</p>{deleteError && <div role="alert" style={{marginTop:14,padding:12,border:"1px solid rgba(239,68,68,.35)",color:"var(--error-text)",fontSize:12,lineHeight:1.5}}>{deleteError}</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" disabled={deletingContent} onClick={()=>setDeleteTarget(null)}>Cancel</button><button className="btn btn-wire" disabled={deletingContent} style={{color:"var(--error-text)",borderColor:"rgba(239,68,68,.35)"}} onClick={permanentlyDelete}>{deletingContent ? "Deleting…" : "Delete permanently"}</button></div></div></div>}
     {editingContent && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Edit content"><div className="modal" style={{ maxWidth: 620, maxHeight: "90vh", overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>Edit {typeLabel(editingContent.content_type)}</h3></div><button type="button" className="btn btn-wire" onClick={closeEdit}>Close</button></div>
       <form onSubmit={saveEdit} style={{ marginTop: 20 }}>

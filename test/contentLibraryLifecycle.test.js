@@ -22,6 +22,17 @@ test('Content Library renders archive lifecycle, safe permanent-delete confirmat
   assert.match(source, /storage_cleanup === "failed"/)
 })
 
+test('confirmation action sends one authenticated delete path and keeps a blocked item visible with its safe reason', () => {
+  assert.match(source, /if \(!deleteTarget \|\| deletingContent\) return/)
+  assert.match(source, /apiFetch\(`\$\{API\}\/content\/\$\{deleteTarget\.id\}`, \{method:"DELETE"\}\)/)
+  assert.match(source, /setDeletingContent\(true\)/)
+  assert.match(source, /setDeleteError\(message\); setActionError\(message\)/)
+  assert.match(source, /role="alert"/)
+  assert.match(source, /disabled=\{deletingContent\}/)
+  assert.match(source, /Deleting…/)
+  assert.match(source, /await load\(\)/)
+})
+
 test('Image rows load and render state-aware Zoe knowledge actions', () => {
   assert.match(source, /if \(selected\?\.content_type === "IMAGE"\) void loadImageKnowledge\(selected\)/)
   for (const label of ['Extract knowledge for Zoe', 'Extracting…', 'Review Zoe knowledge', 'View Zoe knowledge', 'Extract again', 'Retry extraction']) {
