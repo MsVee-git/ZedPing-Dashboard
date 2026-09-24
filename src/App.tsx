@@ -1967,6 +1967,18 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const [editForm, setEditForm] = useState({ name: "", description: "", text_content: "", link_url: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editNotice, setEditNotice] = useState("");
+  const editFormRef = useRef(editForm);
+  const editRevisionRef = useRef(0);
+  const editRequestRef = useRef(0);
+  const editInFlightRef = useRef(false);
+  const editAutosaveTimerRef = useRef(null);
+  const contentAutosaveFlushRef = useRef(() => {});
+  const [creatingTextDraft, setCreatingTextDraft] = useState(null);
+  const [newTextSaving, setNewTextSaving] = useState(false);
+  const [newTextNotice, setNewTextNotice] = useState("");
+  const newTextRequestRef = useRef(0);
+  const newTextInFlightRef = useRef(false);
+  const newTextAutosaveTimerRef = useRef(null);
   const [imageKnowledge, setImageKnowledge] = useState([]);
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [reviewingKnowledge, setReviewingKnowledge] = useState(null);
@@ -1975,6 +1987,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const [deletingContent, setDeletingContent] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
+  const newTextDirty = type === "TEXT" && (!creatingTextDraft || ["name", "description", "text_content"].some((key) => String(form[key] || "") !== String(creatingTextDraft[key] || "")));
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -1999,6 +2012,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const begin = async (nextType) => {
     setType(nextType); setActionError(""); setFile(null);
     setForm({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
+    setCreatingTextDraft(null); setNewTextNotice("");
     if (nextType !== "WHATSAPP_TEMPLATE_REFERENCE" || templates.length) return;
     setTemplateError("");
     try {
@@ -2013,6 +2027,11 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const submit = async (event) => {
     event.preventDefault();
     if (!type) return;
+    if (type === "TEXT") {
+      const saved = await persistNewText(form);
+      if (saved) { setSelected(saved); onRouteOpen?.(saved.id); setCreating(false); setType(null); setCreatingTextDraft(null); setNewTextNotice(""); }
+      return;
+    }
     setSaving(true); setActionError("");
     try {
       const body = new FormData();
@@ -2048,6 +2067,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     setEditForm({ name: item.name || "", description: item.description || "", text_content: item.text_content || "", link_url: item.link_url || "" });
     setEditingContent(item);
   };
+  useEffect(() => { editFormRef.current = editForm; }, [editForm]);
   const editDirty = editingContent && ["name", "description", "text_content", "link_url"].some((key) => String(editForm[key] || "") !== String(editingContent[key] || ""));
   const closeEdit = () => {
     if (editSaving) return;
@@ -2060,23 +2080,82 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [editDirty]);
+  const persistExistingText = useCallback(async (snapshot = editForm, revision = editRevisionRef.current) => {
+    if (!editingContent || !canManage || editingContent.content_type !== "TEXT" || editInFlightRef.current) return null;
+    editInFlightRef.current = true;
+    const request = ++editRequestRef.current;
+    setEditSaving(true); setEditNotice("Saving…");
+    try {
+      const payload = { name: snapshot.name, description: snapshot.description, text_content: snapshot.text_content };
+      const response = await apiFetch(`${API}/content/${editingContent.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      if (request !== editRequestRef.current) return result.item;
+      setItems((current) => current.map((entry) => entry.id === result.item.id ? result.item : entry));
+      setSelected(result.item); onRouteOpen?.(result.item.id); setEditingContent(result.item);
+      if (revision === editRevisionRef.current) setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" });
+      setEditNotice("Saved");
+      return result.item;
+    } catch (_) {
+      if (request === editRequestRef.current) setEditNotice("Couldn't save — Retry");
+      return null;
+    } finally { editInFlightRef.current = false; if (request === editRequestRef.current) setEditSaving(false); }
+  }, [editingContent, canManage, editForm, onRouteOpen]);
   const saveEdit = async (event) => {
     event.preventDefault();
     if (!editingContent || !canManage) return;
+    if (editingContent.content_type === "TEXT") { await persistExistingText(editForm, editRevisionRef.current); return; }
     setEditSaving(true); setEditNotice("");
     try {
-      const payload = { name: editForm.name, description: editForm.description };
-      if (editingContent.content_type === "TEXT") payload.text_content = editForm.text_content;
-      if (editingContent.content_type === "LINK") payload.link_url = editForm.link_url;
-      const response = await apiFetch(`${API}/content/${editingContent.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await apiFetch(`${API}/content/${editingContent.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editForm.name, description: editForm.description, link_url: editForm.link_url }) });
       const result = await response.json();
-      setItems((current) => current.map((entry) => entry.id === result.item.id ? result.item : entry));
-      setSelected(result.item); onRouteOpen?.(result.item.id); setEditingContent(result.item); setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" });
-      setEditNotice("Changes saved");
-    } catch (_) {
-      setEditNotice("We couldn't save your changes. Please try again.");
-    } finally { setEditSaving(false); }
+      setItems((current) => current.map((entry) => entry.id === result.item.id ? result.item : entry)); setSelected(result.item); onRouteOpen?.(result.item.id); setEditingContent(result.item); setEditForm({ name: result.item.name || "", description: result.item.description || "", text_content: result.item.text_content || "", link_url: result.item.link_url || "" }); setEditNotice("Changes saved");
+    } catch (_) { setEditNotice("We couldn't save your changes. Please try again."); }
+    finally { setEditSaving(false); }
   };
+  useEffect(() => {
+    if (!editingContent || editingContent.content_type !== "TEXT" || !editDirty || editSaving) return undefined;
+    const snapshot = { ...editForm }; const revision = editRevisionRef.current;
+    editAutosaveTimerRef.current = window.setTimeout(() => { void persistExistingText(snapshot, revision); }, 1000);
+    return () => window.clearTimeout(editAutosaveTimerRef.current);
+  }, [editingContent?.id, editingContent?.content_type, editForm, editDirty, editSaving, persistExistingText]);
+  const persistNewText = async (snapshot = form) => {
+    if (!canManage || type !== "TEXT" || newTextSaving || newTextInFlightRef.current || !String(snapshot.name || "").trim() || !String(snapshot.text_content || "").trim()) return null;
+    newTextInFlightRef.current = true;
+    const request = ++newTextRequestRef.current;
+    setNewTextSaving(true); setNewTextNotice("Saving…");
+    try {
+      let result;
+      if (creatingTextDraft) {
+        const response = await apiFetch(`${API}/content/${creatingTextDraft.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name:snapshot.name, description:snapshot.description, text_content:snapshot.text_content }) });
+        result = await response.json();
+      } else {
+        const body = new FormData(); body.set("content_type", "TEXT"); body.set("name", snapshot.name); body.set("text_content", snapshot.text_content); if (snapshot.description) body.set("description", snapshot.description);
+        const response = await apiFetch(`${API}/content`, { method: "POST", body }); result = await response.json();
+      }
+      if (request !== newTextRequestRef.current) return result.item;
+      setCreatingTextDraft(result.item); setItems((current) => current.some((entry) => entry.id === result.item.id) ? current.map((entry) => entry.id === result.item.id ? result.item : entry) : [result.item, ...current]); setNewTextNotice("Saved");
+      return result.item;
+    } catch (_) { if (request === newTextRequestRef.current) setNewTextNotice("Couldn't save — Retry"); return null; }
+    finally { newTextInFlightRef.current = false; if (request === newTextRequestRef.current) setNewTextSaving(false); }
+  };
+  useEffect(() => {
+    if (!creating || type !== "TEXT" || !newTextDirty || newTextSaving || !String(form.name || "").trim() || !String(form.text_content || "").trim()) return undefined;
+    const snapshot = { ...form };
+    newTextAutosaveTimerRef.current = window.setTimeout(() => { void persistNewText(snapshot); }, 1000);
+    return () => window.clearTimeout(newTextAutosaveTimerRef.current);
+  }, [creating, type, form, newTextDirty, newTextSaving, creatingTextDraft]);
+  useEffect(() => {
+    contentAutosaveFlushRef.current = () => {
+      if (editingContent?.content_type === "TEXT" && editDirty && !editSaving) void persistExistingText(editFormRef.current, editRevisionRef.current);
+      if (creating && type === "TEXT" && newTextDirty && !newTextSaving) void persistNewText(form);
+    };
+  });
+  useEffect(() => () => { contentAutosaveFlushRef.current(); }, []);
+  useEffect(() => {
+    const flush = () => { if (document.hidden) contentAutosaveFlushRef.current(); };
+    document.addEventListener("visibilitychange", flush);
+    return () => document.removeEventListener("visibilitychange", flush);
+  }, []);
 
   const secureOpen = async (item) => {
     setActionError("");
@@ -2193,11 +2272,11 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     {editingContent && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Edit content"><div className="modal" style={{ maxWidth: 620, maxHeight: "90vh", overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>Edit {typeLabel(editingContent.content_type)}</h3></div><button type="button" className="btn btn-wire" onClick={closeEdit}>Close</button></div>
       <form onSubmit={saveEdit} style={{ marginTop: 20 }}>
-        <label className="label">Name</label><input className="input" required maxLength="160" value={editForm.name} onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))} />
-        <label className="label" style={{ marginTop: 13 }}>Description <span style={{ color: "var(--mist)" }}>optional</span></label><input className="input" maxLength="500" value={editForm.description} onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))} />
-        {editingContent.content_type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={editForm.text_content} onChange={(event) => setEditForm((current) => ({ ...current, text_content: event.target.value }))} /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{editForm.text_content.length}/20,000</div></>}
+        <label className="label">Name</label><input className="input" required maxLength="160" value={editForm.name} onChange={(event) => { editRevisionRef.current += 1; setEditForm((current) => ({ ...current, name: event.target.value })); }} />
+        <label className="label" style={{ marginTop: 13 }}>Description <span style={{ color: "var(--mist)" }}>optional</span></label><input className="input" maxLength="500" value={editForm.description} onChange={(event) => { editRevisionRef.current += 1; setEditForm((current) => ({ ...current, description: event.target.value })); }} />
+        {editingContent.content_type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={editForm.text_content} onChange={(event) => { editRevisionRef.current += 1; setEditForm((current) => ({ ...current, text_content: event.target.value })); }} /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{editForm.text_content.length}/20,000</div></>}
         {editingContent.content_type === "LINK" && <><label className="label" style={{ marginTop: 13 }}>Destination URL</label><input className="input" type="url" required value={editForm.link_url} onChange={(event) => setEditForm((current) => ({ ...current, link_url: event.target.value }))} /></>}
-        {editNotice && <div role="status" style={{ color: editNotice === "Changes saved" ? "var(--gold2)" : "var(--error-text)", fontSize: 12, marginTop: 13 }}>{editNotice}</div>}
+        {editNotice && <div role="status" style={{ color: ["Changes saved", "Saved", "Saving…"].includes(editNotice) ? "var(--gold2)" : "var(--error-text)", fontSize: 12, marginTop: 13 }}>{editNotice}{editNotice === "Couldn't save — Retry" && <button type="button" className="btn btn-wire" style={{ marginLeft: 10, padding: "4px 7px", fontSize: 9 }} onClick={() => void persistExistingText(editForm, editRevisionRef.current)}>Retry</button>}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={closeEdit} disabled={editSaving}>Cancel</button><button type="submit" className="btn btn-gold" disabled={editSaving}>{editSaving ? "Saving…" : "Save changes"}</button></div>
       </form>
     </div></div>}
@@ -2208,12 +2287,12 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
       <form onSubmit={submit} style={{ marginTop: 20 }}>
         <label className="label">Name</label><input className="input" required maxLength="160" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Give this content a clear name" />
         <label className="label" style={{ marginTop: 13 }}>Description <span style={{ color: "var(--mist)" }}>optional</span></label><input className="input" maxLength="500" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="A short note for your team" />
-        {type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={form.text_content} onChange={(event) => setForm((current) => ({ ...current, text_content: event.target.value }))} placeholder="Write reusable information for your team" /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{form.text_content.length}/20,000</div></>}
+        {type === "TEXT" && <><label className="label" style={{ marginTop: 13 }}>Content</label><textarea className="textarea" required maxLength="20000" value={form.text_content} onChange={(event) => setForm((current) => ({ ...current, text_content: event.target.value }))} placeholder="Write reusable information for your team" /><div style={{ color: "var(--mist)", fontSize: 10, textAlign: "right" }}>{form.text_content.length}/20,000</div>{newTextNotice && <div role="status" style={{ color: ["Saved", "Saving…"].includes(newTextNotice) ? "var(--gold2)" : "var(--error-text)", fontSize: 12, marginTop: 10 }}>{newTextNotice}{newTextNotice === "Couldn't save — Retry" && <button type="button" className="btn btn-wire" style={{ marginLeft: 10, padding: "4px 7px", fontSize: 9 }} onClick={() => void persistNewText(form)}>Retry</button>}</div>}</>}
         {type === "LINK" && <><label className="label" style={{ marginTop: 13 }}>Destination URL</label><input className="input" type="url" required value={form.link_url} onChange={(event) => setForm((current) => ({ ...current, link_url: event.target.value }))} placeholder="https://…" /></>}
         {["DOCUMENT","IMAGE"].includes(type) && <><label className="label" style={{ marginTop: 13 }}>{type === "IMAGE" ? "Image file" : "Document file"}</label><input className="input" type="file" required accept={type === "IMAGE" ? "image/jpeg,image/png,image/webp" : ".pdf,.doc,.docx,.xls,.xlsx,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"} onChange={(event) => setFile(event.target.files?.[0] || null)} /><div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>Allowed types only, up to 10 MB. Files stay private to this workspace.</div></>}
         {type === "WHATSAPP_TEMPLATE_REFERENCE" && <><label className="label" style={{ marginTop: 13 }}>Live WhatsApp template</label>{templateError ? <div role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>{templateError}</div> : <select className="input" required value={form.template_id} onChange={(event) => setForm((current) => ({ ...current, template_id: event.target.value }))}><option value="">Choose a template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.status} · {template.language}</option>)}</select>}<div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>This saves a validated reference, not a copy of the Meta template.</div></>}
         {actionError && <div role="alert" style={{ color: "var(--error-text)", fontSize: 12, marginTop: 13 }}>{actionError}</div>}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={() => setType(null)}>Back</button><button type="submit" className="btn btn-gold" disabled={saving || (type === "WHATSAPP_TEMPLATE_REFERENCE" && !!templateError)}>{saving ? (["DOCUMENT","IMAGE"].includes(type) ? "Uploading…" : "Saving…") : "Save content"}</button></div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={() => setType(null)}>Back</button><button type="submit" className="btn btn-gold" disabled={saving || newTextSaving || (type === "WHATSAPP_TEMPLATE_REFERENCE" && !!templateError)}>{saving || newTextSaving ? (["DOCUMENT","IMAGE"].includes(type) ? "Uploading…" : "Saving…") : "Save content"}</button></div>
       </form>}
     </div></div>}
   </div>

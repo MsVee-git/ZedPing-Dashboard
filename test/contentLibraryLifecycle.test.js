@@ -33,6 +33,27 @@ test('confirmation action sends one authenticated delete path and keeps a blocke
   assert.match(source, /await load\(\)/)
 })
 
+test('Text Content Library editing uses debounced, visibility-flushed autosave without stale-response overwrite', () => {
+  assert.match(source, /editAutosaveTimerRef/)
+  assert.match(source, /window\.setTimeout\(\(\) => \{ void persistExistingText\(snapshot, revision\); \}, 1000\)/)
+  assert.match(source, /document\.addEventListener\("visibilitychange"/)
+  assert.match(source, /if \(revision === editRevisionRef\.current\) setEditForm/)
+  assert.match(source, /editInFlightRef\.current/)
+  assert.match(source, /Couldn't save — Retry/)
+  assert.match(source, /Saving…/)
+  assert.match(source, /Saved/)
+  assert.match(source, /contentAutosaveFlushRef\.current\(\)/)
+})
+
+test('new Text creation establishes one server record before later autosaves patch the same item', () => {
+  assert.match(source, /const \[creatingTextDraft, setCreatingTextDraft\] = useState\(null\)/)
+  assert.match(source, /if \(creatingTextDraft\) \{[\s\S]*method: "PATCH"/)
+  assert.match(source, /body\.set\("content_type", "TEXT"\)/)
+  assert.match(source, /newTextDirty/)
+  assert.match(source, /newTextInFlightRef\.current/)
+  assert.match(source, /if \(!creating \|\| type !== "TEXT" \|\| !newTextDirty/)
+})
+
 test('Image rows load and render state-aware Zoe knowledge actions', () => {
   assert.match(source, /if \(selected\?\.content_type === "IMAGE"\) void loadImageKnowledge\(selected\)/)
   for (const label of ['Extract knowledge for Zoe', 'Extracting…', 'Review Zoe knowledge', 'View Zoe knowledge', 'Extract again', 'Retry extraction']) {
