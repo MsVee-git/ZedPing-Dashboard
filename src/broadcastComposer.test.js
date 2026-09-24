@@ -24,3 +24,12 @@ test('Broadcasts does not send while reviewing and renders required variable map
   assert.match(section, /disabled=\{sending \|\| review\.skipped_recipients > 0/)
 })
 
+
+
+test('Broadcasts labels connected numbers from the canonical display phone while retaining the workspace number record as its value', () => {
+  const section = source.slice(source.indexOf('function Broadcasts()'), source.indexOf('// ── CONTACTS'))
+  assert.match(source, /function connectedWhatsAppNumberLabel\(number\)/)
+  assert.match(section, /value=\{number\.id\}/)
+  assert.match(section, /connectedWhatsAppNumberLabel\(number\)/)
+  assert.doesNotMatch(section, /\{number\.display_name \|\| number\.phone_number_id\}/)
+})
