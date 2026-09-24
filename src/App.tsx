@@ -23,6 +23,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 const WORKSPACE_STORAGE_KEY = "zedping.activeWorkspaceId";
 const nativeRequest = window.fetch.bind(window);
 
+// Customer-facing number labels must come from the connected telephone number,
+// never the internal Meta Phone Number ID.
+function connectedWhatsAppNumberLabel(number) {
+  const phone = typeof number?.display_phone_number === "string" ? number.display_phone_number.trim() : "";
+  if (!phone) return "Connected WhatsApp number";
+  const name = typeof number?.display_name === "string" ? number.display_name.trim() : "";
+  return name ? `${name} — ${phone}` : phone;
+}
+
 const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(init.headers || {});
@@ -933,7 +942,7 @@ function Broadcasts() {
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>New Broadcast</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {setupError && <div className="mono" style={{ color: "var(--error-text)", fontSize: 11 }}>{setupError}</div>}
-          <div><label className="label">Sending WhatsApp number</label><select className="input" value={numberId} onChange={event => setNumberId(event.target.value)} disabled={setupLoading}><option value="">Select a connected number…</option>{(setup?.numbers || []).map(number => <option key={number.id} value={number.id}>{number.display_name || number.phone_number_id}</option>)}</select></div>
+          <div><label className="label">Sending WhatsApp number</label><select className="input" value={numberId} onChange={event => setNumberId(event.target.value)} disabled={setupLoading}><option value="">Select a connected number…</option>{(setup?.numbers || []).map(number => <option key={number.id} value={number.id}>{connectedWhatsAppNumberLabel(number)}</option>)}</select></div>
           <div><label className="label">Contact Group</label><select className="input" value={groupId} onChange={event => setGroupId(event.target.value)} disabled={setupLoading}><option value="">Select a Contact Group…</option>{(setup?.groups || []).map(group => <option key={group.id} value={group.id}>{group.name}{group.total_contacts ? ` — ${group.total_contacts} contacts` : ""}</option>)}</select></div>
           <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><label className="label">Approved WhatsApp template</label>{numberId && <button className="btn btn-wire" onClick={loadTemplates} disabled={loadingTemplates} style={{ padding: "5px 8px", fontSize: 9 }}>{loadingTemplates ? "Refreshing…" : "Refresh templates"}</button>}</div><select className="input" value={templateId} onChange={event => setTemplateId(event.target.value)} disabled={!numberId || loadingTemplates}><option value="">{numberId ? "Select a template…" : "Select a number first"}</option>{templates.map(template => <option key={template.id} value={template.id} disabled={!template.sendable}>{template.name} · {template.language} · {template.status}{template.sendable ? "" : " — unavailable"}</option>)}</select></div>
           {selectedTemplate && <div style={{ padding: 12, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}><div className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{selectedTemplate.category} · {selectedTemplate.language} · {selectedTemplate.status}</div><div style={{ color: "var(--mist)", fontSize: 13, marginTop: 7, whiteSpace: "pre-wrap" }}>{selectedTemplate.body_preview || "This template has no text body preview."}</div>{selectedTemplate.unavailable_reason && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 8 }}>{selectedTemplate.unavailable_reason}</div>}</div>}
