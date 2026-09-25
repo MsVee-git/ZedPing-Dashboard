@@ -3,6 +3,8 @@
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { BroadcastDetails } from "./BroadcastDetails";
+import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
 import { WhatsAppConnection } from "./WhatsAppConnection";
 import { ChatbotFlows } from "./ChatbotFlows";
 import { ZoeAI } from "./ZoeAI";
@@ -894,6 +896,7 @@ function Broadcasts() {
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
   const [activityFilter, setActivityFilter] = useState("all");
+  const [activityId, setActivityId] = useState(null);
 
   const selectedTemplate = templates.find((item) => String(item.id) === String(templateId));
   const loadTemplates = async () => {
@@ -948,7 +951,7 @@ function Broadcasts() {
           {selectedTemplate && <div style={{ padding: 12, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}><div className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{selectedTemplate.category} · {selectedTemplate.language} · {selectedTemplate.status}</div><div style={{ color: "var(--mist)", fontSize: 13, marginTop: 7, whiteSpace: "pre-wrap" }}>{selectedTemplate.body_preview || "This template has no text body preview."}</div>{selectedTemplate.unavailable_reason && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 8 }}>{selectedTemplate.unavailable_reason}</div>}</div>}
           {selectedTemplate?.sendable && selectedTemplate.variables.map(number => <div key={number}><label className="label">Template variable {"{{" + number + "}}" }</label><select className="input" value={mappings[number]?.source || ""} onChange={event => updateMapping(number, event.target.value)}><option value="">Choose a value…</option><option value="contact_name">Contact name</option><option value="contact_phone">Contact phone</option><option value="contact_email">Contact email</option><option value="fixed">Same text for every recipient</option></select>{mappings[number]?.source === "fixed" && <input className="input" style={{ marginTop: 8 }} value={mappings[number]?.value || ""} onChange={event => updateMapping(number, "fixed", event.target.value)} placeholder="Enter fixed text" />}</div>)}
           {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
-          {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 8 }}>{review.audience.name} · {review.total_selected} selected · {review.eligible_recipients} eligible · {review.opted_out_recipients || 0} opted out · {review.skipped_recipients} invalid/skipped</div><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? "Sending…" : "Send broadcast"}</button></div></div>}
+          {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><BroadcastReviewSummary review={review} /><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? "Sending…" : "Send broadcast"}</button></div></div>}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
@@ -958,15 +961,17 @@ function Broadcasts() {
       <div className="card">
         {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
           const status = statusFor(broadcast); if (!status) return null;
-          return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px", gap: 12 }}>
+          return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px auto", gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
             <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
             <div style={{ fontSize: 11, color: "var(--mist)" }}>{Array.isArray(broadcast.contacts) ? broadcast.contacts.length : 0} recipients</div>
             <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString()}</div>
             <div className={"badge " + status.cls}>{status.label}</div>
+            <button className="btn btn-wire" onClick={() => setActivityId(broadcast.id)} aria-expanded={activityId === broadcast.id} aria-controls="broadcast-details">Details</button>
           </div>;
         })}
       </div>
+      {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
     </div>
   );
 }
@@ -1306,8 +1311,9 @@ function TeamInbox({ customer, user }) {
             </div>
             <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{conversation.contacts?.phone_number || "No phone number"}</div>
             <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.last_message?.message_body || "No message preview"}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center", flexWrap: "wrap" }}>
               <span className={conversation.status === "needs_attention" ? "badge badge-red" : conversation.status === "resolved" ? "badge badge-cream" : conversation.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(conversation)}</span>
+              <MarketingOptOutBadge contact={conversation.contacts} />
               <span className="mono" style={{ color: "var(--mist)", fontSize: 9 }}>{conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleDateString() : "—"}</span>
             </div>
           </button>)}
@@ -1318,6 +1324,7 @@ function TeamInbox({ customer, user }) {
           <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
             <span className={active.status === "needs_attention" ? "badge badge-red" : active.status === "resolved" ? "badge badge-cream" : active.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(active)}</span>
+            <MarketingOptOutBadge contact={active.contacts} />
           </div>
           {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
           <div style={{ flex: 1, padding: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1341,6 +1348,8 @@ function TeamInbox({ customer, user }) {
         {!active ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose a conversation to see contact details and controls.</div> : <>
           <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{active.contacts?.name || "Unnamed contact"}</div>
           <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{active.contacts?.phone_number || "No phone number"}</div>
+          <div style={{ marginTop: 10 }}><MarketingOptOutBadge contact={active.contacts} /></div>
+          {active.contacts?.marketing_opted_out === true && <p style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.5 }}>Excluded from marketing broadcasts. Customer-service conversations and service automation remain available.</p>}
           {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
           <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
             <div className="label">Conversation status</div>

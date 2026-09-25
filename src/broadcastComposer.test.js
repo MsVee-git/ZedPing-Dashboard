@@ -36,7 +36,6 @@ test('Broadcasts labels connected numbers from the canonical display phone while
 
 test('Broadcast Review separates opted-out suppression from invalid recipients and blocks an empty audience', () => {
   const section = source.slice(source.indexOf('function Broadcasts()'), source.indexOf('// ── CONTACTS'))
-  assert.match(section, /review\.opted_out_recipients \|\| 0\} opted out/)
-  assert.match(section, /review\.skipped_recipients\} invalid\/skipped/)
+  assert.match(section, /<BroadcastReviewSummary review=\{review\}/)
   assert.match(section, /disabled=\{sending \|\| review\.skipped_recipients > 0 \|\| !review\.eligible_recipients\}/)
 })
