@@ -8,7 +8,9 @@ try { ({ chromium } = require('playwright')) } catch { /* Optional local browser
 const esbuild = createRequire(require.resolve('vite'))('esbuild')
 const root = path.join(__dirname, '..')
 const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8')
-const css = app.slice(app.indexOf('const css = `') + 13, app.indexOf('`;', app.indexOf('const css = `')))
+const css = app.slice(app.indexOf('const css = `') + 13, app.indexOf('`;', app.indexOf('const css = `'))).replace('${faceliftCss}',fs.readFileSync(path.join(root,'src/facelift.css'),'utf8'))
+const topbars=app.slice(app.indexOf('function Topbar('),app.indexOf('// ── PAGE HEADER'))
+const shell=app.slice(app.lastIndexOf('  return ('),app.lastIndexOf('\n}'))
 const inbox = app.slice(app.indexOf('function TeamInbox('), app.indexOf('// ── AUTOMATIONS'))
 const pageHead = app.slice(app.indexOf('function PageHead('), app.indexOf('\n}', app.indexOf('function PageHead(')) + 2)
 const fixture = `
@@ -31,8 +33,10 @@ async function apiFetch(url,options){
  if(parts[3]==='reply')t.messages.push({id:'new',direction:'outbound',message_body:JSON.parse(options.body).message,status:'sent'});
  return {ok:true,json:async()=>structuredClone(t||{})};
 }
-window.appendFixtureMessage=()=>{threads.Long.messages.push({id:'incoming'+threads.Long.messages.length,message_body:'New incoming message',direction:'inbound'});};
 const Loader=()=> <p>Loading</p>, Empty=({msg})=><p>{msg}</p>;
+const Logo=()=> <span>ZedPing</span>, Ic=()=> <span/>;
+const Sidebar=()=> <aside className="sidebar">Synthetic navigation</aside>;
+${topbars}
 ${pageHead}
 ${inbox}
 window.fixtureRequests=[];
@@ -43,7 +47,12 @@ function ScrollProbe(){
  return <div ref={historyRef} onScroll={onHistoryScroll} id="probe" style={{height:200,overflowY:'auto'}}>{messages.map(i=><div key={i} style={{height:50}}>{i}</div>)}</div>;
 }
 window.mountProbe=()=>createRoot(document.getElementById('root')).render(<ScrollProbe/>);
-createRoot(document.getElementById('root')).render(<div className="main"><div style={{height:56,flexShrink:0}}>Synthetic workspace</div><TeamInbox customer={customer} user={user}/></div>);
+function Fixture(){
+ const css=${JSON.stringify(css)},active='messages',navigate=()=>{},onLogout=()=>{},open=false,setOpen=()=>{},workspaces=[customer],workspaceSwitchTarget=null,onWorkspaceChange=()=>{},workspaceChanging=false;
+ const cur={title:'Team Inbox',comp:<TeamInbox customer={customer} user={user}/>};
+ ${shell}
+}
+createRoot(document.getElementById('root')).render(<Fixture/>);
 `
 
 test('real Inbox layout keeps long/short histories, composer and actions usable without production requests', { skip: !chromium && 'Playwright is required for browser layout verification' }, async () => {
@@ -62,9 +71,9 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
   page.on('pageerror', error => errors.push(error.message))
   await page.route('**/*', route => route.abort())
   try {
-    for (const [width,height] of [[1440,900],[1366,768],[1280,600],[1024,768]]) {
+    for (const [width,height] of [[1440,900],[1366,768],[1366,650],[1280,600],[1024,768]]) {
       await page.setViewportSize({width,height})
-      await page.setContent(`<style>${css}\n${fs.readFileSync(path.join(root,'src/teamInbox.css'),'utf8')}</style><div id="root"></div>`)
+      await page.setContent(`<style>${fs.readFileSync(path.join(root,'src/index.css'),'utf8')}\n${fs.readFileSync(path.join(root,'src/teamInbox.css'),'utf8')}</style><div id="root"></div>`)
       await page.addScriptTag({content:bundle.outputFiles[0].text})
       await page.getByRole('button',{name:/Long/}).click()
       await page.locator('.inbox-composer').waitFor()
@@ -72,18 +81,26 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
         const history=document.querySelector('.inbox-history'), form=document.querySelector('.inbox-composer');
         const bounds=history.getBoundingClientRect();
         const visible=[...history.children].filter(el=>{const r=el.getBoundingClientRect();return r.top>=bounds.top && r.bottom<=bounds.bottom}).length;
-        return {historyHeight:history.clientHeight,panelHeight:history.parentElement.clientHeight,visible,textareaHeight:form.querySelector("textarea").clientHeight,bottom:form.getBoundingClientRect().bottom,viewport:innerHeight,scrollable:history.scrollHeight>history.clientHeight,atBottom:history.scrollHeight-history.scrollTop-history.clientHeight<3,pageHeight:document.documentElement.scrollHeight,pageWidth:document.documentElement.scrollWidth,width:innerWidth};
+        const grid=document.querySelector('.team-inbox').getBoundingClientRect(), panel=history.parentElement.getBoundingClientRect();
+        const route=document.querySelector('.inbox-route').getBoundingClientRect(),page=document.querySelector('.inbox-page'),style=getComputedStyle(page);
+        return {gridTop:grid.top,gridHeight:grid.height,gridBottom:grid.bottom,cardHeight:panel.height,routeBottom:route.bottom,pagePadding:parseFloat(style.paddingBottom),composerHeight:form.getBoundingClientRect().height,historyHeight:history.clientHeight,panelHeight:history.parentElement.clientHeight,visible,textareaHeight:form.querySelector("textarea").clientHeight,bottom:form.getBoundingClientRect().bottom,viewport:innerHeight,scrollable:history.scrollHeight>history.clientHeight,atBottom:history.scrollHeight-history.scrollTop-history.clientHeight<3,pageHeight:document.documentElement.scrollHeight,pageWidth:document.documentElement.scrollWidth,width:innerWidth};
       })
       assert.ok(long.bottom<=height,`${width}x${height}: composer bottom ${long.bottom}`)
-      assert.ok(long.visible>=2,`multiple full messages required: ${JSON.stringify(long)}`)
+      assert.ok(long.visible>=3,`multiple full messages required: ${JSON.stringify(long)}`)
       assert.ok(long.historyHeight>=long.panelHeight*.5,`history must dominate: ${JSON.stringify(long)}`)
       if(height>=768 && width>=1280) assert.ok(long.historyHeight>=long.panelHeight*.65,`desktop history target: ${JSON.stringify(long)}`)
       assert.ok(long.textareaHeight>=50 && long.textareaHeight<=60)
+      assert.ok(long.gridHeight >= (height-long.gridTop)*.95,`workspace must consume remaining viewport: ${JSON.stringify(long)}`)
+      assert.ok(Math.abs(long.cardHeight-long.gridHeight)<2,`center must fill grid: ${JSON.stringify(long)}`)
+      assert.ok(Math.abs(height-long.gridBottom-long.pagePadding)<2,`workspace bottom: ${JSON.stringify(long)}`)
+      assert.ok(long.gridBottom<=height && long.routeBottom<=height)
+      assert.ok(long.historyHeight>long.composerHeight*1.7,`history taller than composer: ${JSON.stringify(long)}`)
+      console.log('INBOX GEOMETRY '+JSON.stringify(long))
       assert.ok(long.scrollable)
       assert.ok(long.atBottom)
       assert.ok(long.pageHeight<=height+2,`page grows: ${JSON.stringify(long)}`)
       assert.ok(long.pageWidth<=width,`horizontal overflow ${width}`)
-      if (width===1366 && process.env.INBOX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.INBOX_SCREENSHOT_DIR,'inbox-long-conversation.png')})
+      if (width===1366 && process.env.INBOX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.INBOX_SCREENSHOT_DIR,'inbox-full-shell-long-'+height+'.png')})
       const before=await page.locator('.inbox-composer').boundingBox()
       await page.locator('.inbox-history').evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'))})
       assert.deepEqual(await page.locator('.inbox-composer').boundingBox(),before)
@@ -98,7 +115,7 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
       const short = await page.evaluate(()=>({historyHeight:document.querySelector('.inbox-history').clientHeight,composerBottom:document.querySelector('.inbox-composer').getBoundingClientRect().bottom}))
       assert.equal(short.historyHeight,long.historyHeight,`short history must fill the panel`)
       assert.ok(short.composerBottom<=height)
-      if (width===1366 && process.env.INBOX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.INBOX_SCREENSHOT_DIR,'inbox-short-conversation.png')})
+      if (width===1366 && process.env.INBOX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.INBOX_SCREENSHOT_DIR,'inbox-full-shell-short-'+height+'.png')})
       await page.getByRole('button',{name:'Request human attention',exact:true}).click()
       await page.locator('.inbox-conversation').getByText('NEEDS ATTENTION',{exact:true}).waitFor()
       await page.getByRole('button',{name:'Take Conversation',exact:true}).click()

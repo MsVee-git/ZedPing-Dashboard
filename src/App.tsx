@@ -1205,7 +1205,7 @@ function TeamInbox({ customer, user }) {
   const [reply, setReply] = useState("");
   const [replying, setReplying] = useState(false);
   const requestRef = useRef(0);
-  const { gridRef, historyRef, onHistoryScroll } = useInboxScroll(selectedId, thread?.messages, threadLoading);
+  const { historyRef, onHistoryScroll } = useInboxScroll(selectedId, thread?.messages, threadLoading);
   const composerRef = useInboxComposer(reply, selectedId, threadLoading);
 
   useEffect(() => {
@@ -1292,15 +1292,15 @@ function TeamInbox({ customer, user }) {
   const assigneeName = (conversation) => (members || []).find((member) => member.id === conversation?.assigned_user_id)?.name || (members || []).find((member) => member.id === conversation?.assigned_user_id)?.email || "another team member";
 
 
-  return <div className="pad" style={{ padding: 28 }}>
-    <PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." />
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+  return <div className="pad inbox-page" style={{ padding: 28 }}>
+    <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." /></div>
+    <div className="inbox-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
       {[["all","All"],["unread","Unread"],["attention","Needs Attention"],["mine","Assigned to Me"],["unassigned","Unassigned"],["resolved","Resolved"]].map(([id,label]) =>
         <button key={id} className={filter===id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(id)} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>
       )}
     </div>
 
-    <div ref={gridRef} className="team-inbox">
+    <div className="team-inbox">
       <div className="card inbox-list">
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, padding: "14px 16px", borderBottom: "1px solid var(--wire)" }}>{filter === "all" ? "CONVERSATIONS" : filter.toUpperCase()}</div>
         {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 16, color: "var(--error-text)", fontSize: 12 }}>We could not load conversations: {error}</div> : !filtered.length ? <Empty msg={list.length ? "No conversations match this filter" : "No conversations yet"} /> :
@@ -2592,10 +2592,10 @@ export default function App() {
       <style>{css}</style>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={navigate} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
-        <div className="main workspace">
+        <div className={"main workspace" + (active === "messages" ? " inbox-workspace" : "")}>
           <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
-          {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} style={{ flex: 1, overflowY: "auto" }}>{cur.comp}</div>}
+          {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} className={active === "messages" ? "inbox-route" : undefined} style={{ flex: 1, overflowY: active === "messages" ? undefined : "auto" }}>{cur.comp}</div>}
         </div>
       </div>
     </>
