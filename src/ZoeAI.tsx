@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const styles = ["professional", "friendly", "warm", "concise"];
 
@@ -20,6 +20,8 @@ export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, on
   const [saving,setSaving]=useState(false);
   const [lifecycleBusy,setLifecycleBusy]=useState("");
   const [selected,setSelected]=useState(null);
+  const goLivePending = useRef(false);
+  const [goLiveError,setGoLiveError]=useState("");
 
   async function load() {
     try {
@@ -85,7 +87,13 @@ export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, on
     } catch(error) { setNotice(error?.message || "We could not add the approved test contact."); }
   }
   async function reviewActivation() {
-    if (!selected) return;
+    if (!selected || !canManage || lifecycleBusy) return;
+    setGoLiveError(""); setNotice("");
+    // Going live keeps the activated snapshot. Draft readiness is only for activation.
+    if (selected.lifecycle_status === "active" && selected.deployment_mode === "test") {
+      setActivationReview({ assistant_name: selected.name });
+      return;
+    }
     try {
       const response=await apiFetch("/ai-agents/"+selected.id+"/readiness");
       const result=await response.json();
@@ -104,11 +112,22 @@ export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, on
     finally { setLifecycleBusy(""); }
   }
   async function goLive() {
-    if (!selected || lifecycleBusy) return;
+    if (!selected || !canManage || lifecycleBusy || goLivePending.current) return;
+    goLivePending.current = true;
+    setGoLiveError(""); setNotice("");
     setLifecycleBusy("go-live");
-    try { const response=await apiFetch("/ai-agents/"+selected.id+"/go-live",{method:"POST"}); const result=await response.json(); openAgent(result.agent); setActivationReview(null); await load(); setNotice("Live on WhatsApp — Responding to eligible customers."); }
-    catch(error) { setNotice(error?.message || "We could not put this agent live."); }
-    finally { setLifecycleBusy(""); }
+    try {
+      const response=await apiFetch("/ai-agents/"+selected.id+"/go-live",{method:"POST"});
+      const result=await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to put this AI Agent live");
+      if (result.agent?.id !== selected.id || result.agent?.lifecycle_status !== "active" || result.agent?.deployment_mode !== "live") throw new Error("Unable to confirm Live status. Refresh the page before trying again.");
+      openAgent(result.agent); setActivationReview(null); await load(); setNotice("Live on WhatsApp — Responding to eligible customers.");
+    }
+    catch(error) {
+      const safeMessages = ["Only an active Test Mode agent can go live", "The activated AI configuration is unavailable", "The activated AI configuration is invalid", "The activated AI configuration is not bound to this WhatsApp number", "The activated knowledge snapshot is invalid", "The activated handoff configuration is invalid", "Another active AI Agent already uses this WhatsApp number", "Select a connected WhatsApp number from this workspace", "Administrator access required", "You do not have access to this workspace", "AI Agent changed before going live; review it again", "Unable to confirm Live status. Refresh the page before trying again."];
+      setGoLiveError(safeMessages.includes(error?.message) ? error.message : "We could not put this agent live. Check your connection and sign-in, then try again.");
+    }
+    finally { goLivePending.current = false; setLifecycleBusy(""); }
   }
   async function returnToTest() {
     if (!selected || !window.confirm("Return "+selected.name+" to Test Mode? Only approved test contacts will receive responses.")) return;
@@ -159,7 +178,7 @@ export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, on
   if (selected) {
     const label = selected.lifecycle_status === "active" ? (selected.deployment_mode === "live" ? "Live — responding to eligible WhatsApp customers." : "Test Mode — responding only to approved test contacts.") : selected.lifecycle_status === "paused" ? "Paused — not responding on WhatsApp." : "Draft — not active on WhatsApp.";
     const lifecycleAction = selected.lifecycle_status === "active" ? (selected.deployment_mode === "test" ? <button className="btn btn-wire" disabled={!!lifecycleBusy} onClick={reviewActivation}>Go Live</button> : <button className="btn btn-wire" disabled={!!lifecycleBusy} onClick={returnToTest}>Return to Test Mode</button>) : selected.lifecycle_status === "paused" ? <button className="btn btn-gold" disabled={!!lifecycleBusy} onClick={resume}>{lifecycleBusy === "resume" ? "Resuming…" : `Resume ${selected.deployment_mode === "live" ? "Live" : "Test Mode"}`}</button> : <button className="btn btn-gold" disabled={!testContacts.length || !!lifecycleBusy} onClick={reviewActivation}>Activate Agent</button>;
-    return <div style={{padding:"28px 32px",maxWidth:1000,margin:"0 auto"}}>{activationReview && <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:30,background:"rgba(0,0,0,.65)",display:"grid",placeItems:"center",padding:20}}><div style={{maxWidth:560,padding:24,border:"1px solid var(--wire)",background:"var(--panel)"}}><h2 className="editorial" style={{fontSize:30}}>{selected?.lifecycle_status === "active" ? `Go Live with ${activationReview.assistant_name}?` : `Activate ${activationReview.assistant_name}?`}</h2><p>{selected?.lifecycle_status === "active" ? "Once live, this assistant can respond to eligible incoming WhatsApp messages using the activated approved information." : "Once activated, this assistant responds only to approved test contacts."}</p><button className="btn btn-gold" disabled={!!lifecycleBusy} onClick={selected?.lifecycle_status === "active" ? goLive : activate}>{lifecycleBusy ? "Saving…" : selected?.lifecycle_status === "active" ? "Go Live" : "Activate Agent"}</button> <button className="btn btn-wire" disabled={!!lifecycleBusy} onClick={()=>setActivationReview(null)}>Cancel</button></div></div>}<h1 className="editorial" style={{fontSize:42}}>{selected.name}</h1><p style={{color:"var(--gold2)"}}>{label}</p>{notice && <p role="status">{notice}</p>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20}}><div style={{padding:20,border:"1px solid var(--wire)",background:"var(--panel)"}}><p><strong>Knowledge sources:</strong> {selected.knowledge?.length ? selected.knowledge.map(item=>item.name).join(", ") : "None selected"}</p>{canManage && selected.lifecycle_status !== "active" && <><label className="label" style={{marginTop:16}}>Approved test contacts</label>{testContacts.length ? testContacts.map(contact=><div key={contact.id} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0"}}><span>{contact.phone_e164}</span><button className="btn btn-wire" onClick={()=>removeTestContact(contact)}>Remove</button></div>) : <p style={{color:"var(--mist)"}}>No approved test contacts yet.</p>}<input className="input" value={testContactPhone} onChange={e=>setTestContactPhone(e.target.value)} placeholder="+260…"/><button className="btn btn-wire" onClick={addTestContact}>Add test contact</button></>}{canManage && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>{selected.lifecycle_status === "active" && <button className="btn btn-gold" disabled={!!lifecycleBusy} onClick={pause}>{lifecycleBusy === "pause" ? "Pausing…" : "Pause Agent"}</button>}{lifecycleAction}{selected.lifecycle_status !== "active" && <button className="btn btn-wire" onClick={()=>start({},selected)}>Edit draft</button>}<button className="btn btn-wire" onClick={archive}>Archive</button></div>}<button className="btn btn-wire" onClick={()=>setSelected(null)}>Back</button></div><div style={{padding:20,border:"1px solid var(--wire)",background:"var(--panel)"}}><div className="mono">PRIVATE TEST AGENT</div>{messages.map((entry,index)=><p key={index}><strong>{entry.role==="user"?"You":selected.name}:</strong> {entry.content}</p>)}{canManage && <><textarea className="textarea" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a customer question…"/><button className="btn btn-gold" onClick={testAgent}>Test Agent</button></>}</div></div></div>;
+    return <div style={{padding:"28px 32px",maxWidth:1000,margin:"0 auto"}}>{activationReview && <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:30,background:"rgba(0,0,0,.65)",display:"grid",placeItems:"center",padding:20}}><div style={{maxWidth:560,padding:24,border:"1px solid var(--wire)",background:"var(--panel)"}}><h2 className="editorial" style={{fontSize:30}}>{selected?.lifecycle_status === "active" ? `Go Live with ${activationReview.assistant_name}?` : `Activate ${activationReview.assistant_name}?`}</h2><p>{selected?.lifecycle_status === "active" ? "Once live, this assistant can respond to eligible incoming WhatsApp messages using the activated approved information." : "Once activated, this assistant responds only to approved test contacts."}</p>{goLiveError && <p role="alert" style={{color:"var(--error-text)",margin:"12px 0"}}>{goLiveError}</p>}<button className="btn btn-gold" disabled={!!lifecycleBusy} onClick={selected?.lifecycle_status === "active" ? goLive : activate}>{lifecycleBusy ? "Saving…" : selected?.lifecycle_status === "active" ? "Go Live" : "Activate Agent"}</button> <button className="btn btn-wire" disabled={!!lifecycleBusy} onClick={()=>setActivationReview(null)}>Cancel</button></div></div>}<h1 className="editorial" style={{fontSize:42}}>{selected.name}</h1><p style={{color:"var(--gold2)"}}>{label}</p>{notice && <p role="status">{notice}</p>}<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20}}><div style={{padding:20,border:"1px solid var(--wire)",background:"var(--panel)"}}><p><strong>Knowledge sources:</strong> {selected.knowledge?.length ? selected.knowledge.map(item=>item.name).join(", ") : "None selected"}</p>{canManage && selected.lifecycle_status !== "active" && <><label className="label" style={{marginTop:16}}>Approved test contacts</label>{testContacts.length ? testContacts.map(contact=><div key={contact.id} style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0"}}><span>{contact.phone_e164}</span><button className="btn btn-wire" onClick={()=>removeTestContact(contact)}>Remove</button></div>) : <p style={{color:"var(--mist)"}}>No approved test contacts yet.</p>}<input className="input" value={testContactPhone} onChange={e=>setTestContactPhone(e.target.value)} placeholder="+260…"/><button className="btn btn-wire" onClick={addTestContact}>Add test contact</button></>}{canManage && <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:16}}>{selected.lifecycle_status === "active" && <button className="btn btn-gold" disabled={!!lifecycleBusy} onClick={pause}>{lifecycleBusy === "pause" ? "Pausing…" : "Pause Agent"}</button>}{lifecycleAction}{selected.lifecycle_status !== "active" && <button className="btn btn-wire" onClick={()=>start({},selected)}>Edit draft</button>}<button className="btn btn-wire" onClick={archive}>Archive</button></div>}<button className="btn btn-wire" onClick={()=>setSelected(null)}>Back</button></div><div style={{padding:20,border:"1px solid var(--wire)",background:"var(--panel)"}}><div className="mono">PRIVATE TEST AGENT</div>{messages.map((entry,index)=><p key={index}><strong>{entry.role==="user"?"You":selected.name}:</strong> {entry.content}</p>)}{canManage && <><textarea className="textarea" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a customer question…"/><button className="btn btn-gold" onClick={testAgent}>Test Agent</button></>}</div></div></div>;
   }
   return <div style={{padding:"28px 32px",maxWidth:1180,margin:"0 auto"}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div className="mono" style={{color:"var(--gold2)"}}>ZOE AI</div><h1 className="editorial" style={{fontSize:42}}>AI Agents</h1><p style={{color:"var(--cream2)"}}>Create private draft assistants from selected approved knowledge.</p></div>{canManage && <button className="btn btn-gold" onClick={()=>start(templates[0]||{key:"common_questions"})}>Create AI Agent</button>}</div>{notice && <p role="status">{notice}</p>}<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginTop:22}}>{templates.map(item=><div key={item.key} style={{padding:18,border:"1px solid var(--wire)",background:"var(--panel)"}}><h2 className="editorial" style={{fontSize:26}}>{item.title}</h2><p>{item.role}</p><p style={{color:"var(--mist)"}}>Hands to a person: {item.handoff}</p>{canManage && <button className="btn btn-gold" onClick={()=>start(item)}>Use template</button>}</div>)}</div><h2 className="editorial" style={{fontSize:32,marginTop:28}}>My Agents</h2>{agents.map(agent=><button key={agent.id} className="slink" onClick={()=>openAgent(agent)}>{agent.name} · {agent.lifecycle_status} · {agent.knowledge?.length || 0} approved knowledge item(s)</button>)}</div>;
 }

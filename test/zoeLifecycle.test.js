@@ -12,7 +12,7 @@ test('Zoe lifecycle UI keeps members read-only and labels every deployment state
   assert.match(source, /Draft — not active on WhatsApp\./)
   assert.match(source, /Testing on WhatsApp — Approved test contacts only/)
   assert.match(source, /Live on WhatsApp — Responding to eligible customers/)
-  assert.match(source, /Paused — not responding to WhatsApp\./)
+  assert.match(source, /Paused — not responding on WhatsApp\./)
 })
 
 test('Go Live is reviewed before its mutation and test-mode return remains explicit', () => {
@@ -32,7 +32,7 @@ test('Pause and Resume use explicit confirmation that preserves the current depl
 })
 
 test('Test-contact management is available only to managers and is not removed by lifecycle controls', () => {
-  assert.match(source, /canManage && <>\s*<label className="label"[^>]*>Approved test contacts<\/label>/)
+  assert.match(source, /canManage && selected.lifecycle_status !== "active" && <>\s*<label className="label"[^>]*>Approved test contacts<\/label>/)
   assert.match(source, /\/test-contacts/)
-  assert.match(source, /selected\.lifecycle_status!=="active"/)
+  assert.match(source, /selected\.lifecycle_status !== "active"/)
 })
