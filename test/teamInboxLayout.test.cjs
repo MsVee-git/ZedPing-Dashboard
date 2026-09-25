@@ -14,7 +14,7 @@ const pageHead = app.slice(app.indexOf('function PageHead('), app.indexOf('\n}',
 const fixture = `
 import React, {useState,useRef,useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
-import {useInboxScroll} from './src/useInboxScroll';
+import {useInboxScroll,useInboxComposer} from './src/useInboxScroll';
 import {ConversationHandlingStatus} from './src/ConversationHandlingStatus';
 import {MarketingOptOutBadge} from './src/MarketingConsent';
 const API='https://synthetic.invalid';
@@ -31,10 +31,18 @@ async function apiFetch(url,options){
  if(parts[3]==='reply')t.messages.push({id:'new',direction:'outbound',message_body:JSON.parse(options.body).message,status:'sent'});
  return {ok:true,json:async()=>structuredClone(t||{})};
 }
+window.appendFixtureMessage=()=>{threads.Long.messages.push({id:'incoming'+threads.Long.messages.length,message_body:'New incoming message',direction:'inbound'});};
 const Loader=()=> <p>Loading</p>, Empty=({msg})=><p>{msg}</p>;
 ${pageHead}
 ${inbox}
 window.fixtureRequests=[];
+function ScrollProbe(){
+ const [messages,setMessages]=useState(Array.from({length:30},(_,i)=>i));
+ const {historyRef,onHistoryScroll}=useInboxScroll('probe',messages,false);
+ window.appendProbe=()=>setMessages(old=>[...old,old.length]);
+ return <div ref={historyRef} onScroll={onHistoryScroll} id="probe" style={{height:200,overflowY:'auto'}}>{messages.map(i=><div key={i} style={{height:50}}>{i}</div>)}</div>;
+}
+window.mountProbe=()=>createRoot(document.getElementById('root')).render(<ScrollProbe/>);
 createRoot(document.getElementById('root')).render(<div className="main"><div style={{height:56,flexShrink:0}}>Synthetic workspace</div><TeamInbox customer={customer} user={user}/></div>);
 `
 
@@ -62,9 +70,15 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
       await page.locator('.inbox-composer').waitFor()
       const long = await page.evaluate(() => {
         const history=document.querySelector('.inbox-history'), form=document.querySelector('.inbox-composer');
-        return {bottom:form.getBoundingClientRect().bottom,viewport:innerHeight,scrollable:history.scrollHeight>history.clientHeight,atBottom:history.scrollHeight-history.scrollTop-history.clientHeight<3,pageHeight:document.documentElement.scrollHeight,pageWidth:document.documentElement.scrollWidth,width:innerWidth};
+        const bounds=history.getBoundingClientRect();
+        const visible=[...history.children].filter(el=>{const r=el.getBoundingClientRect();return r.top>=bounds.top && r.bottom<=bounds.bottom}).length;
+        return {historyHeight:history.clientHeight,panelHeight:history.parentElement.clientHeight,visible,textareaHeight:form.querySelector("textarea").clientHeight,bottom:form.getBoundingClientRect().bottom,viewport:innerHeight,scrollable:history.scrollHeight>history.clientHeight,atBottom:history.scrollHeight-history.scrollTop-history.clientHeight<3,pageHeight:document.documentElement.scrollHeight,pageWidth:document.documentElement.scrollWidth,width:innerWidth};
       })
       assert.ok(long.bottom<=height,`${width}x${height}: composer bottom ${long.bottom}`)
+      assert.ok(long.visible>=2,`multiple full messages required: ${JSON.stringify(long)}`)
+      assert.ok(long.historyHeight>=long.panelHeight*.5,`history must dominate: ${JSON.stringify(long)}`)
+      if(height>=768 && width>=1280) assert.ok(long.historyHeight>=long.panelHeight*.65,`desktop history target: ${JSON.stringify(long)}`)
+      assert.ok(long.textareaHeight>=50 && long.textareaHeight<=60)
       assert.ok(long.scrollable)
       assert.ok(long.atBottom)
       assert.ok(long.pageHeight<=height+2,`page grows: ${JSON.stringify(long)}`)
@@ -76,10 +90,13 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
       await page.locator('.inbox-details').evaluate(el=>{el.style.paddingBottom='800px'})
       assert.deepEqual(await page.locator('.inbox-composer').boundingBox(),before)
       await page.locator('.inbox-details').evaluate(el=>{el.style.paddingBottom=''})
+      await page.locator('.inbox-list').evaluate(el=>{el.style.paddingBottom='800px'})
+      assert.deepEqual(await page.locator('.inbox-composer').boundingBox(),before)
+      await page.locator('.inbox-list').evaluate(el=>{el.style.paddingBottom=''})
       await page.getByRole('button',{name:/Short/}).click()
       await page.locator('.inbox-history').getByText(/Synthetic message 1/).waitFor()
       const short = await page.evaluate(()=>({historyHeight:document.querySelector('.inbox-history').clientHeight,composerBottom:document.querySelector('.inbox-composer').getBoundingClientRect().bottom}))
-      assert.ok(short.historyHeight<220,`short chat has dead space: ${short.historyHeight}`)
+      assert.equal(short.historyHeight,long.historyHeight,`short history must fill the panel`)
       assert.ok(short.composerBottom<=height)
       if (width===1366 && process.env.INBOX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.INBOX_SCREENSHOT_DIR,'inbox-short-conversation.png')})
       await page.getByRole('button',{name:'Request human attention',exact:true}).click()
@@ -87,6 +104,10 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
       await page.getByRole('button',{name:'Take Conversation',exact:true}).click()
       await page.locator('.inbox-conversation').getByText('TEAM MEMBER HANDLING',{exact:true}).waitFor()
       assert.equal(await page.locator('.inbox-composer textarea').isEnabled(),true)
+      await page.locator('.inbox-composer textarea').fill('A longer draft\n'.repeat(20))
+      const expanded=await page.locator('.inbox-composer textarea').evaluate(el=>({height:el.clientHeight,scrolls:el.scrollHeight>el.clientHeight,bottom:el.closest('form').getBoundingClientRect().bottom,history:document.querySelector('.inbox-history').clientHeight}))
+      assert.ok(expanded.height>long.textareaHeight && expanded.height<=120)
+      assert.ok(expanded.scrolls && expanded.bottom<=height && expanded.history>=long.historyHeight-70)
       await page.locator('.inbox-composer textarea').fill('Synthetic staff reply')
       await page.getByRole('button',{name:'Send reply',exact:true}).click()
       await page.locator('.inbox-history').getByText('Synthetic staff reply',{exact:true}).waitFor()
@@ -102,6 +123,15 @@ test('real Inbox layout keeps long/short histories, composer and actions usable 
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth))
     await page.getByRole('button',{name:'Request human attention',exact:true}).scrollIntoViewIfNeeded()
     assert.ok(await page.getByRole('button',{name:'Request human attention',exact:true}).isVisible())
+    await page.setContent('<div id="root"></div>')
+    await page.evaluate(()=>window.mountProbe())
+    await page.locator('#probe').waitFor()
+    await page.evaluate(()=>window.appendProbe())
+    await page.waitForFunction(()=>{const e=document.querySelector('#probe');return e.children.length===31 && e.scrollHeight-e.scrollTop-e.clientHeight<3})
+    await page.locator('#probe').evaluate(e=>{e.scrollTop=150;e.dispatchEvent(new Event('scroll'))})
+    await page.evaluate(()=>window.appendProbe())
+    await page.waitForFunction(()=>document.querySelector('#probe').children.length===32)
+    assert.equal(await page.locator('#probe').evaluate(e=>e.scrollTop),150)
     assert.deepEqual(errors,[])
   } finally { await browser.close() }
 })

@@ -3,7 +3,7 @@
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.55fr) minmax(0, .7fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   height: var(--inbox-height, calc(100dvh - 240px));
   min-height: 0;
 }
@@ -11,11 +11,12 @@
 .inbox-list, .inbox-details { overflow-y: auto; overflow-wrap: anywhere; }
 .inbox-conversation { display: flex; flex-direction: column; overflow: hidden; }
 .inbox-conversation > :not(.inbox-history) { flex-shrink: 0; }
-.inbox-history { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.inbox-history { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
 .inbox-history > div { flex-shrink: 0; min-width: 0; overflow-wrap: anywhere; }
-.inbox-composer { flex-shrink: 0; padding: 14px; border-top: 1px solid var(--wire); background: var(--panel); }
-.inbox-composer .textarea { min-height: 64px; height: 72px; max-height: 120px; resize: vertical; }
-.inbox-composer > div { flex-wrap: wrap; }
+.inbox-composer { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--wire); background: var(--panel); }
+.inbox-composer .textarea { display: block; min-height: 56px; height: 56px; max-height: min(120px, 18dvh); line-height: 18px; padding: 9px 12px; resize: none; overflow-y: auto; }
+.inbox-composer > div > span { flex: 1; min-width: 0; }
+.inbox-composer button { flex-shrink: 0; }
 .inbox-details .input { max-width: 100%; }
 @media (max-width: 1000px) and (min-width: 769px) {
   .team-inbox { grid-template-columns: minmax(0, .75fr) minmax(0, 1.5fr) minmax(0, .75fr); gap: 8px; }
@@ -25,6 +26,6 @@
 @media (max-width: 768px) {
   .team-inbox { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; height: auto; }
   .team-inbox > .inbox-list { max-height: 180px; }
-  .team-inbox > .inbox-conversation { max-height: calc(100dvh - 80px); }
+  .team-inbox > .inbox-conversation { height: calc(100dvh - 80px); max-height: calc(100dvh - 80px); }
   .team-inbox > .inbox-details { max-height: 60dvh; }
 }

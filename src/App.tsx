@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastDetails } from "./BroadcastDetails";
-import { useInboxScroll } from "./useInboxScroll";
+import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
 import "./teamInbox.css";
 import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
@@ -1206,6 +1206,7 @@ function TeamInbox({ customer, user }) {
   const [replying, setReplying] = useState(false);
   const requestRef = useRef(0);
   const { gridRef, historyRef, onHistoryScroll } = useInboxScroll(selectedId, thread?.messages, threadLoading);
+  const composerRef = useInboxComposer(reply, selectedId, threadLoading);
 
   useEffect(() => {
     requestRef.current += 1;
@@ -1320,7 +1321,7 @@ function TeamInbox({ customer, user }) {
 
       <div className="card inbox-conversation">
         {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
-          <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
             <ConversationHandlingStatus conversation={active} />
             <MarketingOptOutBadge contact={active.contacts} />
@@ -1333,7 +1334,7 @@ function TeamInbox({ customer, user }) {
             </div>)}
           </div>
           <form onSubmit={sendReply} className="inbox-composer">
-            <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
+            <textarea ref={composerRef} rows={2} className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
               <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Zoe is not responding. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Zoe has stopped responding. A team member needs to respond." : "Take or reopen this conversation before replying."}</span>
               <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>

@@ -43,3 +43,20 @@ export function useInboxScroll(selectedId, messages, loading) {
   };
   return { gridRef, historyRef, onHistoryScroll };
 }
+
+// Size only the reply field; sending and conversation state stay with TeamInbox.
+export function useInboxComposer(reply, selectedId, loading) {
+  const composerRef = useRef(null);
+  useLayoutEffect(() => {
+    const field = composerRef.current;
+    if (!field) return;
+    const resize = () => {
+      field.style.height = 'auto';
+      field.style.height = `${field.scrollHeight + 2}px`;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [reply, selectedId, loading]);
+  return composerRef;
+}
