@@ -29,7 +29,7 @@ test('marketing badge is exceptional, independent of automation state, and absen
   const inbox = app.slice(app.indexOf('function TeamInbox'), app.indexOf('// ── AUTOMATIONS'))
   assert.match(inbox, /<MarketingOptOutBadge contact=\{conversation.contacts\}/)
   assert.match(inbox, /CONVERSATION DETAILS[\s\S]*<MarketingOptOutBadge contact=\{active.contacts\}/)
-  assert.match(inbox, /return "Automation active"/)
+  assert.match(inbox, /<ConversationHandlingStatus conversation=\{active\}/)
 })
 
 test('Review displays server-provided 5/4/1/0 and identifies the excluded contact', () => {

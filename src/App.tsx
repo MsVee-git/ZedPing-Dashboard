@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastDetails } from "./BroadcastDetails";
+import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
 import { WhatsAppConnection } from "./WhatsAppConnection";
 import { ChatbotFlows } from "./ChatbotFlows";
@@ -1285,12 +1286,7 @@ function TeamInbox({ customer, user }) {
   const isHuman = active?.control_mode === "human" && active?.status !== "resolved";
   const isAssignedToMe = active?.assigned_user_id === user?.id;
   const assigneeName = (conversation) => (members || []).find((member) => member.id === conversation?.assigned_user_id)?.name || (members || []).find((member) => member.id === conversation?.assigned_user_id)?.email || "another team member";
-  const labelFor = (conversation) => {
-    if (conversation.status === "resolved") return "Resolved";
-    if (conversation.control_mode === "needs_attention") return conversation.assigned_user_id ? `Assigned to ${assigneeName(conversation)}` : "Waiting for a team member";
-    if (conversation.control_mode === "human") return conversation.assigned_user_id === user?.id ? "You're handling this conversation" : `Assigned to ${assigneeName(conversation)}`;
-    return "Automation active";
-  };
+
 
   return <div className="pad" style={{ padding: 28 }}>
     <PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." />
@@ -1312,7 +1308,7 @@ function TeamInbox({ customer, user }) {
             <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{conversation.contacts?.phone_number || "No phone number"}</div>
             <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.last_message?.message_body || "No message preview"}</div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center", flexWrap: "wrap" }}>
-              <span className={conversation.status === "needs_attention" ? "badge badge-red" : conversation.status === "resolved" ? "badge badge-cream" : conversation.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(conversation)}</span>
+              <ConversationHandlingStatus conversation={conversation} />
               <MarketingOptOutBadge contact={conversation.contacts} />
               <span className="mono" style={{ color: "var(--mist)", fontSize: 9 }}>{conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleDateString() : "—"}</span>
             </div>
@@ -1323,7 +1319,7 @@ function TeamInbox({ customer, user }) {
         {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
           <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
-            <span className={active.status === "needs_attention" ? "badge badge-red" : active.status === "resolved" ? "badge badge-cream" : active.control_mode === "human" ? "badge badge-green" : "badge badge-blue"}>{labelFor(active)}</span>
+            <ConversationHandlingStatus conversation={active} />
             <MarketingOptOutBadge contact={active.contacts} />
           </div>
           {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
@@ -1336,7 +1332,7 @@ function TeamInbox({ customer, user }) {
           <form onSubmit={sendReply} style={{ padding: 14, borderTop: "1px solid var(--wire)" }}>
             <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
-              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Automation is paused. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Automation is paused while this conversation needs attention." : "Take or reopen this conversation before replying."}</span>
+              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Zoe is not responding. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Zoe has stopped responding. A team member needs to respond." : "Take or reopen this conversation before replying."}</span>
               <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>
             </div>
           </form>
@@ -1353,9 +1349,9 @@ function TeamInbox({ customer, user }) {
           {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
           <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
             <div className="label">Conversation status</div>
-            <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{labelFor(active)}</div>
-            {active.control_mode === "needs_attention" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused while this conversation needs attention.</div>}
-            {active.control_mode === "human" && active.status !== "resolved" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Automation is paused.</div>}
+            <ConversationHandlingStatus conversation={active} />
+            {active.control_mode === "needs_attention" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Zoe has stopped responding. A team member needs to respond.</div>}
+            {active.control_mode === "human" && active.status !== "resolved" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Zoe is not responding while a team member handles this chat.</div>}
           </div>
           <div style={{ display: "grid", gap: 9 }}>
             {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
