@@ -4,6 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastDetails } from "./BroadcastDetails";
+import { useInboxScroll } from "./useInboxScroll";
+import "./teamInbox.css";
 import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
 import { WhatsAppConnection } from "./WhatsAppConnection";
@@ -1203,6 +1205,7 @@ function TeamInbox({ customer, user }) {
   const [reply, setReply] = useState("");
   const [replying, setReplying] = useState(false);
   const requestRef = useRef(0);
+  const { gridRef, historyRef, onHistoryScroll } = useInboxScroll(selectedId, thread?.messages, threadLoading);
 
   useEffect(() => {
     requestRef.current += 1;
@@ -1296,8 +1299,8 @@ function TeamInbox({ customer, user }) {
       )}
     </div>
 
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, .9fr) minmax(340px, 1.55fr) minmax(210px, .7fr)", gap: 14, alignItems: "stretch" }} className="team-inbox">
-      <div className="card" style={{ minHeight: 540 }}>
+    <div ref={gridRef} className="team-inbox">
+      <div className="card inbox-list">
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, padding: "14px 16px", borderBottom: "1px solid var(--wire)" }}>{filter === "all" ? "CONVERSATIONS" : filter.toUpperCase()}</div>
         {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 16, color: "var(--error-text)", fontSize: 12 }}>We could not load conversations: {error}</div> : !filtered.length ? <Empty msg={list.length ? "No conversations match this filter" : "No conversations yet"} /> :
           filtered.map((conversation) => <button key={conversation.id} onClick={() => openConversation(conversation.id)} style={{ display: "block", width: "100%", border: "none", borderBottom: "1px solid var(--wire)", background: selectedId === conversation.id ? "rgba(184,146,42,.08)" : "transparent", color: "var(--cream)", textAlign: "left", padding: "14px 16px", cursor: "pointer" }}>
@@ -1315,7 +1318,7 @@ function TeamInbox({ customer, user }) {
           </button>)}
       </div>
 
-      <div className="card" style={{ minHeight: 540, display: "flex", flexDirection: "column" }}>
+      <div className="card inbox-conversation">
         {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
           <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
             <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
@@ -1323,13 +1326,13 @@ function TeamInbox({ customer, user }) {
             <MarketingOptOutBadge contact={active.contacts} />
           </div>
           {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
-          <div style={{ flex: 1, padding: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
             {(thread.messages || []).map((message) => <div key={message.id} style={{ alignSelf: message.direction === "outbound" ? "flex-end" : "flex-start", maxWidth: "80%", background: message.direction === "outbound" ? "rgba(184,146,42,.16)" : "rgba(255,255,255,.05)", border: "1px solid var(--wire)", padding: "10px 12px" }}>
               <div style={{ color: "var(--cream)", fontSize: 13, whiteSpace: "pre-wrap" }}>{message.message_body || "Unsupported message type"}</div>
               <div className="mono" style={{ color: "var(--mist)", fontSize: 9, marginTop: 7 }}>{message.direction === "outbound" ? "OUTBOUND" : "INBOUND"} · {message.status || "—"} · {message.created_at ? new Date(message.created_at).toLocaleString() : "—"}</div>
             </div>)}
           </div>
-          <form onSubmit={sendReply} style={{ padding: 14, borderTop: "1px solid var(--wire)" }}>
+          <form onSubmit={sendReply} className="inbox-composer">
             <textarea className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
               <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Zoe is not responding. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Zoe has stopped responding. A team member needs to respond." : "Take or reopen this conversation before replying."}</span>
@@ -1339,7 +1342,7 @@ function TeamInbox({ customer, user }) {
         </>}
       </div>
 
-      <div className="card" style={{ padding: 18, minHeight: 540 }}>
+      <div className="card inbox-details" style={{ padding: 18 }}>
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, marginBottom: 14 }}>CONVERSATION DETAILS</div>
         {!active ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose a conversation to see contact details and controls.</div> : <>
           <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{active.contacts?.name || "Unnamed contact"}</div>
