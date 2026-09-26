@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastDetails } from "./BroadcastDetails";
+import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
 import "./teamInbox.css";
 import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
@@ -1192,187 +1193,163 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
 function TeamInbox({ customer, user }) {
-  const [filter, setFilter] = useState("all");
-  const conversationEndpoint = filter === "mine" ? "/conversations?view=assigned_to_me" : filter === "unassigned" ? "/conversations?view=unassigned_human" : "/conversations";
-  const { data: conversations, loading, error, refetch } = useAPI(conversationEndpoint, [customer?.id, filter]);
-  const { data: members } = useAPI("/conversations/members", [customer?.id]);
-
-  const [selectedId, setSelectedId] = useState("");
-  const [thread, setThread] = useState(null);
-  const [threadLoading, setThreadLoading] = useState(false);
-  const [threadError, setThreadError] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [reply, setReply] = useState("");
-  const [replying, setReplying] = useState(false);
-  const requestRef = useRef(0);
-  const { historyRef, onHistoryScroll } = useInboxScroll(selectedId, thread?.messages, threadLoading);
-  const composerRef = useInboxComposer(reply, selectedId, threadLoading);
-
-  useEffect(() => {
-    requestRef.current += 1;
-    setSelectedId("");
-    setThread(null);
-    setThreadError("");
-    setActionError("");
-    setReply("");
-  }, [customer?.id]);
-
-  const openConversation = async (id) => {
-    const request = ++requestRef.current;
-    setSelectedId(id); setThread(null); setThreadError(""); setActionError(""); setReply(""); setThreadLoading(true);
+  const [filter,setFilter]=useState('all');
+  const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
+  const {rows,counts,members,loading,error}=queue;
+  const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
+  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
+  const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
+  const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id);
+  workspaceRef.current=customer?.id;
+  const {historyRef,onHistoryScroll}=useInboxScroll(selectedId,thread?.messages,threadLoading);
+  const active=thread?.conversation;
+  const canManageAssignment=['owner','admin'].includes(customer?.role);
+  const isHuman=active?.status==='open' && active?.control_mode==='human';
+  const isAssignedToMe=active?.assigned_user_id===user?.id;
+  const canReply=isHuman && (isAssignedToMe || canManageAssignment);
+  const composerRef=useInboxComposer(reply,selectedId,threadLoading,canReply);
+  const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
+  const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
+  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
+  useEffect(()=>{setSelection(new Set());setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
+  useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
+  const openConversation=async(id,markRead=true,force=false)=>{
+    if(id===selectedId && thread && markRead && !force)return;
+    const request=++requestRef.current,workspace=customer?.id;
+    setSelectedId(id);setThreadLoading(true);setThreadError('');setActionError('');
+    if(id!==selectedId){setThread(null);setReply('');}
     try {
-      const response = await apiFetch(`${API}/conversations/${id}`);
-      const payload = await response.json();
-      if (request !== requestRef.current) return;
-      setThread(payload);
-      await apiFetch(`${API}/conversations/${id}/read`, { method: "POST" });
-      refetch();
-    } catch (failure) {
-      if (request === requestRef.current) setThreadError(failure?.message || "We could not load this conversation.");
-    } finally {
-      if (request === requestRef.current) setThreadLoading(false);
-    }
+      const response=await apiFetch(`${API}/conversations/${id}`);const payload=await response.json();
+      if(!response.ok)throw new Error(payload.error || 'Unable to open conversation');
+      if(request!==requestRef.current || workspace!==workspaceRef.current)return;
+      setThread(payload);setThreadLoading(false);queue.patchRow(payload.conversation);
+      // Viewing an already-read thread does not need a write or full list reload.
+      if(markRead && payload.conversation.unread_count>0){
+        const read=await apiFetch(`${API}/conversations/${id}/read`,{method:'POST'});const data=await read.json();
+        if(!read.ok){if(request===requestRef.current)setActionError(data.error || 'Unable to mark read');return;}
+        if(request===requestRef.current && workspace===workspaceRef.current){setThread(old=>({...old,conversation:data.conversation}));queue.patchRow(data.conversation);queue.refreshCounts();}
+      }
+    } catch(failure){if(request===requestRef.current)setThreadError(failure.message || 'Unable to load conversation');}
+    finally{if(request===requestRef.current)setThreadLoading(false);}
   };
-
-  const refreshThread = async (id = selectedId) => {
-    if (!id) return;
-    await openConversation(id);
+  const runAction=async(path,options={})=>{
+    if(actionLock.current || !selectedId)return;
+    actionLock.current=true;setBusy(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
+    try{
+      const response=await apiFetch(`${API}/conversations/${selectedId}${path}`,{method:options.method||'POST',headers:{'Content-Type':'application/json'},...(options.body?{body:JSON.stringify(options.body)}:{})});
+      const payload=await response.json();if(!response.ok)throw new Error(payload.error || 'Unable to update conversation');
+      if(workspace!==workspaceRef.current)return;
+      if(request===requestRef.current && payload.conversation)setThread(old=>old?{...old,conversation:payload.conversation}:old);
+      await queue.refresh();
+    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+    finally{actionLock.current=false;setBusy(false);}
   };
-
-  const runAction = async (path, options = {}) => {
-    if (!selectedId) return;
-    setActionError("");
-    try {
-      const response = await apiFetch(`${API}/conversations/${selectedId}${path}`, {
-        method: options.method || "POST",
-        headers: { "Content-Type": "application/json" },
-        body: options.body ? JSON.stringify(options.body) : undefined
-      });
-      const payload = await response.json();
-      if (payload?.conversation) setThread((current) => current ? { ...current, conversation: payload.conversation } : current);
-      await refetch();
-      return payload;
-    } catch (failure) {
-      setActionError(failure?.message || "This action could not be completed.");
-      return null;
-    }
+  const sendReply=async event=>{
+    event.preventDefault();if(actionLock.current || !canReply || !reply.trim())return;
+    actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
+    try{
+      const response=await apiFetch(`${API}/conversations/${selectedId}/reply`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:reply})});
+      const payload=await response.json();if(!response.ok)throw new Error(payload.error || 'Unable to send reply');
+      if(workspace!==workspaceRef.current)return;
+      queue.patchRow(payload.conversation);
+      if(request===requestRef.current){setReply('');await openConversation(selectedId,false);}
+    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+    finally{actionLock.current=false;setReplying(false);}
   };
-
-  const sendReply = async (event) => {
-    event.preventDefault();
-    if (!reply.trim() || !selectedId) return;
-    setReplying(true); setActionError("");
-    try {
-      await apiFetch(`${API}/conversations/${selectedId}/reply`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: reply })
-      });
-      setReply("");
-      await refreshThread(selectedId);
-      await refetch();
-    } catch (failure) {
-      setActionError(failure?.message || "We could not send this reply.");
-    } finally {
-      setReplying(false);
-    }
+  const selectedRows=rows.filter(row=>selection.has(row.id));
+  const toggle=id=>setSelection(old=>{const next=new Set(old);if(next.has(id))next.delete(id);else if(next.size<200)next.add(id);return next;});
+  const selectView=async()=>{
+    if(actionLock.current)return;actionLock.current=true;setBusy(true);setActionError('');const workspace=customer?.id;
+    try{const items=await queue.selectView();if(workspace===workspaceRef.current)setSelection(new Set(items.map(row=>row.id)));}
+    catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+    finally{actionLock.current=false;setBusy(false);}
   };
-
-  const list = Array.isArray(conversations) ? conversations : [];
-  const filtered = list.filter((conversation) => {
-    if (filter === "unread") return Number(conversation.unread_count || 0) > 0;
-    if (filter === "attention") return conversation.status === "needs_attention" && conversation.control_mode === "needs_attention";
-    // The server has already derived these two views from the authenticated caller.
-    if (filter === "mine" || filter === "unassigned") return true;
-    if (filter === "resolved") return conversation.status === "resolved";
-    return true;
-  });
-  const active = thread?.conversation;
-  const canManageAssignment = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
-  const isHuman = active?.control_mode === "human" && active?.status !== "resolved";
-  const isAssignedToMe = active?.assigned_user_id === user?.id;
-  const assigneeName = (conversation) => (members || []).find((member) => member.id === conversation?.assigned_user_id)?.name || (members || []).find((member) => member.id === conversation?.assigned_user_id)?.email || "another team member";
-
-
-  return <div className="pad inbox-page" style={{ padding: 28 }}>
-    <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Keep customer conversations in one secure workspace." /></div>
-    <div className="inbox-filters" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-      {[["all","All"],["unread","Unread"],["attention","Needs Attention"],["mine","Assigned to Me"],["unassigned","Unassigned"],["resolved","Resolved"]].map(([id,label]) =>
-        <button key={id} className={filter===id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(id)} style={{ padding: "8px 10px", fontSize: 9 }}>{label}</button>
-      )}
+  const prepareBulk=(action,items=selectedRows)=>{
+    if(!items.length || busy)return;
+    setConfirmation({action,items:items.map(({id,updated_at,contacts})=>({id,updated_at,name:contacts?.name||contacts?.phone_number||'Conversation'})),assigned_user_id:assignee});
+  };
+  const confirmBulk=async()=>{
+    if(actionLock.current || !confirmation)return;
+    const job=confirmation,workspace=customer?.id,request=requestRef.current;actionLock.current=true;setBusy(true);setActionError('');
+    try{
+      const response=await apiFetch(`${API}/conversations/bulk`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:job.action,items:job.items.map(({id,updated_at})=>({id,updated_at})),assigned_user_id:job.assigned_user_id})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error || 'Unable to apply bulk action');
+      if(workspace!==workspaceRef.current)return;
+      setBulkResult(data.results.map(result=>({...result,name:job.items.find(item=>item.id===result.id)?.name})));
+      const changed=data.results.find(result=>result.id===selectedId && result.conversation);
+      if(changed&&request===requestRef.current)setThread(old=>old?{...old,conversation:changed.conversation}:old);
+      setSelection(new Set());setConfirmation(null);await queue.refresh();
+    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+    finally{actionLock.current=false;setBusy(false);}
+  };
+  return <div className="pad inbox-page">
+    <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Triage waiting chats and manage your team’s workload."/></div>
+    <div className="inbox-filters" role="group" aria-label="Inbox views">
+      {INBOX_VIEWS.map(([id,label])=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{label}{counts?` (${counts[id]??0})`:''}</button>)}
+      <button className="btn btn-wire" disabled={loading||busy||replying} onClick={()=>{queue.refresh();if(selectedId)openConversation(selectedId,true,true);}}>Refresh</button>
     </div>
-
+    {!counts && !loading && <div className="inbox-notice">Counts unavailable. Refresh to retry.</div>}
+    {selection.size>0 && <div className="inbox-bulk" role="group" aria-label="Selected conversation actions">
+      <strong>{selection.size} selected</strong>
+      {canManageAssignment && <><select aria-label="Bulk assignee" className="input" value={assignee} disabled={busy} onChange={e=>setAssignee(e.target.value)}><option value="">Choose team member</option>{members.map(member=><option key={member.id} value={member.id}>{member.name||member.email||member.id}</option>)}</select><button className="btn btn-wire" disabled={busy||!assignee} onClick={()=>prepareBulk('assign')}>Assign to member</button></>}
+      <button className="btn btn-wire" disabled={busy} onClick={()=>prepareBulk('assign_me')}>Assign to me</button>
+      <button className="btn btn-wire" disabled={busy} onClick={()=>prepareBulk('resolve')}>Resolve selected</button>
+      <button className="btn btn-wire" disabled={busy} onClick={()=>prepareBulk('reopen')}>Reopen selected</button>
+      <button className="btn btn-wire" disabled={busy} onClick={()=>setSelection(new Set())}>Clear selection</button>
+    </div>}
+    {actionError && <div className="inbox-notice" role="alert">{actionError}</div>}
     <div className="team-inbox">
       <div className="card inbox-list">
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, padding: "14px 16px", borderBottom: "1px solid var(--wire)" }}>{filter === "all" ? "CONVERSATIONS" : filter.toUpperCase()}</div>
-        {loading ? <Loader /> : error ? <div role="alert" style={{ padding: 16, color: "var(--error-text)", fontSize: 12 }}>We could not load conversations: {error}</div> : !filtered.length ? <Empty msg={list.length ? "No conversations match this filter" : "No conversations yet"} /> :
-          filtered.map((conversation) => <button key={conversation.id} onClick={() => openConversation(conversation.id)} style={{ display: "block", width: "100%", border: "none", borderBottom: "1px solid var(--wire)", background: selectedId === conversation.id ? "rgba(184,146,42,.08)" : "transparent", color: "var(--cream)", textAlign: "left", padding: "14px 16px", cursor: "pointer" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-              <strong style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.contacts?.name || conversation.contacts?.phone_number || "Unknown contact"}</strong>
-              {Number(conversation.unread_count || 0) > 0 && <span className="badge badge-gold">{conversation.unread_count}</span>}
-            </div>
-            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{conversation.contacts?.phone_number || "No phone number"}</div>
-            <div style={{ color: "var(--mist)", fontSize: 11, marginTop: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conversation.last_message?.message_body || "No message preview"}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 9, alignItems: "center", flexWrap: "wrap" }}>
-              <ConversationHandlingStatus conversation={conversation} />
-              <MarketingOptOutBadge contact={conversation.contacts} />
-              <span className="mono" style={{ color: "var(--mist)", fontSize: 9 }}>{conversation.last_message_at ? new Date(conversation.last_message_at).toLocaleDateString() : "—"}</span>
-            </div>
-          </button>)}
+        <div className="inbox-selection"><span>{rows.length} loaded</span><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select loaded (max 200)</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select this view (max 200)</button></div>
+        {error && <div role="alert" className="inbox-notice">{error}</div>}
+        {loading&&!rows.length?<Loader/>:!rows.length?<Empty msg="No conversations in this view"/>:rows.map(conversation=><div key={conversation.id} className="inbox-list-row">
+          <input type="checkbox" aria-label={`Select ${conversation.contacts?.name||conversation.contacts?.phone_number||conversation.id}`} checked={selection.has(conversation.id)} disabled={busy||(!selection.has(conversation.id)&&selection.size>=200)} onChange={()=>toggle(conversation.id)}/>
+          <button className={'inbox-open '+(selectedId===conversation.id?'selected':'')} onClick={()=>openConversation(conversation.id)}>
+            <strong>{conversation.contacts?.name||conversation.contacts?.phone_number||'Unknown contact'}</strong>
+            <span>{conversation.contacts?.phone_number}</span>
+            <span className="inbox-preview">{conversation.last_message?.message_body||'No message preview'}</span>
+            <ConversationHandlingStatus conversation={conversation}/>
+            <MarketingOptOutBadge contact={conversation.contacts}/>
+            <span>{conversation.last_message_at?new Date(conversation.last_message_at).toLocaleString():''}</span>
+            <span>{conversation.unread_count>0?`${conversation.unread_count} unread`:'Read'}{conversation.assigned_user_id?` · ${assigneeName(conversation)}`:''}</span>
+          </button>
+          <button className="text-button inbox-manage" disabled={busy} aria-label={`Manage ${conversation.contacts?.name||conversation.id}`} onClick={()=>setSelection(new Set([conversation.id]))}>Manage</button>
+        </div>)}
+        {queue.nextOffset!==null && <button className="btn btn-wire" disabled={loading||busy} onClick={()=>queue.loadMore()}>{loading?'Loading…':'Load more conversations'}</button>}
       </div>
-
       <div className="card inbox-conversation">
-        {!selectedId ? <Empty msg="Select a conversation to view messages" /> : threadLoading ? <Loader /> : threadError ? <div role="alert" style={{ padding: 18, color: "var(--error-text)", fontSize: 12 }}>{threadError}</div> : !active ? <Empty msg="Conversation unavailable" /> : <>
-          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--wire)", display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-            <div><div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{active.contacts?.name || active.contacts?.phone_number || "Customer"}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3 }}>{active.contacts?.phone_number || "No phone number"}</div></div>
-            <ConversationHandlingStatus conversation={active} />
-            <MarketingOptOutBadge contact={active.contacts} />
-          </div>
-          {actionError && <div role="alert" style={{ margin: 12, padding: 10, color: "var(--error-text)", border: "1px solid rgba(239,68,68,.3)", fontSize: 12 }}>{actionError}</div>}
+        {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
+          <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||'Customer'}</strong><small>{active.contacts?.phone_number}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
-            {(thread.messages || []).map((message) => <div key={message.id} style={{ alignSelf: message.direction === "outbound" ? "flex-end" : "flex-start", maxWidth: "80%", background: message.direction === "outbound" ? "rgba(184,146,42,.16)" : "rgba(255,255,255,.05)", border: "1px solid var(--wire)", padding: "10px 12px" }}>
-              <div style={{ color: "var(--cream)", fontSize: 13, whiteSpace: "pre-wrap" }}>{message.message_body || "Unsupported message type"}</div>
-              <div className="mono" style={{ color: "var(--mist)", fontSize: 9, marginTop: 7 }}>{message.direction === "outbound" ? "OUTBOUND" : "INBOUND"} · {message.status || "—"} · {message.created_at ? new Date(message.created_at).toLocaleString() : "—"}</div>
-            </div>)}
+            {(thread.messages||[]).map(message=><div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}><div style={{fontSize:13,whiteSpace:'pre-wrap'}}>{message.message_body||'Unsupported message type'}</div><div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>)}
           </div>
-          <form onSubmit={sendReply} className="inbox-composer">
-            <textarea ref={composerRef} rows={2} className="textarea" placeholder={isHuman ? "Write a reply…" : active?.status === "resolved" ? "Reopen this conversation before replying" : "Take this conversation before replying"} value={reply} disabled={!isHuman || replying} onChange={(event) => setReply(event.target.value)} />
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginTop: 10, alignItems: "center" }}>
-              <span style={{ color: "var(--mist)", fontSize: 10 }}>{isHuman ? "Zoe is not responding. Replies are sent through this workspace’s WhatsApp number." : active?.control_mode === "needs_attention" ? "Zoe has stopped responding. A team member needs to respond." : "Take or reopen this conversation before replying."}</span>
-              <button className="btn btn-gold" type="submit" disabled={!isHuman || !reply.trim() || replying}>{replying ? "Sending…" : "Send reply"}</button>
-            </div>
-          </form>
-        </>}
-      </div>
-
-      <div className="card inbox-details" style={{ padding: 18 }}>
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 1.5, marginBottom: 14 }}>CONVERSATION DETAILS</div>
-        {!active ? <div style={{ color: "var(--mist)", fontSize: 12 }}>Choose a conversation to see contact details and controls.</div> : <>
-          <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{active.contacts?.name || "Unnamed contact"}</div>
-          <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{active.contacts?.phone_number || "No phone number"}</div>
-          <div style={{ marginTop: 10 }}><MarketingOptOutBadge contact={active.contacts} /></div>
-          {active.contacts?.marketing_opted_out === true && <p style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.5 }}>Excluded from marketing broadcasts. Customer-service conversations and service automation remain available.</p>}
-          {active.contacts?.tag && <div className="badge badge-cream" style={{ marginTop: 10 }}>{active.contacts.tag}</div>}
-          <div style={{ borderTop: "1px solid var(--wire)", margin: "18px 0", paddingTop: 16 }}>
-            <div className="label">Conversation status</div>
-            <ConversationHandlingStatus conversation={active} />
-            {active.control_mode === "needs_attention" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Zoe has stopped responding. A team member needs to respond.</div>}
-            {active.control_mode === "human" && active.status !== "resolved" && <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 8 }}>Zoe is not responding while a team member handles this chat.</div>}
-          </div>
-          <div style={{ display: "grid", gap: 9 }}>
-            {active.control_mode === "automation" && active.status !== "resolved" && <button className="btn btn-wire" onClick={() => runAction("/handoff", { body: { reason: "Requested from Team Inbox" } })}>Request human attention</button>}
-            {active.control_mode === "needs_attention" && (!active.assigned_user_id || active.assigned_user_id === user?.id) && <button className="btn btn-gold" onClick={() => runAction("/take")}>Take Conversation</button>}
-            {active.status === "resolved" && <button className="btn btn-gold" onClick={() => runAction("/reopen")}>Reopen Conversation</button>}
-            {active.control_mode === "human" && active.status !== "resolved" && (isAssignedToMe || canManageAssignment) && <button className="btn btn-wire" onClick={() => runAction("/resolve")}>Resolve Conversation</button>}
-          </div>
-          {canManageAssignment && active.status !== "resolved" && <div style={{ borderTop: "1px solid var(--wire)", marginTop: 18, paddingTop: 16 }}>
-            <label className="label" htmlFor="conversation-assignee">Assign to</label>
-            <select id="conversation-assignee" className="input" value={active.assigned_user_id || ""} onChange={(event) => runAction("/assignment", { method: "PATCH", body: { assigned_user_id: event.target.value || null } })}>
-              <option value="">Waiting for a team member</option>
-              {(members || []).map((member) => <option key={member.id} value={member.id}>{member.name || member.email || member.id} · {member.role}</option>)}
-            </select>
+          {canReply?<form className="inbox-composer" onSubmit={sendReply}><textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply" placeholder="Write a reply…" value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}><button className="btn btn-gold" type="submit" disabled={replying||busy||!reply.trim()}>{replying?'Sending…':'Send reply'}</button></div></form>:<div className="inbox-control">
+            <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zoe is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
+            {canTake && <button className="btn btn-gold" disabled={busy} onClick={()=>active.control_mode==='automation'?setConfirmation({action:'take_zoe',id:active.id}):runAction('/take')}>Take Conversation</button>}
+            {active.status==='resolved' && <button className="btn btn-wire" disabled={busy} onClick={()=>runAction('/reopen')}>Reopen Conversation</button>}
           </div>}
         </>}
       </div>
+      <div className="card inbox-details" style={{padding:18}}>
+        <div className="label">CONVERSATION DETAILS</div>
+        {!active?<p>Choose a conversation for details.</p>:<><strong>{active.contacts?.name||'Customer'}</strong><p>{active.contacts?.phone_number}</p><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/>
+          {active.contacts?.marketing_opted_out === true && <p className="inbox-note">Excluded from marketing broadcasts. Customer-initiated support remains available.</p>}
+          <div>{active.contacts?.tag&&<span className="badge badge-cream">{active.contacts.tag}</span>}</div>
+          <p className="inbox-note">{active.assigned_user_id?`Assigned to ${assigneeName(active)}`:'No assigned team member'}</p>
+          {active.status==='needs_attention' && active.assigned_user_id && <p className="inbox-note">Assignment reserves this chat. The assignee still needs to take it before replying.</p>}
+          {isHuman&&(isAssignedToMe||canManageAssignment)&&<button className="btn btn-wire" disabled={busy} onClick={()=>runAction('/resolve')}>Resolve Conversation</button>}
+          {canManageAssignment && ['needs_attention','human'].includes(active.control_mode)&&active.status!=='resolved' && <><label className="label" htmlFor="conversation-assignee">Assign to</label><select id="conversation-assignee" className="input" disabled={busy} value={active.assigned_user_id||''} onChange={e=>runAction('/assignment',{method:'PATCH',body:{assigned_user_id:e.target.value||null}})}><option value="">No assigned team member</option>{members.map(member=><option key={member.id} value={member.id}>{member.name||member.email||member.id}</option>)}</select></>}
+        </>}
+      </div>
     </div>
+    {(confirmation||bulkResult) && <div className="modal-bg" role="dialog" aria-modal="true" aria-label={bulkResult?'Conversation action results':'Confirm conversation action'}><div className="modal">
+      {bulkResult?<><h3>Conversation action results</h3><p>{bulkResult.filter(result=>result.outcome==='applied').length} applied · {bulkResult.filter(result=>result.outcome!=='applied').length} not changed</p><ul>{bulkResult.map(result=><li key={result.id}>{result.name}: {result.outcome}{result.reason?` — ${result.reason}`:''}{result.warning?` — ${result.warning}`:''}</li>)}</ul><button className="btn btn-wire" onClick={()=>setBulkResult(null)}>Close results</button></>:<>
+        <h3>{confirmation.action==='take_zoe'?'Take this conversation?':`${confirmation.action.replace('_',' ')} — ${confirmation.items.length} selected`}</h3>
+        <p>{confirmation.action==='take_zoe'?'Zoe will stop handling this chat and it will be assigned to you.':confirmation.action==='resolve'?'Resolve eligible waiting or human-handled chats. Their next inbound message returns to normal routing. Zoe-handled chats are not resolved.':confirmation.action==='reopen'?'Only resolved chats will reopen, under your human handling. Zoe stays paused until resolution.':'Assign eligible waiting or human-handled chats. Assignment does not take control or change Zoe handling.'}</p>
+        {confirmation.action!=='take_zoe'&&<p>Changed, unauthorized, or ineligible chats will be reported separately.</p>}
+        <div style={{display:'flex',gap:8,marginTop:16}}><button className="btn btn-wire" disabled={busy} onClick={()=>setConfirmation(null)}>Cancel</button><button className="btn btn-gold" disabled={busy} onClick={()=>{if(confirmation.action==='take_zoe'){if(confirmation.id!==selectedId){setConfirmation(null);return;}setConfirmation(null);runAction('/take',{body:{from_automation:true}});}else confirmBulk();}}>{busy?'Applying…':'Confirm action'}</button></div>
+      </>}
+    </div></div>}
   </div>
 }
 

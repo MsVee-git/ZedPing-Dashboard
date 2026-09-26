@@ -29,7 +29,7 @@ export function useInboxScroll(selectedId, messages, loading) {
 }
 
 // Size only the reply field; sending and conversation state stay with TeamInbox.
-export function useInboxComposer(reply, selectedId, loading) {
+export function useInboxComposer(reply, selectedId, loading, controlMode) {
   const composerRef = useRef(null);
   useLayoutEffect(() => {
     const field = composerRef.current;
@@ -41,6 +41,6 @@ export function useInboxComposer(reply, selectedId, loading) {
     resize();
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
-  }, [reply, selectedId, loading]);
+  }, [reply, selectedId, loading, controlMode]);
   return composerRef;
 }

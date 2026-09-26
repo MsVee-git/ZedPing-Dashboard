@@ -40,3 +40,26 @@
   .team-inbox > .inbox-conversation { height: calc(100dvh - 80px); max-height: calc(100dvh - 80px); }
   .team-inbox > .inbox-details { max-height: 60dvh; }
 }
+.inbox-filters,.inbox-bulk { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px; }
+.inbox-filters .btn,.inbox-bulk .btn { padding:6px 9px; font-size:11px; min-height:34px; }
+.inbox-bulk { padding:8px; border:1px solid var(--wire); border-radius:8px; font-size:12px; }
+.inbox-bulk .input { width:165px; min-height:34px; padding:6px; }
+.inbox-selection { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding:10px; font-size:11px; border-bottom:1px solid var(--wire); }
+.inbox-list-row { display:grid; grid-template-columns:20px minmax(0,1fr); padding:8px; gap:6px; border-bottom:1px solid var(--wire); }
+.inbox-list-row > input { align-self:start; margin-top:8px; }
+.inbox-open { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0; border:0; padding:6px; background:transparent; text-align:left; color:var(--cream); cursor:pointer; }
+.inbox-open.selected { background:var(--panel2); border-radius:8px; }
+.inbox-open > span:not(.badge) { font-size:11px; color:var(--mist); max-width:100%; }
+.inbox-open .inbox-preview { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.inbox-manage { grid-column:2; justify-self:start; }
+.inbox-conversation-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px; padding:8px 12px; border-bottom:1px solid var(--wire); font-size:13px; }
+.inbox-conversation-header small { display:block; color:var(--mist); }
+.inbox-control { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 12px; border-top:1px solid var(--wire); font-size:12px; }
+.inbox-control .btn { padding:6px 10px; flex-shrink:0; }
+.inbox-note { font-size:12px; margin:12px 0; }
+.inbox-notice { padding:8px; font-size:12px; color:var(--error-text); }
+.inbox-page > .modal-bg .modal { max-height:85dvh; overflow-y:auto; }
+@media(max-width:768px) {
+ .inbox-control { flex-wrap:wrap; }
+ .inbox-bulk { position:sticky; top:0; z-index:3; background:var(--panel); }
+}
