@@ -101,8 +101,9 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
           ...(current.finishWabaId ? { finish_waba_id: current.finishWabaId } : {})
         })
       });
-      await response.json();
+      const completed = await response.json();
       pending.current = { session: null, code: null, phoneNumberId: null, finishWabaId: null };
+      if (completed?.connection?.status !== "connected" || completed?.connection?.provisioning_state !== "operational") throw new Error("WhatsApp provisioning needs attention. You can retry safely.");
       setPhase("complete");
       setMessage("WhatsApp is connected to this workspace.");
       await refresh();
@@ -220,9 +221,17 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
   const busy = ["preparing", "meta", "validating"].includes(phase);
 
+  const retryProvisioning = async () => {
+    if (!canManage || !connection?.id || connection?.provisioning_state !== "failed") return;
+    setPhase("validating"); setMessage("Registering your phone with WhatsApp…");
+    try { await apiFetch(`${API}/whatsapp-connections/${connection.id}/provision/retry`, { method: "POST" }); setPhase("complete"); setMessage("WhatsApp is connected to this workspace."); await refresh(); }
+    catch (error) { setPhase("error"); setMessage(error?.message || "WhatsApp provisioning needs attention. Please try again."); await refresh(); }
+  };
+
   if (loading) return <div className="card" style={{ padding: 24, marginBottom: 16 }}><div className="spin" /></div>;
 
-  const statusLabel = connection?.status === "connected" ? "Connected" : connection ? "Connection needs attention" : "Not connected";
+  const operational = connection?.status === "connected" && connection?.provisioning_state !== "failed";
+  const statusLabel = operational ? "Connected" : connection?.provisioning_state === "registering" ? "Activating WhatsApp…" : connection?.provisioning_state === "failed" ? "Connection needs attention" : connection ? "Registering phone…" : "Not connected";
 
   return (
     <section className="card-gold" style={{ padding: 24, marginBottom: 16 }} aria-labelledby="whatsapp-connection-heading">
@@ -231,17 +240,18 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
           <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>WhatsApp connection</div>
           <h3 id="whatsapp-connection-heading" className="editorial" style={{ color: "var(--cream)", fontSize: 25, fontWeight: 600 }}>Connect your business number.</h3>
         </div>
-        <span className={connection?.status === "connected" ? "badge badge-green" : "badge badge-cream"}>{statusLabel}</span>
+        <span className={operational ? "badge badge-green" : "badge badge-cream"}>{statusLabel}</span>
       </div>
 
       {connection ? (
         <div style={{ marginTop: 18, padding: 16, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}>
           <div style={{ color: "var(--cream)", fontSize: 14, fontWeight: 600 }}>{connection.phone_number}</div>
           <div style={{ color: "var(--mist)", fontSize: 12, marginTop: 5 }}>
-            {connection.status === "connected"
+            {operational
               ? `Connected to ${customer?.business_name || "this workspace"}.`
-              : "This workspace has an existing connection that needs support. Contact ZedPing before reconnecting."}
+              : connection.provisioning_state === "failed" ? "Business account and phone were verified, but WhatsApp activation needs a safe retry." : "Business account connected ✓  Phone added ✓  Phone verified ✓  Registering phone…"}
           </div>
+          {connection.provisioning_state === "failed" && canManage && <button type="button" className="btn btn-wire" onClick={retryProvisioning} disabled={busy} style={{ marginTop: 12 }}>{busy ? "Retrying…" : "Retry activation"}</button>}
         </div>
       ) : (
         <>
