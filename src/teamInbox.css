@@ -26,6 +26,10 @@
 .inbox-history > div { flex-shrink: 0; min-width: 0; overflow-wrap: anywhere; }
 .inbox-image { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 8px; background: #101010; }
 .inbox-media-state { min-width: 190px; padding: 22px 14px; color: var(--mist); background: rgba(255,255,255,.035); border-radius: 8px; font-size: 13px; }
+.inbox-document,.inbox-location { display:flex; flex-direction:column; gap:5px; min-width:220px; padding:10px; border:1px solid var(--wire); border-radius:8px; background:rgba(255,255,255,.035); font-size:13px; }
+.inbox-document > span,.inbox-location > div { color:var(--mist); overflow-wrap:anywhere; }
+.inbox-document .text-button { width:max-content; margin-top:3px; }
+.inbox-location a { color:var(--gold2); width:max-content; }
 .inbox-composer { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--wire); background: var(--panel); }
 .inbox-composer .textarea { display: block; min-height: 56px; height: 56px; max-height: min(120px, 18dvh); line-height: 18px; padding: 9px 12px; resize: none; overflow-y: auto; }
 .inbox-composer > div > span { flex: 1; min-width: 0; }

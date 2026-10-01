@@ -6,10 +6,10 @@ const source = fs.readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8
 const inbox = source.slice(source.indexOf('function TeamInbox'), source.indexOf('// ── AUTOMATIONS'))
 
 test('Team Inbox renders inbound image media through the authenticated message proxy', () => {
-  assert.match(inbox, /message\.inbound_media\?\.type==='image'/)
-  assert.match(inbox, /<InboundImage conversationId=\{active\.id\} messageId=\{message\.id\} apiFetch=\{apiFetch\}\/>/)
+  assert.match(inbox, /const media=message\.inbound_media\|\|message\.outbound_media/)
+  assert.match(inbox, /<InboxMedia conversationId=\{active\.id\} messageId=\{message\.id\} media=\{media\}/)
   assert.match(source, /\/conversations\/\$\{conversationId\}\/messages\/\$\{messageId\}\/media/)
-  assert.match(source, /alt="Incoming WhatsApp image"/)
+  assert.match(source, /Incoming'\} WhatsApp image/)
   assert.doesNotMatch(source, /message\.inbound_media\.media_id/)
 })
 

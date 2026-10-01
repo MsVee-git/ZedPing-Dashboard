@@ -1197,9 +1197,9 @@ function TeamInbox({ customer, user }) {
   const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
   const {rows,counts,members,loading,error}=queue;
   const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
-  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
+  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
   const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
-  const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id);
+  const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
   const {historyRef,onHistoryScroll}=useInboxScroll(selectedId,thread?.messages,threadLoading);
   const active=thread?.conversation;
@@ -1210,7 +1210,7 @@ function TeamInbox({ customer, user }) {
   const composerRef=useInboxComposer(reply,selectedId,threadLoading,canReply);
   const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
   const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
-  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
+  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
   useEffect(()=>{setSelection(new Set());setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
   useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
   const openConversation=async(id,markRead=true,force=false)=>{
@@ -1254,6 +1254,25 @@ function TeamInbox({ customer, user }) {
       queue.patchRow(payload.conversation);
       if(request===requestRef.current){setReply('');await openConversation(selectedId,false);}
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+    finally{actionLock.current=false;setReplying(false);}
+  };
+  const sendAttachment=async event=>{
+    event.preventDefault();if(actionLock.current||!canReply||!attachment?.file)return;
+    actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
+    try{
+      const body=new FormData();body.append('file',attachment.file);body.append('type',attachment.type);if(reply.trim())body.append('caption',reply.trim());
+      const response=await apiFetch(`${API}/conversations/${selectedId}/media`,{method:'POST',body});const payload=await response.json();
+      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setReply('');setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';await openConversation(selectedId,false,true);}
+    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message||'Unable to send this attachment');}
+    finally{actionLock.current=false;setReplying(false);}
+  };
+  const sendLocation=async event=>{
+    event.preventDefault();if(actionLock.current||!canReply||!locationDraft)return;
+    actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
+    try{
+      const response=await apiFetch(`${API}/conversations/${selectedId}/location`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(locationDraft)});const payload=await response.json();
+      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setLocationDraft(null);await openConversation(selectedId,false,true);}
+    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message||'Unable to send this location');}
     finally{actionLock.current=false;setReplying(false);}
   };
   const selectedRows=rows.filter(row=>selection.has(row.id));
@@ -1321,9 +1340,9 @@ function TeamInbox({ customer, user }) {
         {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
           <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||'Customer'}</strong><small>{active.contacts?.phone_number}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
-            {(thread.messages||[]).map(message=><div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{message.inbound_media?.type==='image'?<InboundImage conversationId={active.id} messageId={message.id} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:message.inbound_media?.type==='image'?8:0}}>{message.message_body}</div>:!message.inbound_media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>)}
+            {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:media?.type==='image'?8:0}}>{message.message_body}</div>:!media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>})}
           </div>
-          {canReply?<form className="inbox-composer" onSubmit={sendReply}><textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply" placeholder="Write a reply…" value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}><button className="btn btn-gold" type="submit" disabled={replying||busy||!reply.trim()}>{replying?'Sending…':'Send reply'}</button></div></form>:<div className="inbox-control">
+          {canReply?<form className="inbox-composer" onSubmit={attachment?sendAttachment:sendReply}><textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply or caption" placeholder={attachment?'Add an optional caption…':'Write a reply…'} value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><input ref={attachmentInputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={e=>{const file=e.target.files?.[0];if(!file)return;setAttachment({file,type:file.type.startsWith('image/')?'image':'document'});setLocationDraft(null);}}/><div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:6,flexWrap:'wrap'}}><div style={{display:'flex',gap:8}}><button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>attachmentInputRef.current?.click()}>{attachment?`Attached: ${attachment.file.name}`:'Attach image or document'}</button>{attachment&&<button className="text-button" type="button" disabled={replying||busy} onClick={()=>{setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';}}>Remove</button>}<button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>{setLocationDraft({latitude:'',longitude:'',name:'',address:''});setAttachment(null);}}>Send location</button></div><button className="btn btn-gold" type="submit" disabled={replying||busy||(!attachment&&!reply.trim())}>{replying?'Sending…':attachment?'Send attachment':'Send reply'}</button></div></form>:<div className="inbox-control">
             <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zoe is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
             {canTake && <button className="btn btn-gold" disabled={busy} onClick={()=>active.control_mode==='automation'?setConfirmation({action:'take_zoe',id:active.id}):runAction('/take')}>Take Conversation</button>}
             {active.status==='resolved' && <button className="btn btn-wire" disabled={busy} onClick={()=>runAction('/reopen')}>Reopen Conversation</button>}
@@ -1342,6 +1361,7 @@ function TeamInbox({ customer, user }) {
         </>}
       </div>
     </div>
+    {locationDraft&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Send location"><form className="modal" onSubmit={sendLocation}><h3>Send location</h3><p>Share a precise location with this customer.</p><label className="label">Latitude<input required className="input" inputMode="decimal" value={locationDraft.latitude} onChange={e=>setLocationDraft(old=>({...old,latitude:e.target.value}))}/></label><label className="label">Longitude<input required className="input" inputMode="decimal" value={locationDraft.longitude} onChange={e=>setLocationDraft(old=>({...old,longitude:e.target.value}))}/></label><label className="label">Place name (optional)<input className="input" value={locationDraft.name} onChange={e=>setLocationDraft(old=>({...old,name:e.target.value}))}/></label><label className="label">Address (optional)<input className="input" value={locationDraft.address} onChange={e=>setLocationDraft(old=>({...old,address:e.target.value}))}/></label><div style={{display:'flex',gap:8,marginTop:16}}><button className="btn btn-wire" type="button" disabled={replying} onClick={()=>setLocationDraft(null)}>Cancel</button><button className="btn btn-gold" disabled={replying}>{replying?'Sending…':'Send location'}</button></div></form></div>}
     {(confirmation||bulkResult) && <div className="modal-bg" role="dialog" aria-modal="true" aria-label={bulkResult?'Conversation action results':'Confirm conversation action'}><div className="modal">
       {bulkResult?<><h3>Conversation action results</h3><p>{bulkResult.filter(result=>result.outcome==='applied').length} applied · {bulkResult.filter(result=>result.outcome!=='applied').length} not changed</p><ul>{bulkResult.map(result=><li key={result.id}>{result.name}: {result.outcome}{result.reason?` — ${result.reason}`:''}{result.warning?` — ${result.warning}`:''}</li>)}</ul><button className="btn btn-wire" onClick={()=>setBulkResult(null)}>Close results</button></>:<>
         <h3>{confirmation.action==='take_zoe'?'Take this conversation?':`${confirmation.action.replace('_',' ')} — ${confirmation.items.length} selected`}</h3>
@@ -1353,9 +1373,10 @@ function TeamInbox({ customer, user }) {
   </div>
 }
 
-function InboundImage({ conversationId, messageId, apiFetch }) {
+function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {
   const [state,setState]=useState({ status:'loading',url:'' });
   useEffect(()=>{
+    if(media.type!=='image')return;
     let active=true,url='';
     (async()=>{
       try {
@@ -1367,10 +1388,19 @@ function InboundImage({ conversationId, messageId, apiFetch }) {
       } catch (_) { if(active)setState({status:'unavailable',url:''}); }
     })();
     return()=>{active=false;if(url)URL.revokeObjectURL(url)};
-  },[apiFetch,conversationId,messageId]);
+  },[apiFetch,conversationId,messageId,media.type]);
+  const download=async()=>{
+    try { const response=await apiFetch(`${API}/conversations/${conversationId}/messages/${messageId}/media`,{cache:'no-store'});const blob=await response.blob();if(!blob.size)throw new Error('Attachment unavailable');const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=media.filename||'document';anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
+    catch (_) { setState({status:'unavailable',url:''}); }
+  };
+  if(media.type==='location'){
+    const latitude=Number(media.latitude),longitude=Number(media.longitude);const label=media.name||media.address||'Shared location';
+    return <div className="inbox-location"><strong>{label}</strong>{media.address&&media.name?<div>{media.address}</div>:null}<div className="mono">{latitude.toFixed(6)}, {longitude.toFixed(6)}</div><a href={`https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`} target="_blank" rel="noreferrer">Open in maps</a></div>;
+  }
+  if(media.type==='document')return <div className="inbox-document"><strong>Document</strong><span>{media.filename||'Attachment'}</span>{media.caption&&<span>{media.caption}</span>}<button className="text-button" type="button" onClick={download}>Download document</button>{state.status==='unavailable'&&<span role="status">Document unavailable</span>}</div>;
   if(state.status==='loading')return <div className="inbox-media-state">Loading image…</div>;
   if(state.status==='unavailable')return <div className="inbox-media-state" role="status">Image unavailable</div>;
-  return <img className="inbox-image" src={state.url} alt="Incoming WhatsApp image"/>;
+  return <img className="inbox-image" src={state.url} alt={`${direction==='outbound'?'Outgoing':'Incoming'} WhatsApp image`}/>;
 }
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
