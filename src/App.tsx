@@ -1197,7 +1197,7 @@ function TeamInbox({ customer, user }) {
   const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
   const {rows,counts,members,loading,error}=queue;
   const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
-  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
+  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[replyTarget,setReplyTarget]=useState(null),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
   const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
   const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
@@ -1210,7 +1210,7 @@ function TeamInbox({ customer, user }) {
   const composerRef=useInboxComposer(reply,selectedId,threadLoading,canReply);
   const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
   const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
-  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
+  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setReplyTarget(null);setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
   useEffect(()=>{setSelection(new Set());setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
   useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
   const openConversation=async(id,markRead=true,force=false)=>{
@@ -1248,11 +1248,11 @@ function TeamInbox({ customer, user }) {
     event.preventDefault();if(actionLock.current || !canReply || !reply.trim())return;
     actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
     try{
-      const response=await apiFetch(`${API}/conversations/${selectedId}/reply`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:reply})});
+      const response=await apiFetch(`${API}/conversations/${selectedId}/reply`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:reply,reply_to_message_id:replyTarget?.id||null})});
       const payload=await response.json();if(!response.ok)throw new Error(payload.error || 'Unable to send reply');
       if(workspace!==workspaceRef.current)return;
       queue.patchRow(payload.conversation);
-      if(request===requestRef.current){setReply('');await openConversation(selectedId,false);}
+      if(request===requestRef.current){setReply('');setReplyTarget(null);await openConversation(selectedId,false);}
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setReplying(false);}
   };
@@ -1260,9 +1260,9 @@ function TeamInbox({ customer, user }) {
     event.preventDefault();if(actionLock.current||!canReply||!attachment?.file)return;
     actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
     try{
-      const body=new FormData();body.append('file',attachment.file);body.append('type',attachment.type);if(reply.trim())body.append('caption',reply.trim());
+      const body=new FormData();body.append('file',attachment.file);body.append('type',attachment.type);if(reply.trim())body.append('caption',reply.trim());if(replyTarget?.id)body.append('reply_to_message_id',replyTarget.id);
       const response=await apiFetch(`${API}/conversations/${selectedId}/media`,{method:'POST',body});const payload=await response.json();
-      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setReply('');setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';await openConversation(selectedId,false,true);}
+      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setReply('');setReplyTarget(null);setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';await openConversation(selectedId,false,true);}
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message||'Unable to send this attachment');}
     finally{actionLock.current=false;setReplying(false);}
   };
@@ -1270,8 +1270,8 @@ function TeamInbox({ customer, user }) {
     event.preventDefault();if(actionLock.current||!canReply||!locationDraft)return;
     actionLock.current=true;setReplying(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
     try{
-      const response=await apiFetch(`${API}/conversations/${selectedId}/location`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(locationDraft)});const payload=await response.json();
-      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setLocationDraft(null);await openConversation(selectedId,false,true);}
+      const response=await apiFetch(`${API}/conversations/${selectedId}/location`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...locationDraft,reply_to_message_id:replyTarget?.id||null})});const payload=await response.json();
+      if(workspace!==workspaceRef.current)return;queue.patchRow(payload.conversation);if(request===requestRef.current){setReplyTarget(null);setLocationDraft(null);await openConversation(selectedId,false,true);}
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message||'Unable to send this location');}
     finally{actionLock.current=false;setReplying(false);}
   };
@@ -1340,9 +1340,9 @@ function TeamInbox({ customer, user }) {
         {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
           <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||'Customer'}</strong><small>{active.contacts?.phone_number}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
-            {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:media?.type==='image'?8:0}}>{message.message_body}</div>:!media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>})}
+            {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div id={`message-${message.id}`} key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{message.reply_to?<QuotedMessage message={message.reply_to}/>:null}{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:media?.type==='image'?8:0}}>{message.message_body}</div>:!media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginTop:7}}><div className="mono" style={{fontSize:9,color:'var(--mist)'}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div>{canReply&&<button type="button" className="text-button" disabled={replying||busy} onClick={()=>{setReplyTarget(message);setLocationDraft(null);}}>Reply</button>}</div></div>})}
           </div>
-          {canReply?<form className="inbox-composer" onSubmit={attachment?sendAttachment:sendReply}><textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply or caption" placeholder={attachment?'Add an optional caption…':'Write a reply…'} value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><input ref={attachmentInputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={e=>{const file=e.target.files?.[0];if(!file)return;setAttachment({file,type:file.type.startsWith('image/')?'image':'document'});setLocationDraft(null);}}/><div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:6,flexWrap:'wrap'}}><div style={{display:'flex',gap:8}}><button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>attachmentInputRef.current?.click()}>{attachment?`Attached: ${attachment.file.name}`:'Attach image or document'}</button>{attachment&&<button className="text-button" type="button" disabled={replying||busy} onClick={()=>{setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';}}>Remove</button>}<button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>{setLocationDraft({latitude:'',longitude:'',name:'',address:''});setAttachment(null);}}>Send location</button></div><button className="btn btn-gold" type="submit" disabled={replying||busy||(!attachment&&!reply.trim())}>{replying?'Sending…':attachment?'Send attachment':'Send reply'}</button></div></form>:<div className="inbox-control">
+          {canReply?<form className="inbox-composer" onSubmit={attachment?sendAttachment:sendReply}>{replyTarget&&<div className="inbox-reply-target"><QuotedMessage message={replyTarget}/><button className="text-button" type="button" disabled={replying} onClick={()=>setReplyTarget(null)}>Cancel reply</button></div>}<textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply or caption" placeholder={attachment?'Add an optional caption…':'Write a reply…'} value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><input ref={attachmentInputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={e=>{const file=e.target.files?.[0];if(!file)return;setAttachment({file,type:file.type.startsWith('image/')?'image':'document'});setLocationDraft(null);}}/><div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:6,flexWrap:'wrap'}}><div style={{display:'flex',gap:8}}><button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>attachmentInputRef.current?.click()}>{attachment?`Attached: ${attachment.file.name}`:'Attach image or document'}</button>{attachment&&<button className="text-button" type="button" disabled={replying||busy} onClick={()=>{setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';}}>Remove</button>}<button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>{setLocationDraft({latitude:'',longitude:'',name:'',address:''});setAttachment(null);}}>Send location</button></div><button className="btn btn-gold" type="submit" disabled={replying||busy||(!attachment&&!reply.trim())}>{replying?'Sending…':attachment?'Send attachment':'Send reply'}</button></div></form>:<div className="inbox-control">
             <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zoe is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
             {canTake && <button className="btn btn-gold" disabled={busy} onClick={()=>active.control_mode==='automation'?setConfirmation({action:'take_zoe',id:active.id}):runAction('/take')}>Take Conversation</button>}
             {active.status==='resolved' && <button className="btn btn-wire" disabled={busy} onClick={()=>runAction('/reopen')}>Reopen Conversation</button>}
@@ -1371,6 +1371,18 @@ function TeamInbox({ customer, user }) {
       </>}
     </div></div>}
   </div>
+}
+
+function QuotedMessage({ message }) {
+  const media=message?.inbound_media||message?.outbound_media;
+  const summary=message?.message_body||(
+    media?.type==='image'?(media.caption||'Image'):
+    media?.type==='document'?`Document: ${media.filename||'Attachment'}`:
+    media?.type==='location'?`Location: ${media.name||media.address||'Shared location'}`:
+    'Original message unavailable'
+  );
+  const jump=()=>{if(message?.id)document.getElementById(`message-${message.id}`)?.scrollIntoView({behavior:'smooth',block:'center'});};
+  return <button type="button" className="inbox-quote" onClick={jump}><span>Replying to</span><strong>{summary}</strong></button>;
 }
 
 function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {

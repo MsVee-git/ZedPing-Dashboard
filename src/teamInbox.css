@@ -30,6 +30,11 @@
 .inbox-document > span,.inbox-location > div { color:var(--mist); overflow-wrap:anywhere; }
 .inbox-document .text-button { width:max-content; margin-top:3px; }
 .inbox-location a { color:var(--gold2); width:max-content; }
+.inbox-quote { display:flex; flex-direction:column; gap:3px; width:100%; margin:0 0 8px; padding:7px 9px; border:0; border-left:3px solid var(--gold); border-radius:4px; background:rgba(255,255,255,.05); color:var(--cream2); text-align:left; cursor:pointer; }
+.inbox-quote span { color:var(--mist); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
+.inbox-quote strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:500; }
+.inbox-reply-target { display:flex; align-items:flex-start; gap:8px; margin-bottom:7px; }
+.inbox-reply-target .inbox-quote { margin:0; }
 .inbox-composer { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--wire); background: var(--panel); }
 .inbox-composer .textarea { display: block; min-height: 56px; height: 56px; max-height: min(120px, 18dvh); line-height: 18px; padding: 9px 12px; resize: none; overflow-y: auto; }
 .inbox-composer > div > span { flex: 1; min-width: 0; }
