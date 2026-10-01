@@ -75,17 +75,17 @@ test('a valid Update Live confirmation posts once, refreshes state, and clears d
   await nodes(ui.dialog()).find(node => node.type === 'button' && node.props.children === 'Update Live Agent').props.onClick()
   assert.equal(ui.calls.filter(call => call.url.endsWith('/update-live')).length, 1)
   assert.ok(ui.calls.some(call => call.url === '/ai-agents'))
-  assert.match(ui.html(), /Live agent updated successfully/)
+  assert.match(ui.html(), /Live version 12 updated successfully/)
   assert.doesNotMatch(ui.html(), /Changes not live yet/)
   assert.equal(ui.states[14].activated_configuration_version, 12)
 })
 
 test('a backend activation failure remains visible and preserves the draft-divergence state', async () => {
-  const ui = app({ post: async () => ({ ok: false, json: async () => ({ error: 'Only an active AI Agent can update the live version' }) }) })
+  const ui = app({ post: async () => ({ ok: false, json: async () => ({ code: 'not_active', error: 'Only an active AI Agent can update the live configuration.' }) }) })
   await ui.button('Update Live Agent').props.onClick()
   await nodes(ui.dialog()).find(node => node.type === 'button' && node.props.children === 'Update Live Agent').props.onClick()
   const alert = nodes(ui.dialog()).find(node => node.props?.role === 'alert')
-  assert.equal(alert.props.children, 'Only an active AI Agent can update the live version')
+  assert.equal(alert.props.children, 'Only an active AI Agent can update the live configuration.')
   assert.match(ui.html(), /Changes not live yet/)
   assert.equal(ui.states[14].activated_configuration_version, 11)
 })
@@ -96,6 +96,24 @@ test('an incomplete activation confirmation never reports success', async () => 
   await nodes(ui.dialog()).find(node => node.type === 'button' && node.props.children === 'Update Live Agent').props.onClick()
   assert.match(ui.html(), /Unable to confirm that the live version was updated/)
   assert.match(ui.html(), /Changes not live yet/)
+})
+
+test('the current knowledge-source limit is surfaced as an actionable Update Live error', async () => {
+  const ui = app({ post: async () => ({ ok: false, json: async () => ({ code: 'knowledge_limit', error: 'This draft has more approved knowledge sources than the current limit. Remove a source before updating Live.' }) }) })
+  await ui.button('Update Live Agent').props.onClick()
+  await nodes(ui.dialog()).find(node => node.type === 'button' && node.props.children === 'Update Live Agent').props.onClick()
+  const alert = nodes(ui.dialog()).find(node => node.props?.role === 'alert')
+  assert.equal(alert.props.children, 'This draft has more approved knowledge sources than the current limit. Remove a source before updating Live.')
+  assert.doesNotMatch(ui.html(), /We couldn't update the live agent/)
+})
+
+test('a server-confirmed activation is not presented as a failed update when list reconciliation lags', async () => {
+  const ui = app({ post: async () => ({ ok: true, json: async () => ({ agent: { ...baseAgent, activated_configuration_version: 12, changes_not_live_yet: false }, activation: { version: 12, activated_at: '2026-09-30T09:30:00Z' } }) }) })
+  await ui.button('Update Live Agent').props.onClick()
+  await nodes(ui.dialog()).find(node => node.type === 'button' && node.props.children === 'Update Live Agent').props.onClick()
+  assert.equal(ui.calls.filter(call => call.url === '/ai-agents').length >= 2, true)
+  assert.match(ui.html(), /Live version 12 was activated/)
+  assert.doesNotMatch(ui.html(), /We couldn't update the live agent/)
 })
 
 test('members cannot render or submit Update Live', async () => {

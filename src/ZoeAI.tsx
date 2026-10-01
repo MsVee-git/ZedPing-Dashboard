@@ -172,16 +172,28 @@ export function ZoeAI({ customer, apiFetch, routeAgentId = null, onRouteOpen, on
     try {
       const response=await apiFetch("/ai-agents/"+agentId+"/update-live",{method:"POST"});
       const result=await response.json();
-      if (!response.ok) throw new Error(result.error || "Unable to update the live agent");
+      if (!response.ok) throw Object.assign(new Error(result.error || "Unable to update the live agent"), { code:result.code });
       if (!result.activation?.version || !result.activation?.activated_at) throw new Error("Unable to confirm that the live version was updated.");
-      const loadedAgents=await load();
-      const refreshed=loadedAgents?.find(item=>String(item.id)===String(agentId));
-      if (!refreshed || refreshed.changes_not_live_yet) throw new Error("The live update could not be confirmed. Refresh the page before trying again.");
+      let loadedAgents=await load();
+      let refreshed=loadedAgents?.find(item=>String(item.id)===String(agentId));
+      // A server-confirmed activation is authoritative. Retry one read before
+      // treating a delayed list refresh as incomplete; do not present a real
+      // activation as a failed mutation merely because reconciliation lagged.
+      if (!refreshed || refreshed.changes_not_live_yet) {
+        loadedAgents=await load();
+        refreshed=loadedAgents?.find(item=>String(item.id)===String(agentId));
+      }
+      if (!refreshed || refreshed.changes_not_live_yet) {
+        openAgent(result.agent || selected);
+        setUpdateLiveReview(false);
+        setNotice("Live version "+result.activation.version+" was activated. Refresh this page if the current version does not appear yet.");
+        return;
+      }
       openAgent(refreshed);
       setUpdateLiveReview(false);
-      setNotice("Live agent updated successfully.");
+      setNotice("Live version "+result.activation.version+" updated successfully.");
     } catch(error) {
-      const safeMessages = ["Only an active AI Agent can update the live version", "Administrator access required", "You do not have access to this workspace", "AI Agent changed before activation; review it again", "Unable to confirm that the live version was updated.", "The live update could not be confirmed. Refresh the page before trying again."];
+      const safeMessages = ["Only an active AI Agent can update the live configuration.", "This draft has more approved knowledge sources than the current limit. Remove a source before updating Live.", "Select at least one eligible approved knowledge source before updating Live.", "One or more selected knowledge sources are no longer eligible. Review the draft before updating Live.", "Configure handoff behaviour before updating Live.", "The connected WhatsApp number is unavailable. Review the agent before updating Live.", "Another active AI Agent already uses this WhatsApp number.", "Add an approved test contact before updating this agent.", "This agent changed before the update completed. Refresh and review it again.", "Unable to confirm that the live version was updated."];
       setUpdateLiveError(safeMessages.includes(error?.message) ? error.message : "We couldn't update the live agent. Check its configuration and try again.");
     } finally { updateLivePending.current=false; setLifecycleBusy(""); }
   }
