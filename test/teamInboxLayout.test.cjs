@@ -16,7 +16,7 @@ import {useInboxScroll,useInboxComposer} from './src/useInboxScroll';
 import {ConversationHandlingStatus} from './src/ConversationHandlingStatus';
 import {MarketingOptOutBadge} from './src/MarketingConsent';
 const API='https://synthetic.invalid',customer={id:'workspace',role:'owner'},user={id:'staff'};
-const make=(id,count,mode='automation',status='open',assignee=null,unread=0)=>({conversation:{id,customer_id:'workspace',updated_at:'2026-09-25T10:00:00.000Z',status,control_mode:mode,assigned_user_id:assignee,unread_count:unread,contacts:{name:id,phone_number:'+260970000000',marketing_opted_out:true}},messages:Array.from({length:count},(_,i)=>({id:id+i,direction:i%2?'outbound':'inbound',message_body:'Synthetic message '+i+' Context for this customer question.',status:'received'}))});
+const make=(id,count,mode='automation',status='open',assignee=null,unread=0)=>({conversation:{id,customer_id:'workspace',updated_at:'2026-09-25T10:00:00.000Z',status,control_mode:mode,assigned_user_id:assignee,unread_count:unread,contacts:{name:id,phone_number:'+260970000000',marketing_opted_out:true}},messages:Array.from({length:count},(_,i)=>({id:id+i,direction:i%2?'outbound':'inbound',message_body:'Synthetic message '+i+' Context for this customer question.',status:'received',...(id==='Long'&&i===0?{inbound_media:{type:'image',mime_type:'image/png',caption:null}}:{})}))});
 const threads={Long:make('Long',100),Short:make('Short',2),Waiting:make('Waiting',8,'needs_attention','needs_attention',null,3),Human:make('Human',8,'human','open','staff'),Other:make('Other',8,'human','open','other'),Resolved:make('Resolved',8,'human','resolved','other')};
 window.fixtureRequests=[];
 window.fixtureAddMany=()=>{for(let i=0;i<230;i++)threads["Queue"+i]=make("Queue"+i,1,"needs_attention","needs_attention");};
@@ -24,6 +24,7 @@ async function apiFetch(url,options){
  window.fixtureRequests.push({url,method:options?.method||'GET',body:options?.body?JSON.parse(options.body):null});
  const u=new URL(url),parts=u.pathname.split('/'),data=options?.body?JSON.parse(options.body):{},t=threads[parts[2]];
  const response=value=>({ok:true,json:async()=>structuredClone(value)});
+ if(parts[3]==='messages'&&parts[5]==='media')return new Response('synthetic-image',{headers:{'Content-Type':'image/png'}});
  if(parts[2]==='members')return response([{id:'staff',name:'Staff',role:'owner'},{id:'other',name:'Other staff',role:'member'}]);
  if(parts[2]==='counts')return response(Object.fromEntries(INBOX_VIEWS.map(([view])=>[view,Object.values(threads).filter(t=>matchesInboxView(t.conversation,view,user.id)).length])));
  if(!parts[2]){const offset=Number(u.searchParams.get('offset')||0),rows=Object.values(threads).map(t=>t.conversation).filter(c=>matchesInboxView(c,u.searchParams.get('view')||'all',user.id));return response({conversations:rows.slice(offset,offset+50),next_offset:rows.length>offset+50?offset+50:null});}
@@ -74,7 +75,7 @@ test('production shell: state-aware controls, compact composer, independent scro
  const {browser,page,errors,mount}=await setup();
  try{
  for(const [width,height] of [[1440,900],[1366,768],[1366,650],[1280,600],[1024,768],[390,844]]){
-  await mount(width,height);await page.locator('.inbox-open').filter({has:page.getByText('Long',{exact:true})}).click();await page.locator('.inbox-control').waitFor();
+  await mount(width,height);await page.locator('.inbox-open').filter({has:page.getByText('Long',{exact:true})}).click();await page.locator('.inbox-control').waitFor();await page.locator('img[alt="Incoming WhatsApp image"]').waitFor();
   assert.equal(await page.locator('.inbox-composer textarea').count(),0);
   const before=await page.evaluate(()=>{const h=document.querySelector('.inbox-history'),g=document.querySelector('.team-inbox').getBoundingClientRect(),c=document.querySelector('.inbox-control').getBoundingClientRect(),bounds=h.getBoundingClientRect();return {height:h.clientHeight,card:h.parentElement.clientHeight,control:c.height,bottom:c.bottom,gridBottom:g.bottom,gridHeight:g.height,gridTop:g.top,page:document.documentElement.scrollHeight,width:document.documentElement.scrollWidth,visible:[...h.children].filter(e=>{const r=e.getBoundingClientRect();return r.top>=bounds.top&&r.bottom<=bounds.bottom}).length,latest:h.scrollHeight-h.scrollTop-h.clientHeight<3};});
   assert.ok(before.latest);assert.ok(before.height>before.control*2);assert.ok(before.visible>=3,JSON.stringify({width,height,before}));assert.ok(before.width<=width);

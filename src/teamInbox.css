@@ -24,6 +24,8 @@
 .inbox-conversation > :not(.inbox-history) { flex-shrink: 0; }
 .inbox-history { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .inbox-history > div { flex-shrink: 0; min-width: 0; overflow-wrap: anywhere; }
+.inbox-image { display: block; width: min(100%, 420px); max-height: 520px; object-fit: contain; border-radius: 8px; background: #101010; }
+.inbox-media-state { min-width: 190px; padding: 22px 14px; color: var(--mist); background: rgba(255,255,255,.035); border-radius: 8px; font-size: 13px; }
 .inbox-composer { flex-shrink: 0; padding: 10px 12px; border-top: 1px solid var(--wire); background: var(--panel); }
 .inbox-composer .textarea { display: block; min-height: 56px; height: 56px; max-height: min(120px, 18dvh); line-height: 18px; padding: 9px 12px; resize: none; overflow-y: auto; }
 .inbox-composer > div > span { flex: 1; min-width: 0; }

@@ -1321,7 +1321,7 @@ function TeamInbox({ customer, user }) {
         {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
           <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||'Customer'}</strong><small>{active.contacts?.phone_number}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
-            {(thread.messages||[]).map(message=><div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}><div style={{fontSize:13,whiteSpace:'pre-wrap'}}>{message.message_body||'Unsupported message type'}</div><div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>)}
+            {(thread.messages||[]).map(message=><div key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{message.inbound_media?.type==='image'?<InboundImage conversationId={active.id} messageId={message.id} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:message.inbound_media?.type==='image'?8:0}}>{message.message_body}</div>:!message.inbound_media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div className="mono" style={{fontSize:9,color:'var(--mist)',marginTop:7}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div></div>)}
           </div>
           {canReply?<form className="inbox-composer" onSubmit={sendReply}><textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply" placeholder="Write a reply…" value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><div style={{display:'flex',justifyContent:'flex-end',marginTop:6}}><button className="btn btn-gold" type="submit" disabled={replying||busy||!reply.trim()}>{replying?'Sending…':'Send reply'}</button></div></form>:<div className="inbox-control">
             <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zoe is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
@@ -1351,6 +1351,26 @@ function TeamInbox({ customer, user }) {
       </>}
     </div></div>}
   </div>
+}
+
+function InboundImage({ conversationId, messageId, apiFetch }) {
+  const [state,setState]=useState({ status:'loading',url:'' });
+  useEffect(()=>{
+    let active=true,url='';
+    (async()=>{
+      try {
+        const response=await apiFetch(`${API}/conversations/${conversationId}/messages/${messageId}/media`,{cache:'no-store'});
+        const blob=await response.blob();
+        if(!blob.type.startsWith('image/'))throw new Error('Image is unavailable');
+        url=URL.createObjectURL(blob);
+        if(active)setState({status:'ready',url});
+      } catch (_) { if(active)setState({status:'unavailable',url:''}); }
+    })();
+    return()=>{active=false;if(url)URL.revokeObjectURL(url)};
+  },[apiFetch,conversationId,messageId]);
+  if(state.status==='loading')return <div className="inbox-media-state">Loading image…</div>;
+  if(state.status==='unavailable')return <div className="inbox-media-state" role="status">Image unavailable</div>;
+  return <img className="inbox-image" src={state.url} alt="Incoming WhatsApp image"/>;
 }
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
