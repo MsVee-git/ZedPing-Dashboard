@@ -10,6 +10,7 @@ import "./teamInbox.css";
 import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
 import { WhatsAppConnection } from "./WhatsAppConnection";
+import { canReuseAuthenticatedWorkspace } from "./lib/authWorkspaceLifecycle";
 import { ChatbotFlows } from "./ChatbotFlows";
 import { ZoeAI } from "./ZoeAI";
 import { TeamMembers } from "./TeamMembers";
@@ -2347,6 +2348,7 @@ export default function App() {
   const invitationPreviewRef = useRef(Promise.resolve());
   const invitationContextRef = useRef(null);
   const authLoadRef = useRef(null);
+  const loadedAuthIdentityRef = useRef(null);
   const [view, setView] = useState(invitationTokenRef.current || window.location.search.includes("signup") ? "signup" : "login");
   const [user, setUser] = useState(null);
   const [customer, setCustomer] = useState(null);
@@ -2439,8 +2441,10 @@ export default function App() {
         setWorkspaces(authorizedWorkspaces);
         const verified = await verifyWorkspaceSelection(authorizedWorkspaces, selected.id);
         setWorkspaces(current => current.map(item => item.id === verified.workspace.id ? verified.workspace : item));
+        loadedAuthIdentityRef.current = { id: sessionUser.id, emailConfirmedAt: sessionUser.email_confirmed_at };
         setCustomer(verified.workspace); setNeedsVerification(false); setWorkspaceSwitchTarget(null); setWorkspaceChanging(false);
       } catch (error) {
+        loadedAuthIdentityRef.current = null;
         console.error("Workspace loading failed", error);
         // Keep the active Auth identity. Clearing it while a Supabase session
         // remains triggers another auth callback and caused the redirect loop.
@@ -2489,6 +2493,7 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") {
+        loadedAuthIdentityRef.current = null;
         setReset(true);
         setUser(null);
         window.history.replaceState(null, "", window.location.pathname);
@@ -2497,8 +2502,15 @@ export default function App() {
       if (event === "INITIAL_SESSION") emitInvitationAuthDiagnostic(session?.user ? "initial_session" : "no_session");
       if (event === "SIGNED_IN") emitInvitationAuthDiagnostic("signed_in");
       if (session?.user) {
+        // Session reconfirmation on tab focus must not unmount Settings and
+        // discard the in-memory Meta signup session/callback listener.
+        if (canReuseAuthenticatedWorkspace(event, session.user, loadedAuthIdentityRef.current)) {
+          setUser(session.user);
+          return;
+        }
         window.setTimeout(() => { loadAuthenticatedContext(session.user); }, 0);
       } else {
+        loadedAuthIdentityRef.current = null;
         setUser(null);
         setCustomer(null);
         setWorkspaces([]);
