@@ -230,7 +230,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
   if (loading) return <div className="card" style={{ padding: 24, marginBottom: 16 }}><div className="spin" /></div>;
 
-  const operational = connection?.status === "connected" && connection?.provisioning_state !== "failed";
+  const operational = connection?.status === "connected" && connection?.provisioning_state === "operational";
   const statusLabel = operational ? "Connected" : connection?.provisioning_state === "registering" ? "Activating WhatsApp…" : connection?.provisioning_state === "failed" ? "Connection needs attention" : connection ? "Registering phone…" : "Not connected";
 
   return (

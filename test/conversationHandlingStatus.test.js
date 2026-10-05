@@ -17,14 +17,14 @@ function load(file) {
 const { ConversationHandlingStatus } = load('ConversationHandlingStatus.tsx')
 const { MarketingOptOutBadge } = load('MarketingConsent.tsx')
 const render = conversation => renderToStaticMarkup(React.createElement(ConversationHandlingStatus, { conversation }))
-for (const [mode, label, color] of [['automation', 'ZOE IS HANDLING THIS CHAT', 'green'], ['needs_attention', 'NEEDS ATTENTION', 'gold'], ['human', 'TEAM MEMBER HANDLING', 'blue']]) {
+for (const [mode, label, color] of [['automation', 'ZED AI HANDLING', 'green'], ['needs_attention', 'NEEDS ATTENTION', 'gold'], ['human', 'TEAM MEMBER HANDLING', 'blue']]) {
   test(`${mode} renders readable ${label} with its existing badge color`, () => {
     assert.equal(render({ status: 'open', control_mode: mode }), `<span class="badge badge-${color}">${label}</span>`)
   })
 }
 test('refreshed handoff and takeover states update the visible label', () => {
   const conversation = { status: 'open', control_mode: 'automation' }
-  assert.match(render(conversation), /ZOE IS HANDLING/)
+  assert.match(render(conversation), /ZED AI HANDLING/)
   Object.assign(conversation, { status: 'needs_attention', control_mode: 'needs_attention' })
   assert.match(render(conversation), /NEEDS ATTENTION/)
   Object.assign(conversation, { status: 'open', control_mode: 'human', assigned_user_id: 'staff' })
@@ -41,7 +41,7 @@ test('marketing opt-out and Zoe handling remain independent visible badges', () 
   const conversation = { status: 'open', control_mode: 'automation', contacts: { marketing_opted_out: true } }
   const before = structuredClone(conversation)
   const html = renderToStaticMarkup(React.createElement('div', {}, React.createElement(ConversationHandlingStatus, { conversation }), React.createElement(MarketingOptOutBadge, { contact: conversation.contacts })))
-  assert.match(html, /ZOE IS HANDLING THIS CHAT/)
+  assert.match(html, /ZED AI HANDLING/)
   assert.match(html, /MARKETING OPTED OUT/)
   assert.deepEqual(conversation, before)
 })

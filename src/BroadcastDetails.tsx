@@ -10,7 +10,7 @@ function recordedTime(value?: string) {
   if (!value) return "Not recorded";
   // Existing history timestamps are UTC stored without a timezone suffix.
   const date = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value.replace(" ", "T") + "Z");
-  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleString("en-GB", { timeZone: "Africa/Lusaka" }) + " CAT";
 }
 
 export function BroadcastHistoryFacts({ activity }: { activity: Activity }) {

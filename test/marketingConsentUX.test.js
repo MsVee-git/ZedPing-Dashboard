@@ -56,7 +56,7 @@ test('processed history renders stored counts and zero failures without inventin
 })
 
 test('processed rows open contained details with workspace-bound fetching and stale-request protection', () => {
-  const section = app.slice(app.indexOf('function Broadcasts()'), app.indexOf('// ── CONTACTS'))
+  const section = app.slice(app.indexOf('function Broadcasts('), app.indexOf('// ── CONTACTS'))
   assert.match(section, /onClick=\{\(\) => setActivityId\(broadcast.id\)\}/)
   assert.match(section, /<BroadcastDetails id=\{activityId\} apiBase=\{API\} apiFetch=\{apiFetch\}/)
   assert.doesNotMatch(section, /modal-bg/)

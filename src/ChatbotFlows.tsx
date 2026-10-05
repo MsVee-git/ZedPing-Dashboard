@@ -95,7 +95,7 @@ function readableType(type) {
   return ({ send_message: "Send a message", ask_capture: "Ask & capture", choose_option: "Give choices", content: "Share content", human_handoff: "Hand to team", end: "End flow" })[type] || type
 }
 
-export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOpen, onRouteUnavailable }) {
+export function ChatbotFlows({ customer, userId, apiFetch, routeFlowId = null, onRouteOpen, onRouteUnavailable }) {
   const [flows, setFlows] = useState([])
   const [setup, setSetup] = useState({ numbers: [], discovery: null })
   const [selectedNumberId, setSelectedNumberId] = useState("")
@@ -138,17 +138,21 @@ export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOp
   }
   useEffect(() => { load() }, [customer?.id])
 
+  const localDraftKey = id => ["zedping.flow-draft.v1",customer?.id,userId,id].join(":");
   const openFlow = async (flow, { updateRoute = true } = {}) => {
     if (updateRoute) onRouteOpen?.(flow?.id);
     try {
       const response = await apiFetch(`/chatbot-flows/${flow.id}`)
       const detail = await response.json()
-      setSelected(detail); setDraft(clone(detail.draft_definition)); setDraftDirty(false); setMode("builder"); setTestResult(null)
+      let local=null;
+      try { local=canManage?JSON.parse(sessionStorage.getItem(localDraftKey(detail.id))||"null"):null; } catch {}
+      setSelected(detail); setDraft(local || clone(detail.draft_definition)); setDraftDirty(Boolean(local)); setMode("builder"); setTestResult(null)
     } catch (err) { setError(err.message || "Unable to open this flow") }
   }
 
   useEffect(() => {
-    if (!routeFlowId || loading) return;
+    if (!routeFlowId) { setMode("home"); setSelected(null); return; }
+    if (loading) return;
     const flow = flows.find((item) => String(item.id) === String(routeFlowId));
     if (!flow) { onRouteUnavailable?.(); return; }
     if (String(selected?.id) === String(routeFlowId)) return;
@@ -173,6 +177,7 @@ export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOp
       // Open the returned, server-created draft directly. A second request
       // must not strand the owner in the preview after a successful create.
       setFlows(current => [created, ...current.filter(flow => flow.id !== created.id)])
+      onRouteOpen?.(created.id);
       setSelected(created); setDraft(clone(created.draft_definition)); setDraftDirty(false)
       setMode("builder"); setTestResult(null); setReviewOpen(false)
     } catch (err) { setError(err.message || "Unable to create this flow") }
@@ -184,7 +189,10 @@ export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOp
     await createFlow(recipe)
   }
 
-  const changeDraft = (next) => { setDraft(next); setDraftDirty(true) }
+  const changeDraft = (next) => {
+    setDraft(next); setDraftDirty(true)
+    if(selected?.id)try { sessionStorage.setItem(localDraftKey(selected.id),JSON.stringify(next)); } catch { setError("Local draft storage is unavailable. Save before leaving this page."); }
+  }
   const updateStep = (index, patch) => changeDraft({ ...draft, steps: draft.steps.map((step, position) => position === index ? { ...step, ...patch } : step) })
   const addStep = (type) => {
     const id = nextId(type, draft.steps)
@@ -222,6 +230,7 @@ export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOp
     try {
       const response = await apiFetch(`/chatbot-flows/${selected.id}/draft`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: selected.name, draft_definition: draft }) })
       const updated = await response.json()
+      try { sessionStorage.removeItem(localDraftKey(selected.id)); } catch {}
       setSelected({ ...selected, ...updated }); setDraft(clone(updated.draft_definition)); setDraftDirty(false); setError("")
       await load()
       return updated
@@ -255,7 +264,7 @@ export function ChatbotFlows({ customer, apiFetch, routeFlowId = null, onRouteOp
   }
 
   if (loading) return <div className="pad" style={{ padding: 32 }}><div className="spin" /></div>
-  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack: () => { setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
+  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack: () => { onRouteOpen?.(null); setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
 
   return <div className="pad" style={{ padding: 32, maxWidth: 1280, margin: "0 auto" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 26 }}>

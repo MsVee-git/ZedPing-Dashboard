@@ -92,7 +92,7 @@ export function TeamMembers({ customer, apiFetch }) {
 
   const pending = useMemo(() => invitations.filter((item) => item.status === "pending"), [invitations]);
 
-  return <div style={{ padding: "28px 32px 48px", maxWidth: 980 }}>
+  return <div className="pad" style={{ padding: "28px 32px 48px", maxWidth: 980 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 24 }}>
       <div>
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 7 }}>Workspace settings</div>
