@@ -1,6 +1,6 @@
 import React from "react";
 
-export function MarketingOptOutBadge({ contact }: { contact?: { marketing_opted_out?: boolean } | null }) {
+export function MarketingOptOutBadge({ contact }: { contact?: { marketing_opted_out?: boolean } | null }): React.ReactElement | null {
   if (contact?.marketing_opted_out !== true) return null;
   return <span className="badge badge-gold" title="Excluded from marketing broadcasts. Service conversations remain available.">MARKETING OPTED OUT</span>;
 }

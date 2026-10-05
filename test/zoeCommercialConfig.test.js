@@ -34,7 +34,7 @@ function app({ role = 'owner', initialDraft = null, initialSelected = null } = {
       return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value }]
     }
   }
-  const context = { exports: {}, React, require: () => hooks }
+  const context = { exports: {}, React, require: name => name === "./WorkspaceUI" ? { PageTitle: ({title,action})=>React.createElement("header",null,title,action), Surface: ({children})=>React.createElement("section",null,children), AgentBadge: ()=>React.createElement("span",null,"Draft") } : hooks }
   vm.runInNewContext(compiled, context)
   const apiFetch = async (url, init) => {
     calls.push({ url, init })

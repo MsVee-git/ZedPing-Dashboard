@@ -21,6 +21,11 @@ import { emitInvitationAuthDiagnostic } from "./lib/invitationDiagnostics";
 import { invitationAccountState } from "./lib/invitationIdentity";
 import { parseDashboardRoute, routeToPath, safeParentRoute, isResourceRoute } from "./lib/dashboardRouting";
 import * as XLSX from "xlsx";
+import { navigation, parentSection, RouteLink, SectionTabs, PageTitle } from "./WorkspaceUI";
+import { WorkspaceOverview } from "./WorkspaceOverview";
+import { WorkspaceReports, WorkspaceBilling, WorkspaceIntegrations } from "./WorkspaceReports";
+import { useQueryState, useReplyDraft, readDraft, writeDraft } from "./usePageState";
+import redesignCss from "./workspace.css?inline";
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
@@ -57,6 +62,8 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   }
   return response;
 };
+
+const workspaceRequest = (path, init = {}) => apiFetch(API + path, init);
 
 function pendingInvitationToken() {
   try { return captureInvitationToken(window.sessionStorage, window.location.hash || ""); } catch { return null; }
@@ -299,6 +306,7 @@ const css = `
   }
 
   ${faceliftCss}
+  ${redesignCss}
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--ink); }
   ::-webkit-scrollbar-thumb { background: rgba(184,146,42,0.3); }
@@ -313,6 +321,7 @@ const Ic = ({ n, s = 15, c = "currentColor" }) => {
     messages: "M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z",
     auto: "M13 10V3L4 14h7v7l9-11h-7z",
     flow: "M7 3v4 M7 7h10 M17 7v4 M17 11H7 M7 11v4 M7 15h10 M17 15v4 M7 21v-2 M17 21v-2",
+    chart: "M4 20V10h4v10 M10 20V4h4v16 M16 20v-7h4v7",
     catalog: "M21 8v13a2 2 0 01-2 2H5a2 2 0 01-2-2V8 M1 3h22v5H1z M10 12h4",
     settings: "M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z",
     plus: "M12 5v14 M5 12h14",
@@ -362,7 +371,7 @@ function useAPI(endpoint, deps = []) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const run = async () => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
       const r = await apiFetch(`${API}${endpoint}`);
       setData(await r.json());
@@ -661,20 +670,7 @@ function VerifyEmail({ user, onLogout, invitation }) {
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function Sidebar({ active, setActive, user, customer, onLogout, open, onClose }) {
-  const links = [
-    { id: "overview", label: "Dashboard", icon: "home" },
-    { id: "broadcasts", label: "Broadcasts", icon: "broadcast" },
-    { id: "contacts", label: "Contacts", icon: "contacts" },
-    { id: "contactGroups", label: "Contact Groups", icon: "contacts" },
-    { id: "messages", label: "Team Inbox", icon: "messages" },
-    { id: "automations", label: "Automations", icon: "auto" },
-    { id: "chatbotFlows", label: "Chatbot Flows", icon: "flow" },
-    { id: "zoeAi", label: "Zoe AI", icon: "auto" },
-    { id: "templates", label: "WhatsApp Templates", icon: "messages" },
-    { id: "content", label: "Content Library", icon: "catalog" },
-    { id: "team", label: "Team Members", icon: "contacts" },
-    { id: "settings", label: "Settings", icon: "settings" },
-  ];
+  const current = parentSection(active);
   const initial = (customer?.business_name || user?.email || "Z").charAt(0).toUpperCase();
 
   return (
@@ -696,14 +692,13 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
             </div>
           </div>
         </div>
-        <nav style={{ flex: 1, padding: "12px 8px", overflowY: "auto" }}>
-          <div className="mono" style={{ fontSize: 8, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase", padding: "6px 12px 10px", opacity: 0.5 }}>Navigation</div>
-          {links.map(l => (
-            <button key={l.id} className={`slink ${active===l.id?"active":""}`} onClick={()=>{ setActive(l.id); onClose(); }}>
-              <span style={{ color: active===l.id ? "var(--gold2)" : "var(--mist)", flexShrink: 0 }}><Ic n={l.icon} s={13} c="currentColor" /></span>
-              {l.label}
-            </button>
-          ))}
+        <nav className="primary-navigation" aria-label="Main navigation">
+          {navigation.map(group=><div className="navigation-group" key={group.label}>
+            <div className="navigation-label">{group.label}</div>
+            {group.items.map(([id,label,icon])=><RouteLink key={id} route={id} navigate={next=>{setActive(next);onClose();}} className={"slink "+(current===id?"active":"")} aria-current={current===id?"page":undefined}>
+              <Ic n={icon} s={18} c="currentColor"/><span>{label}</span>
+            </RouteLink>)}
+          </div>)}
         </nav>
         <div style={{ padding: "8px 8px 14px" }}>
           <button className="slink" onClick={onLogout} style={{ color: "rgba(239,68,68,0.6)" }}>
@@ -721,7 +716,7 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWo
   return (
     <div className="desk-bar" style={{ height: 56, alignItems: "center", justifyContent: "space-between", padding: "0 32px", borderBottom: "1px solid var(--wire)", background: "var(--workspace-bg)", backdropFilter: "blur(16px)", position: "sticky", top: 0, zIndex: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 1, height: 16, background: "var(--gold)", opacity: 0.6 }} />
+
         <span className="mono" style={{ fontSize: 10, color: "var(--cream2)", letterSpacing: 2, textTransform: "uppercase" }}>{title}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -754,166 +749,49 @@ function MobTopbar({ onMenu, onLogout, workspaces, activeWorkspaceId, onWorkspac
 
 // ── PAGE HEADER ───────────────────────────────────────────────────────────────
 function PageHead({ label, title, sub, action }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28, flexWrap: "wrap", gap: 14 }}>
-      <div>
-        {label && <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}><div style={{ width: 20, height: 1, background: "var(--gold)", opacity: 0.6 }} /><span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>{label}</span></div>}
-        <h2 className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600, letterSpacing: -0.3 }}>{title}</h2>
-        {sub && <p style={{ color: "var(--mist)", fontSize: 13, marginTop: 4 }}>{sub}</p>}
-      </div>
-      {action}
-    </div>
-  );
+  return <PageTitle title={title.replace(/\.$/, "")} description={sub} action={action}/>;
 }
 
 // ── OVERVIEW ──────────────────────────────────────────────────────────────────
-function Overview({ customer, user, onNavigate, whatsappConnectionState }) {
-  const { data: msgs, loading: mL } = useAPI("/messages");
-  const { data: contacts, loading: cL } = useAPI("/contacts");
-  const { data: autos } = useAPI("/automations");
-  const { data: setup, loading: setupLoading } = useAPI("/workspace");
-  const todayOut = (msgs||[]).filter(m => new Date(m.created_at).toDateString()===new Date().toDateString()&&m.direction==="outbound").length;
-  const h = new Date().getHours();
-  const greet = h<12 ? "Good morning" : h<17 ? "Good afternoon" : "Good evening";
-  const whatsappConnected = Boolean(setup?.whatsapp_connection?.status === "connected" || customer?.whatsapp_connected_at);
-  const profileComplete = Boolean(customer?.profile_completed_at);
-  const connectionFailed = whatsappConnectionState?.phase === "error";
-  const checklist = setup?.setup_checklist;
-  const discovery = setup?.discovery;
-  const recommendations = setup?.recommendations;
-  const activation = whatsappConnected
-    ? { title: "WhatsApp is connected", detail: "This workspace is ready to send and receive WhatsApp messages.", action: "Manage connection →", tone: "#23734a" }
-    : connectionFailed
-      ? { title: "WhatsApp connection needs attention", detail: whatsappConnectionState.message || "No connection was created. Review the connection details and try again.", action: "Review connection →", tone: "#b33a35" }
-      : profileComplete
-        ? { title: "Connect your WhatsApp number", detail: "Securely connect the WhatsApp Business account your team uses to speak with customers.", action: "Connect WhatsApp →", tone: "var(--gold2)" }
-        : { title: "Complete your business profile", detail: "Add your workspace details before connecting WhatsApp.", action: "Complete profile →", tone: "var(--gold2)" };
-  const stats = [
-    { label: "Sent Today", value: mL || !Array.isArray(msgs) ? "—" : todayOut, sub: "Outbound messages", color: "var(--gold2)" },
-    { label: "Contacts", value: cL || !Array.isArray(contacts) ? "—" : contacts.length, sub: "In your list", color: "var(--cream2)" },
-    { label: "Active Keywords", value: Array.isArray(autos) ? autos.filter(a=>a.is_active&&a.trigger_type==="keyword").length : "—", sub: "Automations live", color: "var(--gold2)" },
-    { label: "Plan", value: (customer?.subscription_plan||"Starter").charAt(0).toUpperCase()+(customer?.subscription_plan||"starter").slice(1), sub: customer?.subscription_status||"trial", color: "var(--cream2)" },
-  ];
-
-  return (
-    <div className="pad" style={{ padding: 28 }}>
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-          <div style={{ width: 20, height: 1, background: "var(--gold)", opacity: 0.6 }} />
-          <span className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase" }}>YOUR WORKSPACE</span>
-        </div>
-        <h1 className="editorial" style={{ fontSize: 36, color: "var(--cream)", fontWeight: 600, marginBottom: 4, letterSpacing: -0.5 }}>{greet}, {customer?.business_name || "your workspace"} 👋</h1>
-        <p style={{ color: "var(--mist)", fontSize: 14 }}>Here’s what’s happening across your WhatsApp workspace.</p>
-      </div>
-
-      {!setupLoading && checklist?.presentation === "primary" && <section className="card-gold" style={{ padding: 22, marginBottom: 18 }} aria-label="Getting started">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <div>
-            <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 7 }}>Getting started</div>
-            <div className="editorial" style={{ fontSize: 28, color: "var(--cream)", fontWeight: 600 }}>Let’s get you set up</div>
-            <p style={{ color: "var(--mist)", fontSize: 12, marginTop: 7 }}>Complete these steps to get the most out of ZedPing.</p>
-          </div>
-          <div className="mono" style={{ color: "var(--gold2)", fontSize: 10, letterSpacing: 1 }}>{checklist.completed}/{checklist.total} COMPLETE</div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 9, marginTop: 18 }}>
-          {checklist.items.map((item) => <div key={item.key} style={{ display: "flex", gap: 9, alignItems: "center", color: item.complete ? "var(--cream)" : "var(--mist)", fontSize: 12 }}>
-            <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", background: item.complete ? "var(--gold)" : "rgba(255,255,255,0.08)", color: item.complete ? "var(--ink)" : "var(--mist)", fontSize: 10 }}>{item.complete ? "✓" : "○"}</span>
-            {item.label}
-          </div>)}
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
-          <button className="btn btn-gold" onClick={() => onNavigate?.("settings")}>{discovery?.completed_at ? "Update your setup" : "Tell us what you need"}</button>
-          <button className="btn btn-wire" onClick={() => onNavigate?.("contacts")}>Add contacts</button>
-        </div>
-      </section>}
-
-      {!setupLoading && checklist?.presentation === "secondary" && <div className="card" style={{ padding: "12px 16px", marginBottom: 18, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "var(--mist)", fontSize: 12 }}>Setup progress: {checklist.completed} of {checklist.total} steps complete.</span>
-        <button className="btn btn-wire" onClick={() => onNavigate?.("settings")}>View setup</button>
-      </div>}
-
-      <div style={{ background: connectionFailed ? "#fff1f0" : "#fffaf0", border: `1px solid ${connectionFailed ? "rgba(239,68,68,0.35)" : "var(--wire2)"}`, padding: "16px 20px", marginBottom: 28, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
-        <span aria-hidden="true" style={{ fontSize: 18 }}>{whatsappConnected ? "✓" : connectionFailed ? "!" : "📱"}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: activation.tone, fontSize: 14, fontWeight: 500, marginBottom: 2 }}>{activation.title}</div>
-          <div style={{ color: "var(--mist)", fontSize: 13 }}>{activation.detail}</div>
-        </div>
-        <button type="button" onClick={() => onNavigate?.("settings")} className={connectionFailed ? "btn btn-wire" : "btn btn-gold"} style={{ flexShrink: 0, padding: "9px 18px", fontSize: 10 }}>{activation.action}</button>
-      </div>
-
-      {discovery?.completed_at && (recommendations?.packs?.length || recommendations?.automations?.length) > 0 && <section className="card" style={{ padding: 20, marginBottom: 24 }}>
-        <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 8 }}>Recommended for your business</div>
-        <p style={{ color: "var(--mist)", fontSize: 12, marginBottom: 14 }}>Based on your industry and the jobs you chose for ZedPing.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-          {[...(recommendations?.packs || []), ...(recommendations?.automations || [])].slice(0,4).map((item) => <div key={item.id} style={{ border: "1px solid var(--wire)", padding: 14 }}>
-            <div style={{ color: "var(--cream)", fontSize: 13, fontWeight: 600 }}>{item.name}</div>
-            <div style={{ color: "var(--mist)", fontSize: 11, lineHeight: 1.45, marginTop: 5 }}>{item.description}</div>
-            <button className="btn btn-wire" style={{ marginTop: 12, fontSize: 9, padding: "7px 10px" }} onClick={() => onNavigate?.("automations")}>Explore automations</button>
-          </div>)}
-        </div>
-      </section>}
-
-      <div className="stat-g" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 28 }}>
-        {stats.map((s,i) => (
-          <div className="kpi-card" key={i} style={{ background: "var(--panel)", border: "1px solid var(--wire)", padding: "20px 18px", position: "relative" }}>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${s.color}, transparent)`, opacity: 0.3 }} />
-            <div className="editorial" style={{ fontSize: 40, color: "var(--cream)", lineHeight: 1, marginBottom: 8, fontWeight: 600 }}>{s.value}</div>
-            <div className="mono" style={{ fontSize: 9, color: s.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 2 }}>{s.label}</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
-      <section className="quick-actions" aria-label="Quick actions">
-        <h2>Quick actions</h2>
-        <div className="quick-grid">
-          {[{id:"broadcasts",title:"Send a message",detail:"Open your broadcast tools",icon:"send"},{id:"contacts",title:"Manage contacts",detail:"Add, import and organise",icon:"contacts"},{id:"automations",title:"Create automation",detail:"Set up a keyword reply",icon:"auto"}].map(action => <button key={action.id} className="quick-action" onClick={()=>onNavigate(action.id)}><Ic n={action.icon} s={20}/><span><strong>{action.title}</strong><small>{action.detail}</small></span><span aria-hidden="true">↗</span></button>)}
-        </div>
-      </section>
-      <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>Recent Messages</div>
-      <div className="card">
-        {mL ? <Loader /> : !(msgs?.length) ? <Empty msg="No messages yet" /> :
-          (msgs||[]).slice(0,6).map((m,i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: "1.2fr 2.5fr 90px 80px", gap: 12 }}>
-              <div style={{ fontSize: 13, color: "var(--cream)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.from_number||m.to_number}</div>
-              <div style={{ fontSize: 13, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.message_body}</div>
-              <div className={`badge ${m.direction==="inbound"?"badge-blue":"badge-green"}`}>{m.direction==="inbound"?"IN":"OUT"}</div>
-              <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{m.created_at ? new Date(m.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "—"}</div>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  );
-}
-
 // ── BROADCASTS ────────────────────────────────────────────────────────────────
-function Broadcasts() {
-  const { data: history, loading: historyLoading, refetch: refetchHistory } = useAPI("/broadcasts/scheduled");
+function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
+  const { data: history, loading: historyLoading, error: historyError, refetch: refetchHistory } = useAPI("/broadcasts/scheduled");
   const { data: setup, loading: setupLoading, error: setupError } = useAPI("/broadcasts/setup");
-  const [numberId, setNumberId] = useState("");
-  const [groupId, setGroupId] = useState("");
+  const draftKey = "zedping.campaign.v1:" + customer.id + ":" + user.id;
+  const [storedDraft] = useState(() => readDraft(draftKey) || {});
+  const templateRequest = useRef(0);
+  const previousTemplateNumber = useRef(storedDraft.numberId || "");
+  const [draftSaved,setDraftSaved] = useState(true);
+  const [numberId, setNumberId] = useState(storedDraft.numberId || "");
+  const [groupId, setGroupId] = useState(storedDraft.groupId || "");
   const [templates, setTemplates] = useState([]);
-  const [templateId, setTemplateId] = useState("");
-  const [mappings, setMappings] = useState({});
+  const [templateId, setTemplateId] = useState(storedDraft.templateId || "");
+  const [mappings, setMappings] = useState(storedDraft.mappings || {});
+  useEffect(() => { setDraftSaved(writeDraft(draftKey, {numberId,groupId,templateId,mappings})); }, [draftKey,numberId,groupId,templateId,mappings]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [review, setReview] = useState(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState(null);
-  const [activityFilter, setActivityFilter] = useState("all");
-  const [activityId, setActivityId] = useState(null);
+  const [activityFilter, setActivityFilter] = useQueryState("status", "all");
+  const activityId = routeCampaignId && routeCampaignId !== "new" ? routeCampaignId : null;
+  const setActivityId = id => onRouteOpen(id);
+  const composing = routeCampaignId === "new";
 
   const selectedTemplate = templates.find((item) => String(item.id) === String(templateId));
   const loadTemplates = async () => {
     if (!numberId) return;
-    setLoadingTemplates(true); setNotice(null); setReview(null); setTemplateId(""); setMappings({});
+    setLoadingTemplates(true); setNotice(null); setReview(null);
+    const request=++templateRequest.current;
+    if(previousTemplateNumber.current!==numberId){setTemplateId(""); setMappings({});}
+    previousTemplateNumber.current=numberId;
     try {
       const response = await apiFetch(`${API}/broadcasts/templates?whatsapp_number_id=${encodeURIComponent(numberId)}`);
-      setTemplates((await response.json()).templates || []);
-    } catch (error) { setTemplates([]); setNotice({ ok: false, text: error.message || "Could not load templates." }); }
-    finally { setLoadingTemplates(false); }
+      const nextTemplates=(await response.json()).templates || [];
+      if(request===templateRequest.current)setTemplates(nextTemplates);
+    } catch (error) { if(request===templateRequest.current){setTemplates([]); setNotice({ ok: false, text: error.message || "Could not load templates." });} }
+    finally { if(request===templateRequest.current)setLoadingTemplates(false); }
   };
-  useEffect(() => { if (numberId) loadTemplates(); else { setTemplates([]); setTemplateId(""); } }, [numberId]);
+  useEffect(() => { if (numberId) loadTemplates(); else { templateRequest.current++; setTemplates([]); setTemplateId(""); setLoadingTemplates(false); } return()=>{templateRequest.current++;}; }, [numberId]);
   useEffect(() => { setReview(null); }, [groupId, templateId, mappings]);
   const updateMapping = (number, source, value = "") => setMappings((current) => ({ ...current, [number]: { source, ...(source === "fixed" ? { value } : {}) } }));
   const reviewBroadcast = async () => {
@@ -929,7 +807,7 @@ function Broadcasts() {
     setSending(true); setNotice(null);
     try {
       const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_number_id: numberId, contact_group_id: groupId, template_id: templateId, variable_mappings: mappings }) });
-      const result = await response.json(); setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted · ${result.failed} failed` }); setReview(null); refetchHistory();
+      const result = await response.json(); setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted · ${result.failed} failed` }); setReview(null); setTemplateId(""); setMappings({}); refetchHistory();
     } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
     finally { setSending(false); }
   };
@@ -937,15 +815,17 @@ function Broadcasts() {
   const statusFor = (broadcast) => {
     if (broadcast.status === "completed") return { label: "PROCESSED", cls: "badge-green" };
     if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
-    if (broadcast.status === "pending" || broadcast.status === "sending") return { label: "SCHEDULED", cls: "badge-gold" };
-    return null;
+    if (broadcast.status === "pending") return { label: "SCHEDULED", cls: "badge-gold" };
+    if (broadcast.status === "sending") return { label: "SENDING", cls: "badge-blue" };
+    return { label: broadcast.status || "UNKNOWN", cls: "badge-cream" };
   };
   const activity = (history || []).filter(broadcast => activityFilter === "all" || statusFor(broadcast)?.label.toLowerCase() === activityFilter);
 
   return (
     <div className="pad" style={{ padding: 28 }}>
-      <PageHead label="WhatsApp" title="Broadcasts." sub="Send messages to your contact list" />
-      <div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
+      <PageHead title={composing ? "New campaign" : "Campaigns"} sub="Create broadcasts, review your audience and follow campaign activity." action={<button className={"btn "+(composing?"btn-wire":"btn-gold")} onClick={()=>onRouteOpen(composing?null:"new")}>{composing?"Back to campaigns":"New campaign"}</button>} />
+      {composing && <><p className="draft-notice" role="status">{draftSaved ? "Draft saved in this browser tab. Review your audience before sending." : "Draft could not be saved on this device. Keep this page open."}</p>
+      <div className="campaign-compose-grid"><div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
         <div className="mono" style={{ fontSize: 9, color: "var(--gold2)", letterSpacing: 2, textTransform: "uppercase", marginBottom: 16 }}>New Broadcast</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -959,33 +839,37 @@ function Broadcasts() {
           {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><BroadcastReviewSummary review={review} /><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? "Sending…" : "Send broadcast"}</button></div></div>}
         </div>
       </div>
+      <aside className="work-surface campaign-preview"><header><h2>Campaign preview</h2></header><div className="campaign-preview-body"><span className="badge badge-cream">{selectedTemplate?.status||"Choose a template"}</span><p>{selectedTemplate?.body_preview||"Your approved template will appear here."}</p></div><div className="surface-footnote"><strong>Before you send</strong><p>Confirm the sending number, audience and template variables. The review step checks eligible recipients and marketing opt-outs.</p></div></aside></div>
+      </>}
+      {!composing && <><div className="campaign-summary"><strong>Campaign activity</strong><span>Processing status is separate from delivery receipts.</span></div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Broadcast Activity</div>
-        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["processed","Processed"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+        <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Campaign Activity</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sending","Sending"],["processed","Processed"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
       </div>
       <div className="card">
-        {historyLoading ? <Loader /> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
+        {historyLoading ? <Loader /> : historyError ? <div className="surface-message" role="alert">{historyError} <button className="btn btn-wire" onClick={refetchHistory}>Try again</button></div> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
           const status = statusFor(broadcast); if (!status) return null;
           return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px auto", gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
             <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{Array.isArray(broadcast.contacts) ? broadcast.contacts.length : 0} recipients</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString()}</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{broadcast.recorded_recipients ?? (Array.isArray(broadcast.contacts) ? broadcast.contacts.length : "Unknown")} recipients</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString("en-GB",{timeZone:"Africa/Lusaka"})} CAT</div>
             <div className={"badge " + status.cls}>{status.label}</div>
             <button className="btn btn-wire" onClick={() => setActivityId(broadcast.id)} aria-expanded={activityId === broadcast.id} aria-controls="broadcast-details">Details</button>
           </div>;
         })}
       </div>
+      </>}
       {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
     </div>
   );
 }
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
-function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRouteOpen, onRouteUnavailable }) {
-  const { data, loading, refetch } = useAPI("/contacts");
+function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRouteOpen, onRouteUnavailable, onNavigate }) {
+  const { data, loading, error: contactsError, refetch } = useAPI("/contacts");
   const [tab, setTab] = useState(initialTab);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useQueryState("q", "");
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -1173,10 +1057,8 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 
   return <div className="pad" style={{ padding: 28 }}>
     {toast && <div className="mono" style={{ position:"fixed",right:24,bottom:24,zIndex:2000,padding:"12px 16px",background:toast.ok?"#1A3A2A":"#7F1D1D",color:toast.ok?"var(--success-text)":"var(--error-text)",border:"1px solid var(--wire2)",fontSize:11 }}>{toast.text}</div>}
-    <PageHead label="Database" title="Contacts." sub={loading ? "Loading..." : `${data?.length || 0} contacts`} action={canManageGroups ? (tab === "groups" ? <button className="btn btn-gold" onClick={() => setShowGroupForm(true)}><Ic n="plus" s={12} c="var(--ink)" />New Contact Group</button> : <button className="btn btn-gold" onClick={() => setShowImport(true)}><Ic n="plus" s={12} c="var(--ink)" />Import Contacts</button>) : null} />
-    <div style={{ display:"flex",borderBottom:"1px solid var(--wire)",marginBottom:20 }}>
-      {[["contacts","All Contacts"],["groups","Contact Groups"]].map(([id,label]) => <button key={id} onClick={() => setTab(id)} style={{background:"none",border:"none",borderBottom:tab===id?"2px solid var(--gold)":"2px solid transparent",color:tab===id?"var(--gold2)":"var(--mist)",padding:"10px 18px",fontFamily:"DM Mono, monospace",fontSize:10,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer"}}>{label}</button>)}
-    </div>
+    <PageHead label="Database" title="Contacts." sub={loading ? "Loading..." : contactsError ? "Contacts unavailable" : `${data?.length || 0} contacts`} action={canManageGroups ? (tab === "groups" ? <button className="btn btn-gold" onClick={() => setShowGroupForm(true)}><Ic n="plus" s={12} c="var(--ink)" />New Contact Group</button> : <button className="btn btn-gold" onClick={() => setShowImport(true)}><Ic n="plus" s={12} c="var(--ink)" />Import Contacts</button>) : null} />
+    {contactsError && <div className="surface-message" role="alert">{contactsError} <button className="btn btn-wire" onClick={refetch}>Try again</button></div>}
     {tab === "contacts" && <>
       <div style={{ position:"relative",marginBottom:16 }}><input className="input" placeholder="Search contacts..." value={search} onChange={event => setSearch(event.target.value)} /></div>
       {canManageGroups && selectedContactIds.size > 0 && <div className="card-gold" style={{padding:"12px 14px",marginBottom:12,display:"flex",gap:10,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}><span style={{fontSize:13,color:"var(--cream)"}}>{selectedContactIds.size} contacts selected</span><div style={{display:"flex",gap:8}}><button className="btn btn-gold" onClick={()=>setShowAddToGroup(true)}>Add to Group</button><button className="btn btn-wire" onClick={()=>clearSelection(setSelectedContactIds)}>Clear selection</button></div></div>}
@@ -1193,12 +1075,13 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 }
 
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
-function TeamInbox({ customer, user }) {
-  const [filter,setFilter]=useState('all');
+function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
+  const [filter,setFilter]=useQueryState('view','all');
   const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
   const {rows,counts,members,loading,error}=queue;
   const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
-  const [reply,setReply]=useState(''),[replying,setReplying]=useState(false),[replyTarget,setReplyTarget]=useState(null),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
+  const [reply,setReply]=useReplyDraft(customer?.id,user?.id,selectedId);
+  const [replying,setReplying]=useState(false),[replyTarget,setReplyTarget]=useState(null),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
   const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
   const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
@@ -1211,14 +1094,15 @@ function TeamInbox({ customer, user }) {
   const composerRef=useInboxComposer(reply,selectedId,threadLoading,canReply);
   const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
   const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
-  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReply('');setReplyTarget(null);setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
+  useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReplyTarget(null);setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
   useEffect(()=>{setSelection(new Set());setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
   useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
   const openConversation=async(id,markRead=true,force=false)=>{
     if(id===selectedId && thread && markRead && !force)return;
     const request=++requestRef.current,workspace=customer?.id;
     setSelectedId(id);setThreadLoading(true);setThreadError('');setActionError('');
-    if(id!==selectedId){setThread(null);setReply('');}
+    if(id!==selectedId){setThread(null);setReplyTarget(null);setAttachment(null);setLocationDraft(null);}
+    if(id!==routeConversationId)onRouteOpen?.(id);
     try {
       const response=await apiFetch(`${API}/conversations/${id}`);const payload=await response.json();
       if(!response.ok)throw new Error(payload.error || 'Unable to open conversation');
@@ -1233,6 +1117,10 @@ function TeamInbox({ customer, user }) {
     } catch(failure){if(request===requestRef.current)setThreadError(failure.message || 'Unable to load conversation');}
     finally{if(request===requestRef.current)setThreadLoading(false);}
   };
+  useEffect(()=>{
+    if(routeConversationId && routeConversationId!==selectedId)openConversation(routeConversationId);
+    if(!routeConversationId){setSelectedId('');setThread(null);}
+  },[routeConversationId,customer?.id]);
   const runAction=async(path,options={})=>{
     if(actionLock.current || !selectedId)return;
     actionLock.current=true;setBusy(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
@@ -1344,7 +1232,7 @@ function TeamInbox({ customer, user }) {
             {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div id={`message-${message.id}`} key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{message.reply_to?<QuotedMessage message={message.reply_to}/>:null}{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:media?.type==='image'?8:0}}>{message.message_body}</div>:!media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginTop:7}}><div className="mono" style={{fontSize:9,color:'var(--mist)'}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div>{canReply&&<button type="button" className="text-button" disabled={replying||busy} onClick={()=>{setReplyTarget(message);setLocationDraft(null);}}>Reply</button>}</div></div>})}
           </div>
           {canReply?<form className="inbox-composer" onSubmit={attachment?sendAttachment:sendReply}>{replyTarget&&<div className="inbox-reply-target"><QuotedMessage message={replyTarget}/><button className="text-button" type="button" disabled={replying} onClick={()=>setReplyTarget(null)}>Cancel reply</button></div>}<textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply or caption" placeholder={attachment?'Add an optional caption…':'Write a reply…'} value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><input ref={attachmentInputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={e=>{const file=e.target.files?.[0];if(!file)return;setAttachment({file,type:file.type.startsWith('image/')?'image':'document'});setLocationDraft(null);}}/><div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:6,flexWrap:'wrap'}}><div style={{display:'flex',gap:8}}><button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>attachmentInputRef.current?.click()}>{attachment?`Attached: ${attachment.file.name}`:'Attach image or document'}</button>{attachment&&<button className="text-button" type="button" disabled={replying||busy} onClick={()=>{setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';}}>Remove</button>}<button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>{setLocationDraft({latitude:'',longitude:'',name:'',address:''});setAttachment(null);}}>Send location</button></div><button className="btn btn-gold" type="submit" disabled={replying||busy||(!attachment&&!reply.trim())}>{replying?'Sending…':attachment?'Send attachment':'Send reply'}</button></div></form>:<div className="inbox-control">
-            <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zoe is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
+            <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'Zed AI is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
             {canTake && <button className="btn btn-gold" disabled={busy} onClick={()=>active.control_mode==='automation'?setConfirmation({action:'take_zoe',id:active.id}):runAction('/take')}>Take Conversation</button>}
             {active.status==='resolved' && <button className="btn btn-wire" disabled={busy} onClick={()=>runAction('/reopen')}>Reopen Conversation</button>}
           </div>}
@@ -1366,7 +1254,7 @@ function TeamInbox({ customer, user }) {
     {(confirmation||bulkResult) && <div className="modal-bg" role="dialog" aria-modal="true" aria-label={bulkResult?'Conversation action results':'Confirm conversation action'}><div className="modal">
       {bulkResult?<><h3>Conversation action results</h3><p>{bulkResult.filter(result=>result.outcome==='applied').length} applied · {bulkResult.filter(result=>result.outcome!=='applied').length} not changed</p><ul>{bulkResult.map(result=><li key={result.id}>{result.name}: {result.outcome}{result.reason?` — ${result.reason}`:''}{result.warning?` — ${result.warning}`:''}</li>)}</ul><button className="btn btn-wire" onClick={()=>setBulkResult(null)}>Close results</button></>:<>
         <h3>{confirmation.action==='take_zoe'?'Take this conversation?':`${confirmation.action.replace('_',' ')} — ${confirmation.items.length} selected`}</h3>
-        <p>{confirmation.action==='take_zoe'?'Zoe will stop handling this chat and it will be assigned to you.':confirmation.action==='resolve'?'Resolve eligible waiting or human-handled chats. Their next inbound message returns to normal routing. Zoe-handled chats are not resolved.':confirmation.action==='reopen'?'Only resolved chats will reopen, under your human handling. Zoe stays paused until resolution.':'Assign eligible waiting or human-handled chats. Assignment does not take control or change Zoe handling.'}</p>
+        <p>{confirmation.action==='take_zoe'?'Zed AI will stop handling this chat and it will be assigned to you.':confirmation.action==='resolve'?'Resolve eligible waiting or human-handled chats. Their next inbound message returns to normal routing. Zoe-handled chats are not resolved.':confirmation.action==='reopen'?'Only resolved chats will reopen, under your human handling. Zoe stays paused until resolution.':'Assign eligible waiting or human-handled chats. Assignment does not take control or change Zoe handling.'}</p>
         {confirmation.action!=='take_zoe'&&<p>Changed, unauthorized, or ineligible chats will be reported separately.</p>}
         <div style={{display:'flex',gap:8,marginTop:16}}><button className="btn btn-wire" disabled={busy} onClick={()=>setConfirmation(null)}>Cancel</button><button className="btn btn-gold" disabled={busy} onClick={()=>{if(confirmation.action==='take_zoe'){if(confirmation.id!==selectedId){setConfirmation(null);return;}setConfirmation(null);runAction('/take',{body:{from_automation:true}});}else confirmBulk();}}>{busy?'Applying…':'Confirm action'}</button></div>
       </>}
@@ -1417,7 +1305,7 @@ function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {
 }
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
-function Automations({ customer }) {
+function Automations({ customer, activeView = "library" }) {
   const workspaceKey = customer?.id || "";
   const { data: automationData, loading, error, refetch } = useAPI("/automations", [workspaceKey]);
   const { data: libraryData, loading: libraryLoading, error: libraryError, refetch: refetchLibrary } = useAPI("/automations/library", [workspaceKey]);
@@ -1435,8 +1323,8 @@ function Automations({ customer }) {
   const [hours, setHours] = useState({});
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
+  const [search, setSearch] = useQueryState("q", "");
+  const [category, setCategory] = useQueryState("category", "All");
   const [reviewing, setReviewing] = useState(false);
   const [conflicts, setConflicts] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -1517,10 +1405,12 @@ function Automations({ customer }) {
   const libraryCard = (template, recommendedCard = false) => { const existing = configured(template); return <article key={template.id} className="card" style={{ padding:16, minWidth:recommendedCard ? 260 : 0, display:"flex", flexDirection:"column", gap:10 }}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><span className="badge badge-blue">{template.category}</span>{existing && <span className="badge badge-green">Already active</span>}</div><div style={{fontWeight:650,fontSize:15}}>{template.title}</div><div style={{fontSize:12,color:"var(--mist)",lineHeight:1.5,flex:1}}>{template.description}</div>{recommendedCard && <div style={{fontSize:11,color:"var(--gold2)"}}>{template.recommendation_reason}</div>}<button className="btn btn-wire" onClick={() => existing && canManage ? openComposer(template, existing) : openPreview(template)}>{existing && canManage ? "View / Edit" : "Preview"}</button></article> };
   return <div className="pad" style={{padding:28,maxWidth:1240,margin:"0 auto"}}><PageHead label="Customer conversations" title="Automations" sub="Choose a ready-made response, make it yours, and keep your team in control." />
     {!canManage && <div className="card" style={{padding:16,marginBottom:20,borderColor:"var(--wire2)"}}><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.2}}>VIEW ONLY</div><div style={{color:"var(--cream2)",fontSize:13,marginTop:6}}>You can browse the Automation Library and view activity. An owner or admin manages this workspace's automations.</div></div>}
-    <section style={{marginBottom:30}}><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.6,textTransform:"uppercase"}}>Recommended for you</div><div style={{color:"var(--cream2)",fontSize:13,margin:"5px 0 14px"}}>Suggestions use your business industry and setup goals. Only working automations appear here.</div>{libraryLoading ? <Loader/> : <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:4}}>{recommended.map((template)=>libraryCard(template,true))}</div>}</section>
+    {activeView === "library" && <><section style={{marginBottom:30}}><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.6,textTransform:"uppercase"}}>Recommended for you</div><div style={{color:"var(--cream2)",fontSize:13,margin:"5px 0 14px"}}>Suggestions use your business industry and setup goals. Only working automations appear here.</div>{libraryLoading ? <Loader/> : <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:4}}>{recommended.map((template)=>libraryCard(template,true))}</div>}</section>
     <section className="card" style={{padding:20,marginBottom:22}}><div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"start",flexWrap:"wrap"}}><div><div style={{fontSize:17,fontWeight:650}}>Browse Automation Library</div><div style={{color:"var(--mist)",fontSize:12,marginTop:4}}>Every listed setup uses automation capabilities available today.</div></div><button className="btn btn-wire" onClick={refetchLibrary} disabled={libraryLoading}>Refresh</button></div><input className="input" value={search} onChange={(event)=>setSearch(event.target.value)} placeholder="Search automations" style={{margin:"18px 0 10px",maxWidth:420}}/><div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:6}}>{categories.map((item)=><button key={item} className={"btn "+(category===item?"btn-gold":"btn-wire")} onClick={()=>setCategory(item)} style={{whiteSpace:"nowrap",padding:"7px 10px"}}>{item}</button>)}</div>{libraryError ? <div role="alert" style={{color:"var(--error-text)",marginTop:14}}>We could not load the Automation Library.</div> : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:12,marginTop:18}}>{filtered.map((template)=>libraryCard(template))}</div>}<div style={{marginTop:20,borderTop:"1px solid var(--wire)",paddingTop:16}}><div className="mono" style={{fontSize:10,color:"var(--mist)",letterSpacing:1.2}}>COMING SOON</div><div style={{fontSize:12,color:"var(--mist)",margin:"6px 0 10px"}}>These need workflow capabilities ZedPing does not offer yet.</div><div style={{display:"flex",gap:8,overflowX:"auto"}}>{comingSoon.map((item)=><span className="badge badge-cream" key={item.id} style={{whiteSpace:"nowrap"}}>{item.title}</span>)}</div></div></section>
-    <section className="card" style={{marginBottom:22}}><div style={{padding:"18px 20px",borderBottom:"1px solid var(--wire)",display:"flex",justifyContent:"space-between",gap:12}}><div><div style={{fontSize:16,fontWeight:600}}>Your Automations</div><div style={{fontSize:12,color:"var(--mist)",marginTop:4}}>Workspace-scoped rules, including existing rules created before the Library.</div></div><button className="btn btn-wire" onClick={refetch} disabled={loading}>Refresh</button></div>{notice && <div role="alert" style={{margin:"14px 20px 0",color:"var(--error-text)",fontSize:12}}>{notice}</div>}{loading?<Loader/>:error?<div role="alert" style={{padding:24,color:"var(--error-text)"}}>We could not load automations.</div>:!automations.length?<Empty msg="Preview an Automation Library recipe to get started."/>:<div>{automations.map((item)=><div key={item.id} className="row" style={{gridTemplateColumns:"1.25fr 2.3fr 90px 116px",gap:12}}><div><div style={{fontWeight:600}}>{nameFor(item)}</div><div style={{fontSize:11,color:"var(--mist)",marginTop:4}}>{item.library_template_id ? "Library recipe" : "Existing rule"}</div></div><div style={{fontSize:12,color:"var(--cream2)"}}>{summaryFor(item)}</div><div><span className={"badge "+(item.is_active?"badge-green":"badge-cream")}>{item.is_active?"Active":"Paused"}</span></div><div style={{display:"flex",justifyContent:"flex-end",gap:7}}>{canManage && <><button className="btn btn-wire" onClick={()=> { const template=templates.find((value)=>value.id===item.library_template_id) || {id:"existing",version:1,automation_type:item.automation_type || "keyword",title:nameFor(item),availability:"available",suggested_phrases:[],suggested_response:"",content_library_supported:true,setup_fields:[],duplicate_strategy:"none"}; openComposer(template,item) }} style={{padding:"6px 9px",fontSize:8}}>Edit</button><button className="btn btn-wire" onClick={()=>toggle(item)} style={{padding:"6px 9px",fontSize:8}}>{item.is_active?"Pause":"Activate"}</button></>}</div></div>)}</div>}</section>
+    </>}
+    {activeView === "keywords" && <><section className="card" style={{marginBottom:22}}><div style={{padding:"18px 20px",borderBottom:"1px solid var(--wire)",display:"flex",justifyContent:"space-between",gap:12}}><div><div style={{fontSize:16,fontWeight:600}}>Your Automations</div><div style={{fontSize:12,color:"var(--mist)",marginTop:4}}>Workspace-scoped rules, including existing rules created before the Library.</div></div><button className="btn btn-wire" onClick={refetch} disabled={loading}>Refresh</button></div>{notice && <div role="alert" style={{margin:"14px 20px 0",color:"var(--error-text)",fontSize:12}}>{notice}</div>}{loading?<Loader/>:error?<div role="alert" style={{padding:24,color:"var(--error-text)"}}>We could not load automations.</div>:!automations.length?<Empty msg="Preview an Automation Library recipe to get started."/>:<div>{automations.map((item)=><div key={item.id} className="row" style={{gridTemplateColumns:"1.25fr 2.3fr 90px 116px",gap:12}}><div><div style={{fontWeight:600}}>{nameFor(item)}</div><div style={{fontSize:11,color:"var(--mist)",marginTop:4}}>{item.library_template_id ? "Library recipe" : "Existing rule"}</div></div><div style={{fontSize:12,color:"var(--cream2)"}}>{summaryFor(item)}</div><div><span className={"badge "+(item.is_active?"badge-green":"badge-cream")}>{item.is_active?"Active":"Paused"}</span></div><div style={{display:"flex",justifyContent:"flex-end",gap:7}}>{canManage && <><button className="btn btn-wire" onClick={()=> { const template=templates.find((value)=>value.id===item.library_template_id) || {id:"existing",version:1,automation_type:item.automation_type || "keyword",title:nameFor(item),availability:"available",suggested_phrases:[],suggested_response:"",content_library_supported:true,setup_fields:[],duplicate_strategy:"none"}; openComposer(template,item) }} style={{padding:"6px 9px",fontSize:8}}>Edit</button><button className="btn btn-wire" onClick={()=>toggle(item)} style={{padding:"6px 9px",fontSize:8}}>{item.is_active?"Pause":"Activate"}</button></>}</div></div>)}</div>}</section>
     <section className="card"><button type="button" onClick={()=>setShowHistory(value=>!value)} style={{width:"100%",background:"transparent",color:"inherit",border:0,padding:"18px 20px",cursor:"pointer",display:"flex",justifyContent:"space-between",textAlign:"left"}}><div><div style={{fontSize:16,fontWeight:600}}>Activity</div><div style={{fontSize:12,color:"var(--mist)",marginTop:4}}>Recent automation activity is kept for 90 days.</div></div><span className="mono" style={{color:"var(--gold2)",fontSize:10}}>{showHistory?"Hide":"View activity"}</span></button>{showHistory&&<div style={{borderTop:"1px solid var(--wire)"}}><div style={{padding:"12px 20px",display:"flex",justifyContent:"flex-end"}}><button className="btn btn-wire" onClick={refetchHistory} disabled={historyLoading}>Refresh</button></div>{historyLoading?<Loader/>:historyError?<div role="alert" style={{padding:20,color:"var(--error-text)"}}>We could not load activity.</div>:!(historyData||[]).length?<Empty msg="Activity will appear once an automation handles a conversation."/>:(historyData||[]).map((event)=><div key={event.id} className="row" style={{gridTemplateColumns:"120px 1fr 180px",gap:12}}><div><span className="badge badge-blue">{eventLabel(event)}</span></div><div style={{fontSize:12,color:"var(--cream2)"}}>Automation activity recorded.</div><div className="mono" style={{fontSize:10,color:"var(--mist)",textAlign:"right"}}>{when(event.created_at)}</div></div>)}</div>}</section>
+    </>}
     {preview&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Automation preview"><div className="modal" style={{maxWidth:620,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.3}}>AUTOMATION LIBRARY</div><h2 className="editorial" style={{fontSize:32,marginTop:8}}>{preview.title}</h2></div><button className="btn btn-wire" onClick={reset}>Close</button></div><p style={{color:"var(--cream2)",lineHeight:1.55}}>{preview.description}</p><div className="card" style={{padding:14,margin:"14px 0"}}><div className="label">What it handles</div><div style={{fontSize:13}}>{preview.required_capability}</div>{preview.suggested_phrases?.length>0&&<><div className="label" style={{marginTop:14}}>It listens for</div><div style={{fontSize:12,color:"var(--cream2)"}}>{preview.suggested_phrases.join(", ")}</div></>}{preview.suggested_response&&<><div className="label" style={{marginTop:14}}>Suggested response</div><div style={{fontSize:12,color:"var(--cream2)",lineHeight:1.5}}>{preview.suggested_response}</div></>}<div style={{fontSize:11,color:"var(--mist)",marginTop:14}}>Content Library: {preview.content_library_supported ? "You may choose an active Text or Link item." : "Not used by this automation."}</div></div><div style={{fontSize:12,color:"var(--mist)",lineHeight:1.5}}>{preview.limitations}</div><div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:22}}><button className="btn btn-wire" onClick={reset}>Close</button>{canManage&&<button className="btn btn-gold" onClick={()=>openComposer(preview)}>Use template</button>}</div></div></div>}
     {composer&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Configure automation"><div className="modal" style={{maxWidth:680,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:14,alignItems:"start"}}><div><div className="mono" style={{fontSize:10,color:"var(--gold2)",letterSpacing:1.3}}>{reviewing?"REVIEW":"CUSTOMIZE"}</div><h2 className="editorial" style={{fontSize:31,marginTop:8}}>{icons[composer.automation_type]} {composer.title}</h2></div><button className="btn btn-wire" onClick={reset}>Close</button></div>{reviewing?<><div style={{color:"var(--cream2)",lineHeight:1.55,marginBottom:14}}>Review the customer-facing behaviour before activation.</div><div className="card" style={{padding:16,color:"var(--cream2)"}}>{composer.automation_type!=="human_handoff"&&<div><div className="label">Response</div><div style={{fontSize:13,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{reviewResponse() || "No customer message is sent."}</div></div>}{composer.automation_type==="away"&&<><div className="label" style={{marginTop:18}}>Business hours</div><div style={{display:"grid",gap:5,fontSize:12,lineHeight:1.45}}>{reviewHours().map((line)=><div key={line}>{line}</div>)}</div><div className="label" style={{marginTop:18}}>Timezone</div><div style={{fontSize:13}}>{timezone}</div></>}<div className="label" style={{marginTop:18}}>When this runs</div><div style={{fontSize:13,lineHeight:1.55}}>{reviewTrigger()}</div>{composer.automation_type==="human_handoff"&&<div style={{fontSize:12,color:"var(--mist)",marginTop:12}}>This sends the conversation to your Team Inbox and pauses automation until a team member handles it.</div>}</div>{conflicts.length>0?<div role="alert" className="card" style={{padding:14,marginTop:14,borderColor:"var(--error-text)",color:"var(--error-text)"}}><b>Resolve this conflict first.</b>{conflicts.map((conflict)=><div key={conflict.id} style={{marginTop:6}}>An active workspace automation already uses {conflict.phrase ? "the phrase “"+conflict.phrase+"”" : "this single-use setup"}.</div>)}</div>:<div className="card" style={{padding:14,marginTop:14,color:"var(--cream2)"}}>No active workspace rule conflicts with this setup.</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={()=>setReviewing(false)}>Back</button><button className="btn btn-gold" disabled={saving||conflicts.length>0} onClick={activate}>{saving?"Activating…":"Activate automation"}</button></div></>:<><p style={{color:"var(--cream2)",fontSize:13,lineHeight:1.5}}>{composer.limitations}</p>{["keyword","faq","human_handoff"].includes(composer.automation_type)&&<div><label className="label">{composer.automation_type==="faq"?"Question or topic":"When a customer says"}</label>{composer.automation_type==="faq"&&<input className="input" value={form.topic} onChange={(event)=>setForm(current=>({...current,topic:event.target.value}))} placeholder="e.g. Business hours" style={{marginBottom:10}}/>}<textarea className="textarea" value={form.phrases} onChange={(event)=>setForm(current=>({...current,phrases:event.target.value}))} placeholder="One exact phrase per line" /><div style={{fontSize:11,color:"var(--mist)",marginTop:6}}>Use exact phrases, one per line. Up to 10 phrases.</div></div>}{composer.automation_type!=="human_handoff"&&<div style={{marginTop:18}}><label className="label">Respond with</label><div style={{display:"flex",gap:8,marginBottom:12}}><button className={"btn "+(sourceMode==="message"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("message")}>Write a message</button>{composer.content_library_supported&&<button className={"btn "+(sourceMode==="content"?"btn-gold":"btn-wire")} onClick={()=>setSourceMode("content")}>Content Library</button>}</div>{sourceMode==="message"?<textarea className="textarea" maxLength={4096} value={form.response} onChange={(event)=>setForm(current=>({...current,response:event.target.value}))}/>:<div>{contentLoading?<Loader/>:<select className="input" value={contentId} onChange={(event)=>setContentId(event.target.value)}><option value="">Choose Text or Link content</option>{contentItems.map((item)=><option key={item.id} value={item.id}>{item.name} · {String(item.content_type).toLowerCase()}</option>)}</select>}<div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Only active Text and Link content is supported.</div></div>}</div>}{composer.automation_type==="away"&&<div style={{marginTop:18,borderTop:"1px solid var(--wire)",paddingTop:16}}><label className="label">Workspace timezone</label><input className="input" value={timezone} onChange={(event)=>setTimezone(event.target.value)} placeholder="Africa/Lusaka"/><div style={{fontSize:11,color:"var(--mist)",marginTop:7}}>Use an IANA timezone. An end time earlier than its start means the business is open overnight.</div><div style={{marginTop:16,fontWeight:600}}>Business hours</div>{days.map(([key,label])=>{const interval=firstInterval(key), open=(hours[key]||[]).length>0;return <div key={key} style={{display:"grid",gridTemplateColumns:"104px 70px 1fr 1fr",gap:8,alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--wire)"}}><div style={{fontSize:13}}>{label}</div><label style={{fontSize:11,display:"flex",gap:5,alignItems:"center"}}><input type="checkbox" checked={open} onChange={(event)=>closeDay(key,event.target.checked)}/> Open</label><input className="input" type="time" disabled={!open} value={interval.start} onChange={(event)=>changeHours(key,"start",event.target.value)}/><input className="input" type="time" disabled={!open} value={interval.end} onChange={(event)=>changeHours(key,"end",event.target.value)}/></div>})}</div>}{notice&&<div role="alert" style={{color:"var(--error-text)",fontSize:12,marginTop:14}}>{notice}</div>}<div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:22}}><button className="btn btn-wire" onClick={reset}>Cancel</button><button className="btn btn-gold" disabled={saving} onClick={submitReview}>{saving?"Checking…":"Review"}</button></div></>}</div></div>}
   </div>;
@@ -1673,7 +1563,7 @@ function Settings({ user, customer, onWorkspaceUpdated, onConnectionStateChange 
         
       </div>
 
-      <WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={workspace} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={onConnectionStateChange} />
+
 
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 6 }}>
@@ -1992,9 +1882,9 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("ALL");
+  const [filter, setFilter] = useQueryState("type", "ALL");
   const [lifecycleFilter, setLifecycleFilter] = useState("active");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useQueryState("q", "");
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
   const [type, setType] = useState(null);
@@ -2323,7 +2213,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={closeEdit} disabled={editSaving}>Cancel</button><button type="submit" className="btn btn-gold" disabled={editSaving}>{editSaving ? "Saving…" : "Save changes"}</button></div>
       </form>
     </div></div>}
-    {reviewingKnowledge && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review image knowledge"><div className="modal" style={{maxWidth:820,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:2}}>ZOE KNOWLEDGE</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24,marginTop:7}}>Needs your confirmation</h3></div><button className="btn btn-wire" onClick={()=>setReviewingKnowledge(null)}>Close</button></div><div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:16,marginTop:16}}><div><div className="label">Original image</div>{previewUrl ? <img src={previewUrl} alt={selected?.name || "Original image"} style={{width:"100%",maxHeight:300,objectFit:"contain",border:"1px solid var(--wire)"}} /> : <button className="btn btn-wire" onClick={()=>secureOpen(selected)}>Preview secure image</button>}</div><div><label className="label">Information found</label><textarea className="textarea" maxLength="20000" value={knowledgeForm.extracted_text} onChange={e=>setKnowledgeForm(current=>({...current,extracted_text:e.target.value}))}/><label className="label" style={{marginTop:12}}>Needs your confirmation</label><textarea className="textarea" placeholder="One uncertainty per line" value={knowledgeForm.review_notes} onChange={e=>setKnowledgeForm(current=>({...current,review_notes:e.target.value}))}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}><label className="label">Valid from <input className="input" type="date" value={knowledgeForm.valid_from} onChange={e=>setKnowledgeForm(current=>({...current,valid_from:e.target.value}))}/></label><label className="label">Valid until <input className="input" type="date" value={knowledgeForm.valid_until} onChange={e=>setKnowledgeForm(current=>({...current,valid_until:e.target.value}))}/></label></div></div></div><div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={rejectKnowledge}>Reject</button><button className="btn btn-wire" onClick={()=>saveReview(false)}>Save changes</button><button className="btn btn-gold" onClick={()=>saveReview(true)}>Approve for Zoe</button></div></div></div>}
+    {reviewingKnowledge && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review image knowledge"><div className="modal" style={{maxWidth:820,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:2}}>ZED AI KNOWLEDGE</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24,marginTop:7}}>Needs your confirmation</h3></div><button className="btn btn-wire" onClick={()=>setReviewingKnowledge(null)}>Close</button></div><div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:16,marginTop:16}}><div><div className="label">Original image</div>{previewUrl ? <img src={previewUrl} alt={selected?.name || "Original image"} style={{width:"100%",maxHeight:300,objectFit:"contain",border:"1px solid var(--wire)"}} /> : <button className="btn btn-wire" onClick={()=>secureOpen(selected)}>Preview secure image</button>}</div><div><label className="label">Information found</label><textarea className="textarea" maxLength="20000" value={knowledgeForm.extracted_text} onChange={e=>setKnowledgeForm(current=>({...current,extracted_text:e.target.value}))}/><label className="label" style={{marginTop:12}}>Needs your confirmation</label><textarea className="textarea" placeholder="One uncertainty per line" value={knowledgeForm.review_notes} onChange={e=>setKnowledgeForm(current=>({...current,review_notes:e.target.value}))}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}><label className="label">Valid from <input className="input" type="date" value={knowledgeForm.valid_from} onChange={e=>setKnowledgeForm(current=>({...current,valid_from:e.target.value}))}/></label><label className="label">Valid until <input className="input" type="date" value={knowledgeForm.valid_until} onChange={e=>setKnowledgeForm(current=>({...current,valid_until:e.target.value}))}/></label></div></div></div><div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={rejectKnowledge}>Reject</button><button className="btn btn-wire" onClick={()=>saveReview(false)}>Save changes</button><button className="btn btn-gold" onClick={()=>saveReview(true)}>Approve for Zed AI</button></div></div></div>}
     {creating && <div className="modal-bg"><div className="modal" style={{ maxWidth: 620 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
       {!type ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginTop: 20 }}>{[["TEXT","Text"],["DOCUMENT","Document"],["IMAGE","Image"],["LINK","Link"],["WHATSAPP_TEMPLATE_REFERENCE","WhatsApp Template"]].map(([key,label]) => <button key={key} className="btn btn-wire" onClick={() => begin(key)} style={{ minHeight: 72, justifyContent: "center" }}>{label}</button>)}</div> :
@@ -2361,7 +2251,8 @@ export default function App() {
   const navigate = useCallback((next, { replace = false } = {}) => {
     const nextRoute = typeof next === "string" ? { section: next, resourceId: null, resourceKind: null } : next;
     const pathname = routeToPath(nextRoute);
-    if (pathname !== window.location.pathname) window.history[replace ? "replaceState" : "pushState"](null, "", pathname);
+    const query = parseDashboardRoute(window.location.pathname).section === nextRoute.section ? window.location.search : "";
+    if (pathname !== window.location.pathname) window.history[replace ? "replaceState" : "pushState"](null, "", pathname + query);
     setRoute(parseDashboardRoute(pathname));
   }, []);
   const [open, setOpen] = useState(false);
@@ -2588,6 +2479,7 @@ export default function App() {
 
   const onLogout = async () => {
     await supabase.auth.signOut();
+    try { Object.keys(sessionStorage).filter(key=>key.startsWith("zedping.reply.v1:")||key.startsWith("zedping.campaign.v1:")||key.startsWith("zedping.ai-draft.v1:")||key.startsWith("zedping.flow-draft.v1:")).forEach(key=>sessionStorage.removeItem(key)); } catch {}
     window.localStorage.removeItem(WORKSPACE_STORAGE_KEY);
     setUser(null); setCustomer(null); setWorkspaces([]); setNeedsVerification(false); setWorkspaceChanging(false); setWorkspaceSwitchTarget(null);
   };
@@ -2602,18 +2494,22 @@ export default function App() {
   };
 
   const pages = {
-    overview:    { title: "Overview",     comp: <Overview customer={customer} user={user} onNavigate={navigate} whatsappConnectionState={whatsappConnectionState?.workspaceId === customer?.id ? whatsappConnectionState : null} /> },
-    broadcasts:  { title: "Broadcasts",   comp: <Broadcasts customer={customer} /> },
-    contacts:    { title: "Contacts",     comp: <Contacts customer={customer} /> },
-    contactGroups: { title: "Contact Groups", comp: <Contacts customer={customer} initialTab="groups" routeGroupId={route.resourceKind === "contactGroup" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "contactGroups", resourceId, resourceKind: "contactGroup" })} onRouteUnavailable={() => navigate({ section: "contactGroups", resourceId: null, resourceKind: null }, { replace: true })} /> },
-    messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} /> },
-    automations: { title: "Automations",  comp: <Automations customer={customer} /> },
-    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "chatbotFlows", resourceId, resourceKind: "flow" })} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
-    zoeAi: { title: "Zoe AI", comp: <ZoeAI customer={customer} routeAgentId={route.resourceKind === "agent" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "zoeAi", resourceId, resourceKind: "agent" })} onRouteUnavailable={() => navigate({ section: "zoeAi", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={(path: string, init: RequestInit = {}) => apiFetch(API + path, init)} /> },
+    overview:    { title: "Overview",     comp: <WorkspaceOverview customer={customer} request={workspaceRequest} navigate={navigate} /> },
+    broadcasts:  { title: "Campaigns",   comp: <Broadcasts customer={customer} user={user} routeCampaignId={route.resourceId} onRouteOpen={resourceId=>navigate({section:"broadcasts",resourceId,resourceKind:"campaign"})} /> },
+    contacts:    { title: "Contacts",     comp: <Contacts customer={customer} onNavigate={navigate} onRouteOpen={resourceId=>navigate({section:"contactGroups",resourceId,resourceKind:"contactGroup"})} /> },
+    contactGroups: { title: "Contact Groups", comp: <Contacts customer={customer} onNavigate={navigate} initialTab="groups" routeGroupId={route.resourceKind === "contactGroup" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "contactGroups", resourceId, resourceKind: "contactGroup" })} onRouteUnavailable={() => navigate({ section: "contactGroups", resourceId: null, resourceKind: null }, { replace: true })} /> },
+    messages:    { title: "Team Inbox",   comp: <TeamInbox customer={customer} user={user} routeConversationId={route.resourceId} onRouteOpen={resourceId=>navigate({section:"messages",resourceId,resourceKind:"conversation"})} /> },
+    automations: { title: "Automations",  comp: <Automations customer={customer} activeView={route.tab||"library"} /> },
+    chatbotFlows: { title: "Chatbot Flows", comp: <ChatbotFlows customer={customer} userId={user?.id} routeFlowId={route.resourceKind === "flow" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "chatbotFlows", resourceId, resourceKind: "flow" })} onRouteUnavailable={() => navigate({ section: "chatbotFlows", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={workspaceRequest} /> },
+    zoeAi: { title: "Zed AI", comp: <ZoeAI customer={customer} userId={user?.id} routeAgentId={route.resourceKind === "agent" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "zoeAi", resourceId, resourceKind: "agent" })} onRouteUnavailable={() => navigate({ section: "zoeAi", resourceId: null, resourceKind: null }, { replace: true })} apiFetch={workspaceRequest} /> },
     templates:   { title: "WhatsApp Templates", comp: <WhatsAppTemplates customer={customer} /> },
     content:     { title: "Content Library", comp: <ContentLibrary customer={customer} routeContentId={route.resourceKind === "content" ? route.resourceId : null} onRouteOpen={(resourceId) => navigate({ section: "content", resourceId, resourceKind: "content" })} onRouteUnavailable={() => navigate({ section: "content", resourceId: null, resourceKind: null }, { replace: true })} /> },
     team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
-    settings:    { title: "Account",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
+    whatsapp: { title: "WhatsApp", comp: <div className="pad"><PageTitle title="WhatsApp" description="Your business number, connection status and Meta setup."/><WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState}/></div> },
+    analytics: { title:"Analytics", comp:<WorkspaceReports customer={customer} request={workspaceRequest} tab={route.tab||"messaging"}/> },
+    billing: { title:"Billing", comp:<WorkspaceBilling customer={customer}/> },
+    integrations: { title:"Integrations", comp:<WorkspaceIntegrations/> },
+    settings:    { title: "Settings",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 
   if (loading || invitationLoading) return (
@@ -2641,13 +2537,16 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
+      <a className="skip-link" href="#workspace-content">Skip to content</a>
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={navigate} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
-        <div className={"main workspace" + (active === "messages" ? " inbox-workspace" : "")}>
+        <main id="workspace-content" className={"main workspace" + (active === "messages" ? " inbox-workspace" : "")}>
           <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
+          <SectionTabs route={route} navigate={navigate}/>
+          {route.invalid && <div className="route-notice" role="alert">This page is unavailable. Choose a destination from the navigation.</div>}
           {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} className={active === "messages" ? "inbox-route" : undefined} style={{ flex: 1, overflowY: active === "messages" ? undefined : "auto" }}>{cur.comp}</div>}
-        </div>
+        </main>
       </div>
     </>
   );

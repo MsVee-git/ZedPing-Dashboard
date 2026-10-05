@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export const INBOX_VIEWS = [['needs_attention','Needs Attention'],['zoe','Zoe Handling'],['assigned_to_me','My Conversations'],['unassigned_human','Unassigned'],['unread','Unread'],['resolved','Resolved'],['all','All']];
+export const INBOX_VIEWS = [['needs_attention','Needs Attention'],['zoe','AI handling'],['assigned_to_me','My Conversations'],['unassigned_human','Unassigned'],['unread','Unread'],['resolved','Resolved'],['all','All']];
 
 export function matchesInboxView(row,view,userId) {
   if(view==='needs_attention')return row.status==='needs_attention' && row.control_mode==='needs_attention';
