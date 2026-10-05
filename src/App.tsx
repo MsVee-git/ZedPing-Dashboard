@@ -346,7 +346,7 @@ function Logo({ size = "md" }) {
   const fs = size === "lg" ? 22 : size === "sm" ? 16 : 18;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <img src="/zedping-logo-v3.svg" alt="" width={sz} height={sz} style={{ display: "block", objectFit: "contain", flexShrink: 0, border: 0, background: "transparent" }} />
+      <img src="/zedping-logo-v4.svg" alt="" width={sz} height={sz} style={{ display: "block", objectFit: "contain", flexShrink: 0, border: 0, background: "transparent" }} />
       <span style={{ fontFamily: "Cormorant Garamond, serif", fontWeight: 600, fontSize: fs, color: "var(--cream)", letterSpacing: 0.5 }}>
         Zed<span style={{ color: "var(--gold2)" }}>Ping</span>
       </span>
