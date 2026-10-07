@@ -105,10 +105,10 @@ const fixtures={
  console.log('AI detail and return route passed');
  await page.goto('http://127.0.0.1:4186/zed-ai/agents/agent-one');
  await page.getByRole('button',{name:'Edit draft',exact:true}).click();
- await page.getByPlaceholder('For example: AutoGuard Assistant').fill('Manda Support');
+ await page.getByPlaceholder('For example: Customer Support Assistant').fill('Manda Support');
  await page.reload();
- await page.getByPlaceholder('For example: AutoGuard Assistant').waitFor();
- assert.equal(await page.getByPlaceholder('For example: AutoGuard Assistant').inputValue(),'Manda Support');
+ await page.getByPlaceholder('For example: Customer Support Assistant').waitFor();
+ assert.equal(await page.getByPlaceholder('For example: Customer Support Assistant').inputValue(),'Manda Support');
  console.log('AI draft restored without publishing changes');
  for(const state of ['registering','failed','operational']){
    fixtures['/workspace'].whatsapp_connection.provisioning_state=state;

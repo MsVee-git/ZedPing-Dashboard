@@ -54,7 +54,12 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
   async function load() {
     try {
       const results = await Promise.all([apiFetch("/ai-agents/library"),apiFetch("/ai-agents"),apiFetch("/ai-agents/knowledge-items"),apiFetch("/ai-agents/numbers")]);
-      setTemplates((await results[0].json()).templates || []);
+      setTemplates(((await results[0].json()).templates || []).map(item => ({
+        ...item,
+        role: item.title === "Vehicle service information"
+          ? "Helps customers understand your vehicle services using approved business information."
+          : item.role,
+      })));
       const loadedAgents=(await results[1].json()).agents || [];
       setAgents(loadedAgents);
       setSelected(current=>current ? loadedAgents.find(item=>String(item.id)===String(current.id)) || current : current);
@@ -249,7 +254,7 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
     return <div className="ai-page" style={{padding:"28px 32px",maxWidth:1000,margin:"0 auto"}}><h1 className="editorial" style={{fontSize:42}}>Zed AI</h1><p style={{color:"var(--cream2)"}}>Configure a private draft. Changes stay in this browser tab until saved. They do not update your live agent.</p>{notice && <p role="status">{notice}</p>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginTop:20}}><div style={{padding:20,border:"1px solid var(--wire)",background:"var(--panel)"}}>
       <label className="label">Agent template</label><select className="input" value={draft.template_key} onChange={e=>setDraft({...draft,template_key:e.target.value})}>{templates.map(item=><option key={item.key} value={item.key}>{item.title}</option>)}</select>
-      <label className="label" style={{marginTop:16}}>What should customers call your assistant?</label><input className="input" value={draft.assistant_name} onChange={e=>setDraft({...draft,assistant_name:e.target.value})} placeholder="For example: AutoGuard Assistant"/>
+      <label className="label" style={{marginTop:16}}>What should customers call your assistant?</label><input className="input" value={draft.assistant_name} onChange={e=>setDraft({...draft,assistant_name:e.target.value})} placeholder="For example: Customer Support Assistant"/>
       <label className="label" style={{marginTop:16}}>Communication style</label><select className="input" value={draft.communication_style} onChange={e=>setDraft({...draft,communication_style:e.target.value})}>{styles.map(value=><option key={value}>{value}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Future connected WhatsApp number</label><select className="input" value={draft.whatsapp_number_id} onChange={e=>setDraft({...draft,whatsapp_number_id:e.target.value})}>{numbers.map(item=><option key={item.id} value={item.id}>{item.phone_number}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Approved knowledge (up to 5)</label>{knowledge.length ? knowledge.map(item=><label key={item.id} style={{display:"block",padding:"7px 0"}}><input type="checkbox" checked={draft.knowledge_item_ids.includes(item.id)} onChange={()=>toggleKnowledge(item.id)}/> {item.name} · {item.source_type === "image" ? "Image" : "Text"}</label>) : <p style={{color:"var(--mist)"}}>No eligible approved knowledge yet. Review and approve an Image extraction in Content Library before selecting it here.</p>}
