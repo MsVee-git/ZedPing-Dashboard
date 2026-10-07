@@ -113,7 +113,7 @@ const fixtures={
  for(const state of ['registering','failed','operational']){
    fixtures['/workspace'].whatsapp_connection.provisioning_state=state;
    await page.goto('http://127.0.0.1:4186/dashboard');
-   const label=state==='operational'?'Connected':state==='failed'?'Failed · needs attention':'Registering';
+   const label=state==='operational'?'Connected':state==='failed'?'Failed · needs attention':'Activation in progress';
    await page.getByText('WhatsApp · '+label,{exact:true}).waitFor();
  }
  console.log('WhatsApp registering, failed and operational states passed');

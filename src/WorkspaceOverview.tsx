@@ -4,7 +4,8 @@ import { conversationHandlingStatus } from './ConversationHandlingStatus';
 export function connectionLabel(connection:any) {
   if(connection?.provisioning_state==='failed')return 'Failed · needs attention';
   if(connection?.status==='connected' && connection?.provisioning_state==='operational')return 'Connected';
-  if(connection)return 'Registering';
+  if(connection?.provisioning_state==='registering')return 'Activation in progress';
+  if(connection)return 'Number linked';
   return 'Not connected';
 }
 export function campaignStatus(status:string){return ({completed:'Processed',pending:'Scheduled',sending:'Sending',failed:'Failed'})[status]||status||'Unknown';}
