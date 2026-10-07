@@ -95,6 +95,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
     try {
       // Do not retain a one-time authorization code after handing it to the
       // server. Subsequent retries use the backend's server-only vault.
+      pending.current.completionSubmitted = true;
       pending.current.code = null;
       const response = await apiFetch(`${API}/whatsapp-connections/embedded-signup/complete`, {
         method: "POST",
@@ -238,7 +239,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
   const retryProvisioning = async () => {
     if (!canManage || !connection?.id || connection?.provisioning_state !== "failed") return;
-    setPhase("validating"); setMessage("Activating WhatsAppâ€¦");
+    setPhase("validating"); setMessage("Activating WhatsApp…");
     try { await apiFetch(`${API}/whatsapp-connections/${connection.id}/provision/retry`, { method: "POST" }); setPhase("complete"); setMessage("WhatsApp is connected to this workspace."); await refresh(); }
     catch (error) { setPhase("error"); setMessage(error?.message || "WhatsApp provisioning needs attention. Please try again."); await refresh(); }
   };
@@ -271,7 +272,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
               : provisioningInProgress ? "WhatsApp activation is in progress."
               : "This number is linked to your workspace."}
           </div>
-          {connection.provisioning_state === "failed" && canManage && <button type="button" className="btn btn-wire" onClick={retryProvisioning} disabled={busy} style={{ marginTop: 12 }}>{busy ? "Retryingâ€¦" : "Retry activation"}</button>}
+          {connection.provisioning_state === "failed" && canManage && <button type="button" className="btn btn-wire" onClick={retryProvisioning} disabled={busy} style={{ marginTop: 12 }}>{busy ? "Retrying…" : "Retry activation"}</button>}
         </div>
       ) : (
         <>
@@ -286,7 +287,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
 
           {canManage && emailVerified && profileComplete && configured && (
             <button className="btn btn-gold" type="button" onClick={start} disabled={busy} style={{ marginTop: 18 }}>
-              {phase === "preparing" ? "Preparing secure setupâ€¦" : phase === "meta" ? "Waiting for Metaâ€¦" : phase === "validating" ? "Confirming connectionâ€¦" : "Connect WhatsApp"}
+              {phase === "preparing" ? "Preparing secure setup…" : phase === "meta" ? "Waiting for Meta…" : phase === "validating" ? "Confirming connection…" : "Connect WhatsApp"}
             </button>
           )}
         </>
