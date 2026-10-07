@@ -24,7 +24,7 @@ export function embeddedSignupCompletionPayload(pending) {
 }
 
 export function canStartEmbeddedSignupCompletion(pending, completionStarted) {
-  return !completionStarted && Boolean(embeddedSignupCompletionPayload(pending));
+  return !completionStarted && Boolean(pending?.code || pending?.completionSubmitted) && Boolean(embeddedSignupCompletionPayload(pending));
 }
 
 export function embeddedSignupRecoveryOutcome({ connection, errorMessage = "" }) {
