@@ -34,7 +34,7 @@ test("in-progress provisioning is not retried as another Embedded Signup", () =>
 });
 
 test("duplicate clicks are refused after the first completion request begins", () => {
-  const pending = { session, code: null, phoneNumberId: "123456789", finishWabaId: null };
+  const pending = { session, code: null, phoneNumberId: "123456789", finishWabaId: null, completionSubmitted: true };
   assert.equal(canStartEmbeddedSignupCompletion(pending, false), true);
   assert.equal(canStartEmbeddedSignupCompletion(pending, true), false);
 });
@@ -52,4 +52,25 @@ test("only a confirmed operational response completes and expiry clears the pend
 
 test("existing connections remain operational and do not enter a recovery state", () => {
   assert.equal(embeddedSignupRecoveryOutcome({ connection: { status: "connected", provisioning_state: "operational", id: "legacy-connection" } }), "complete");
+});
+
+test("FINISH before the login code waits instead of sending an initial code-less completion", () => {
+  const pending = { ...emptyEmbeddedSignupPending(), session, phoneNumberId: "123456789" };
+  assert.equal(canStartEmbeddedSignupCompletion(pending, false), false);
+  pending.code = "temporary-code";
+  assert.equal(canStartEmbeddedSignupCompletion(pending, false), true);
+  const first = embeddedSignupCompletionPayload(pending);
+  pending.completionSubmitted = true;
+  pending.code = null;
+  assert.equal(first.code, "temporary-code");
+  assert.equal(canStartEmbeddedSignupCompletion(pending, true), false);
+  assert.equal(canStartEmbeddedSignupCompletion(pending, false), true);
+  assert.equal(Object.hasOwn(embeddedSignupCompletionPayload(pending), "code"), false);
+});
+
+test("login code before FINISH waits for the selected phone", () => {
+  const pending = { ...emptyEmbeddedSignupPending(), session, code: "temporary-code" };
+  assert.equal(canStartEmbeddedSignupCompletion(pending, false), false);
+  pending.phoneNumberId = "123456789";
+  assert.equal(canStartEmbeddedSignupCompletion(pending, false), true);
 });
