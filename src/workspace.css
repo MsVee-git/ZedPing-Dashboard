@@ -125,3 +125,40 @@ a.metric:hover { border-color:#81a18d; }
 .sidebar ::-webkit-scrollbar-track { background:#062d24; }
 .sidebar ::-webkit-scrollbar-thumb { background:#365a48; border-radius:8px; }
 @media(max-width:768px) { .workspace .mob-bar { background:#062d24; color:#f4eee0; } }
+
+/* Approved brand direction: logo forest green, ivory and editorial headings. */
+@font-face { font-family:'Instrument Serif'; src:url('/fonts/instrument-serif-400.ttf') format('truetype'); font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:'Manrope'; src:url('/fonts/manrope-400.ttf') format('truetype'); font-weight:400; font-style:normal; font-display:swap; }
+@font-face { font-family:'Manrope'; src:url('/fonts/manrope-500.ttf') format('truetype'); font-weight:500; font-style:normal; font-display:swap; }
+@font-face { font-family:'Manrope'; src:url('/fonts/manrope-600.ttf') format('truetype'); font-weight:600; font-style:normal; font-display:swap; }
+@font-face { font-family:'Manrope'; src:url('/fonts/manrope-700.ttf') format('truetype'); font-weight:700; font-style:normal; font-display:swap; }
+
+.sidebar,.workspace { font-family:'Manrope','Segoe UI',sans-serif; }
+.sidebar { background:#123527; --deep:#123527; --wire:#315042; --mist:#bbcabf; border-color:#294638; }
+.sidebar .slink { color:#f0f2e9; font-family:inherit; font-weight:500; }
+.sidebar .slink.active { background:#244d39; box-shadow:inset 0 0 0 1px #365d47; }
+.sidebar .slink:hover { background:#204431; }
+.navigation-group + .navigation-group { border-color:#315042; }
+.navigation-label { color:#e0c479; font-size:10px; letter-spacing:1px; }
+.workspace { background:#f8f6ef; --workspace-bg:#f8f6ef; --cream:#14251c; --cream2:#49574f; --mist:#67716b; --wire:#e7e6de; }
+.workspace .desk-bar { background:#fcfbf7 !important; border-color:#e7e6de; }
+.workspace .mono,.workspace .label,.workspace .input,.workspace .textarea,.workspace .btn,.workspace .badge { font-family:inherit; }
+.workspace .page-heading h1,.workspace h1.editorial,.workspace h2.editorial,.workspace .ai-page > h1 { font-family:'Instrument Serif',Georgia,serif; font-size:46px !important; line-height:1.1; font-weight:400 !important; letter-spacing:-.8px; }
+.workspace .work-surface h2,.workspace h3.editorial { font-family:'Instrument Serif',Georgia,serif; font-size:25px !important; font-weight:400 !important; letter-spacing:-.2px; }
+.workspace .page-heading { margin-bottom:26px; }
+.workspace .page-heading p { font-size:14px; margin-top:10px; }
+.workspace .pad,.ai-page { padding-top:30px !important; }
+.workspace .btn-gold { background:#123527; color:#fffdf5; border-color:#123527; }
+.workspace .btn-gold:hover { background:#244d39; color:#fffdf5; border-color:#244d39; }
+.workspace a { color:#214d37; }
+.workspace a.btn-gold { color:#fffdf5; }
+.workspace .metric strong { font-family:'Instrument Serif',Georgia,serif; font-size:38px; font-weight:400; letter-spacing:-.5px; }
+.workspace .metric { gap:7px; }
+.workspace .section-tabs { background:#fcfbf7; }
+.workspace .section-tabs a.selected { color:#123527; border-color:#c3a052; }
+.workspace .card,.workspace .card-gold,.workspace .work-surface,.workspace .metric { box-shadow:0 2px 8px #1a302005; border-color:#e7e6de; }
+.workspace .work-table th { background:#faf9f5; }
+.sidebar ::-webkit-scrollbar-track { background:#123527; }
+.sidebar ::-webkit-scrollbar-thumb { background:#42604c; }
+.workspace ::-webkit-scrollbar-track { background:#f8f6ef; }
+@media(max-width:768px) { .workspace .page-heading h1,.workspace h1.editorial,.workspace h2.editorial,.workspace .ai-page > h1 { font-size:36px !important; }.workspace .mob-bar { background:#123527; } }
