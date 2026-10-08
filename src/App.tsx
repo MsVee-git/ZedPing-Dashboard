@@ -348,7 +348,7 @@ function Logo({ size = "md" }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <img src="/zedping-logo-v4.svg" alt="" width={sz} height={sz} style={{ display: "block", objectFit: "contain", flexShrink: 0, border: 0, background: "transparent" }} />
       <span style={{ fontFamily: "General Sans, Segoe UI, sans-serif", fontWeight: 600, fontSize: fs, color: "#efc361", letterSpacing: -0.6 }}>
-        ZedPing
+        <span style={{ color: "#ffffff" }}>Zed</span>Ping
       </span>
     </div>
   );
