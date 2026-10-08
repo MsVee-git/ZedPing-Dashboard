@@ -104,7 +104,7 @@ test('triage views, filtered selection, confirmations, request counts and permis
  assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.url.endsWith('/members')).length),1);
  assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.url.endsWith('/counts')).length),1);
  await page.getByRole('button',{name:'Needs Attention (1)',exact:true}).click();await page.getByRole('checkbox',{name:'Select Waiting',exact:true}).waitFor();
- await page.getByRole('button',{name:'Select loaded (max 200)',exact:true}).click();await page.getByText('1 selected',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Select shown chats',exact:true}).click();await page.getByText('1 chat selected',{exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.url.endsWith('/Waiting')).length),0,'selection must not open/read a chat');
  await page.getByRole('combobox',{name:'Bulk assignee'}).selectOption('other');await page.getByRole('button',{name:'Assign to member',exact:true}).click();
  await page.getByRole('button',{name:'Confirm action'}).evaluate(e=>{e.click();e.click()});await page.getByRole('button',{name:'Close results'}).waitFor();assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.url.endsWith('/bulk')).length),1);
@@ -125,7 +125,7 @@ test('triage views, filtered selection, confirmations, request counts and permis
 test('select this view is bounded to 200 matching conversations across pages without opening them',options,async()=>{
  const {browser,page,errors,mount}=await setup();try{
  await mount();await page.evaluate(()=>window.fixtureAddMany());await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('button',{name:'Needs Attention (231)',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.inbox-open').length===50);
- await page.getByRole('button',{name:'Select this view (max 200)',exact:true}).click();await page.getByText('200 selected',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Select chats in this filter',exact:true}).click();await page.getByText('200 chats selected',{exact:true}).waitFor();
  assert.equal(await page.getByRole('checkbox',{checked:true}).count(),200);assert.equal(await page.locator('.inbox-open').count(),200);
  assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method!=='GET').length),0);
  assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>/conversations\/(Long|Short|Waiting|Queue)/.test(r.url)).length),0);
