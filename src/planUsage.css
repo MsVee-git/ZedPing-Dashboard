@@ -10,3 +10,11 @@
 .usage-cards .muted { margin:0 22px 12px; }
 .usage-cards .surface-footnote { padding:0 22px 22px; margin:0; }
 .plan-caption { padding:14px 22px; }
+
+.workspace .plan-usage-page .surface-footnote,
+.workspace .plan-usage-page .plan-caption,
+.workspace .plan-usage-page .work-table th,
+.workspace .plan-usage-page .work-table td { font-size:15px; line-height:1.65; }
+.workspace .plan-usage-page .muted { font-size:16px; line-height:1.6; }
+.workspace .plan-usage-page .btn { font-size:14px; }
+.workspace .plan-usage-page .usage-explanation { font-size:16px; line-height:1.75; }
