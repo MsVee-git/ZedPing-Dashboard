@@ -187,3 +187,10 @@ body {font-weight:400;}
 .usage-snapshot > div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 16px; padding:10px 0; border-bottom:1px solid var(--wire); }
 .usage-snapshot dt { font-size:12px; }
 .usage-snapshot dd { margin:0; font-size:12px; color:var(--mist); }
+
+.usage-snapshot-body { padding:22px; }
+.usage-snapshot-body .billing-plan { padding:0 0 14px; gap:16px; }
+.usage-snapshot-body .billing-plan > strong { font-size:22px; }
+.usage-snapshot-body .surface-footnote { padding:0; margin:16px 0; }
+.usage-snapshot-body .usage-snapshot dd { text-align:right; }
+@media(max-width:480px) { .usage-snapshot-body { padding:18px; } .usage-snapshot-body .usage-snapshot > div { flex-direction:column; } .usage-snapshot-body .usage-snapshot dd { text-align:left; } }
