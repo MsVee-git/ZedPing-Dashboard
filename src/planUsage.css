@@ -5,3 +5,8 @@
 .usage-explanation { padding-left:20px; line-height:1.8; }
 .work-table th[scope="row"] { text-align:left; font-weight:500; }
 @media(max-width:800px) { .usage-cards { grid-template-columns:1fr; } }
+
+.usage-cards .usage-unknown { margin:22px 22px 12px; }
+.usage-cards .muted { margin:0 22px 12px; }
+.usage-cards .surface-footnote { padding:0 22px 22px; margin:0; }
+.plan-caption { padding:14px 22px; }
