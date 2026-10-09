@@ -194,3 +194,8 @@ body {font-weight:400;}
 .usage-snapshot-body .surface-footnote { padding:0; margin:16px 0; }
 .usage-snapshot-body .usage-snapshot dd { text-align:right; }
 @media(max-width:480px) { .usage-snapshot-body { padding:18px; } .usage-snapshot-body .usage-snapshot > div { flex-direction:column; } .usage-snapshot-body .usage-snapshot dd { text-align:left; } }
+
+.workspace .usage-snapshot-body .usage-snapshot dt,
+.workspace .usage-snapshot-body .usage-snapshot dd,
+.workspace .usage-snapshot-body .surface-footnote { font-size:15px; line-height:1.6; }
+.workspace .usage-snapshot-body .btn { font-size:14px; }
