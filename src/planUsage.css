@@ -1,0 +1,7 @@
+.usage-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:20px 0; }
+.usage-cards .work-surface { margin:0; }
+.usage-unknown { display:block; font-size:32px; margin:16px 0; }
+.plan-caption { text-align:left; padding:12px 0; color:var(--mist); }
+.usage-explanation { padding-left:20px; line-height:1.8; }
+.work-table th[scope="row"] { text-align:left; font-weight:500; }
+@media(max-width:800px) { .usage-cards { grid-template-columns:1fr; } }
