@@ -37,7 +37,7 @@ export function PlanUsageBilling({ customer }: any) {
     </Surface>
     <Surface title="How your allowance will work">
       <ul className="usage-explanation"><li>A broadcast to 500 recipients uses 500 template messages. Splitting a list does not reduce usage.</li><li>Broadcasts and automated template notifications share the monthly template allowance.</li><li>AI replies use separate AI credit and may also incur WhatsApp service-message charges.</li><li>Before sending, you will see the recipients, allowance needed and any additional usage price.</li><li>When the included allowance runs out, additional sending requires a prepaid top-up. Top-ups will be paid through ZedPing.</li></ul>
-      <button className="btn btn-wire" disabled>Top-ups coming soon</button>
+      <a className="btn btn-wire" href={contact("Hello ZedPing, I would like to request extra messaging usage.")} target="_blank" rel="noreferrer">Request a usage top-up</a>
       <p className="surface-footnote">Usage controls and centralized billing are not active yet. This page does not collect payments.</p>
     </Surface>
   </div>;
