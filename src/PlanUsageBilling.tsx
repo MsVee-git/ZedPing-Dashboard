@@ -8,7 +8,7 @@ export function PlanUsageBilling({ customer }: any) {
   const current = customer?.subscription_plan;
   const selected = proposedPlans.find(plan => plan.id === current);
   const contact = (text: string) => support + encodeURIComponent(text);
-  return <div className="pad">
+  return <div className="pad plan-usage-page">
     <PageTitle title="Plan & usage" description="Your subscription, messaging balance and ZedPing AI usage." />
     <Surface title="Current subscription">
       <div className="billing-plan"><div><h2>{selected?.name || 'Plan unavailable'}</h2><p className="muted">{customer?.subscription_status || 'Status unavailable'}</p></div>
