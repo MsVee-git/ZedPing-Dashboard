@@ -182,3 +182,8 @@ body {font-weight:400;}
 .workspace ::-webkit-scrollbar-track {background:#f6f4ec;}
 @media(max-width:1000px) {.overview-columns {grid-template-columns:1fr;}.workspace .metric:nth-child(2) {border-right:0;}.workspace .metric:nth-child(-n+2) {border-bottom:1px solid #e5e6dc;}}
 @media(max-width:768px) {.main {margin-left:0;}.workspace .pad,.ai-page {padding:20px 16px !important;}.workspace .mob-bar {background:#102b1e;}.workspace .page-heading h1,.workspace h1.editorial,.workspace h2.editorial,.workspace .ai-page > h1 {font-size:28px !important;}.workspace .metric {padding:16px;}}
+
+.usage-snapshot { margin:12px 0; }
+.usage-snapshot > div { display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px 16px; padding:10px 0; border-bottom:1px solid var(--wire); }
+.usage-snapshot dt { font-size:12px; }
+.usage-snapshot dd { margin:0; font-size:12px; color:var(--mist); }
