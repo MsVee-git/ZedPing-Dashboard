@@ -18,8 +18,5 @@ export function WorkspaceReports({customer,request,tab='messaging'}:any){
   </ResourceState></div>;
 }
 
-export function WorkspaceBilling({customer}:any){
-  const plan=customer?.subscription_plan||'starter';
-  return <div className="pad"><PageTitle title="Billing & subscription" description="Your current plan and workspace subscription."/><Surface title="Current plan"><div className="billing-plan"><div><h2>{plan.charAt(0).toUpperCase()+plan.slice(1)}</h2><p className="muted">{customer?.subscription_status||'Status unavailable'}</p></div><strong>{({starter:'K850',business:'K1,500',pro:'K2,500'})[plan]||'Custom'}<small> / month</small></strong></div><p className="surface-footnote">{plan==='pro'?'Special integrations may require a separate quote.':'Contact our team to manage your subscription.'}</p><a className="btn btn-gold billing-action" href="https://wa.me/260778621167?text=Hello%20ZedPing%2C%20I%20need%20help%20with%20my%20subscription." target="_blank" rel="noreferrer">Contact billing support</a></Surface></div>;
-}
+export { PlanUsageBilling as WorkspaceBilling } from './PlanUsageBilling';
 export function WorkspaceIntegrations(){return <div className="pad"><PageTitle title="Integrations" description="Connect the tools your team uses."/><Surface title="Workspace integrations"><p className="surface-message">WhatsApp is managed under WhatsApp → Numbers & connection. For special integrations, contact ZedPing to discuss your requirements.</p><a className="btn btn-wire billing-action" href="https://wa.me/260778621167?text=Hello%20ZedPing%2C%20I%20would%20like%20to%20discuss%20an%20integration." target="_blank" rel="noreferrer">Discuss an integration</a></Surface></div>;}
