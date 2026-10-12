@@ -44,3 +44,9 @@ test("does not turn unsafe numeric or scientific spreadsheet representations int
   assert.equal(parsed.rows[0][0], "2.60978748066E+11");
   assert.match(parsed.rows[1][0], /e\+/i);
 });
+
+ test("plain phone lists retain their first and only contact", () => {
+  assert.deepEqual(parsePastedContacts("+260975393853\n"), { headers: ["phone"], rows: [["+260975393853"]] });
+  assert.deepEqual(parsePastedContacts("\uFEFF+260975393853\r\n\r\n0978748066\r\n"), { headers: ["phone"], rows: [["+260975393853"], ["0978748066"]] });
+  assert.deepEqual(parsePastedContacts("phone\n+260975393853"), { headers: ["phone"], rows: [["+260975393853"]] });
+});

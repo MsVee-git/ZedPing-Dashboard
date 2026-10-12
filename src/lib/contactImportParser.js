@@ -54,6 +54,11 @@ export function parsePastedContacts(text) {
   const first = lines[0];
   const delimiter = first.includes("\t") ? "\t" : first.includes(",") ? "," : first.includes(";") ? ";" : null;
   const matrix = delimiter ? lines.map((line) => parseDelimitedLine(line, delimiter)) : lines.map((line) => [line]);
+  // Plain TXT phone lists have no header: retain every number, including a
+  // single-contact file. Only infer this for unambiguous phone-only lines.
+  if (!delimiter && matrix.every(([value]) => /^\+?[0-9][0-9 ()-]{5,24}$/.test(value.trim()))) {
+    return { headers: ["phone"], rows: matrix.map((row) => row.map(preserveCellValue)) };
+  }
   return matrixToContactImport(matrix);
 }
 
