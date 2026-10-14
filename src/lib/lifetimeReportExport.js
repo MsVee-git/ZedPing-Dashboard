@@ -22,6 +22,12 @@ export function summaryRows(report) {
     ['Recorded broadcasts',report.broadcasts.total,'Includes scheduled and unfinished records'],
     ['First recorded message UTC',report.messages.first_recorded_at,'Retained history start'],
     ['Last recorded message UTC',report.messages.last_recorded_at,'Retained history end']];
+  if(report.delivery){
+    for(const [key,label] of [['delivered','Delivered (includes read)'],['read','Read'],['failed','Provider failed'],['sent_pending','Sent awaiting outcome'],['accepted_pending','Accepted awaiting receipt'],['unconfirmed','Unconfirmed legacy messages'],['submission_failures','Recorded submission failures']])
+      rows.push([label,report.delivery[key],'Latest saved evidence for selected messages; Read is included in Delivered']);
+    rows.push(['First provider receipt UTC',report.delivery.first_receipt_at,'Saved receipt coverage'],['Last provider receipt UTC',report.delivery.last_receipt_at,'Saved receipt coverage']);
+    for(const [reason,count] of Object.entries(report.delivery.failure_reasons))rows.push(['Provider failure: '+reason,count,'Failure receipt without successful delivery/read evidence; a message may have multiple reasons']);
+  }
   for (const [status,count] of Object.entries(report.messages.outbound_statuses)) rows.push(['Outbound status: '+status,count,'Stored latest status; not an inferred rate']);
   for (const [status,count] of Object.entries(report.broadcasts.statuses)) rows.push(['Broadcast status: '+status,count,'Current recorded status']);
   for (const metric of report.unavailable) rows.push([metric,null,'Not established by these records']);
@@ -29,6 +35,6 @@ export function summaryRows(report) {
   return rows;
 }
 export function campaignRows(report) {
-  return [['Workspace','Report generated UTC','Period start UTC','Period end UTC','Campaign ID','Name','Status','Created UTC','Scheduled UTC','Completed UTC','Recorded accepted','Recorded failed','Audience entries'],
-    ...report.broadcasts.campaigns.map(c => [report.workspace_id,report.generated_at,report.period?.start_inclusive,report.period?.end_exclusive,c.id,c.name,c.status,c.created_at,c.scheduled_at,c.completed_at,c.accepted,c.failed,c.recorded_recipients])];
+  return [['Workspace','Report generated UTC','Period start UTC','Period end UTC','Campaign ID','Name','Status','Created UTC','Scheduled UTC','Completed UTC','Recorded accepted','Recorded failed','Audience entries','Linked message records','Delivered (includes read)','Read','Provider failed','Sent awaiting outcome','Accepted awaiting receipt','Unconfirmed','Recorded submission failures','Provider failure reasons'],
+    ...report.broadcasts.campaigns.map(c => [report.workspace_id,report.generated_at,report.period?.start_inclusive,report.period?.end_exclusive,c.id,c.name,c.status,c.created_at,c.scheduled_at,c.completed_at,c.accepted,c.failed,c.recorded_recipients,c.delivery?.linked_messages,c.delivery?.delivered,c.delivery?.read,c.delivery?.failed,c.delivery?.sent_pending,c.delivery?.accepted_pending,c.delivery?.unconfirmed,c.delivery?.submission_failures,c.delivery ? JSON.stringify(c.delivery.failure_reasons) : null])];
 }
