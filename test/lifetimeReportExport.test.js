@@ -14,3 +14,13 @@ test('summary and campaign exports retain scope, cutoff, missing values and reco
  assert.equal(rows[1][rows[0].indexOf('Period start UTC')],report.period.start_inclusive);assert.equal(rows[1][rows[0].indexOf('Period end UTC')],report.period.end_exclusive);
  assert.ok(csv(rows).includes('"Not available"'));assert.ok(csv(rows).includes('"\'=SUM(1)"'));
 });
+
+test('exports receipt coverage, unknown history and unavailable campaign evidence distinctly',()=>{
+ const r={...report,delivery:{delivered:2,read:1,failed:0,sent_pending:1,accepted_pending:1,unconfirmed:40,submission_failures:0,failure_reasons:{},first_receipt_at:null,last_receipt_at:null}}
+ const summary=summaryRows(r)
+ assert.equal(summary.find(row=>row[0]==='Unconfirmed legacy messages')[1],40)
+ assert.equal(summary.find(row=>row[0]==='Provider failed')[1],0)
+ const campaigns=campaignRows(r)
+ assert.equal(campaigns[1][campaigns[0].indexOf('Delivered (includes read)')],undefined)
+ assert.ok(csv(campaigns).includes('Not available'))
+})
