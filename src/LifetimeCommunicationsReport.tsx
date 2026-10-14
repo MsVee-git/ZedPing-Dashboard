@@ -3,7 +3,20 @@ import { PageTitle, ResourceState, Surface, useResource } from './WorkspaceUI';
 import { csv, summaryRows, campaignRows } from './lib/lifetimeReportExport';
 
 export function LifetimeCommunicationsReport({customer,request}:any) {
-  const resource = useResource(request, '/reports/lifetime', customer.id);
+  const [mode,setMode] = useState('lifetime');
+  const [start,setStart] = useState('');
+  const [end,setEnd] = useState('');
+  const [path,setPath] = useState('/reports/lifetime');
+  const [periodError,setPeriodError] = useState('');
+  function applyPeriod() {
+    if(mode === 'lifetime') { setPath('/reports/lifetime'); setPeriodError(''); return; }
+    if(!start || !end || start > end) { setPeriodError('Choose a start date and an end date on or after it.'); return; }
+    const from = new Date(start+'T00:00:00');
+    const until = new Date(end+'T00:00:00'); until.setDate(until.getDate()+1);
+    setPath('/reports/lifetime?start='+encodeURIComponent(from.toISOString())+'&end='+encodeURIComponent(until.toISOString()));
+    setPeriodError('');
+  }
+  const resource = useResource(request, path, customer.id);
   const [downloadError,setDownloadError] = useState('');
   const report = resource.data;
   function download(kind:string) {
@@ -15,15 +28,22 @@ export function LifetimeCommunicationsReport({customer,request}:any) {
         {type:json?'application/json;charset=utf-8':'text/csv;charset=utf-8'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href=url; a.download='zedping-lifetime-'+customer.id+'-'+report.generated_at.slice(0,10)+'-'+kind+(json?'.json':'.csv');
+      a.href=url; a.download='zedping-'+report.scope+'-'+customer.id+'-'+report.generated_at.slice(0,10)+'-'+kind+(json?'.json':'.csv');
       document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     } catch { setDownloadError('The export could not be saved. Please try again.'); }
   }
   const number = (x:any) => typeof x === 'number' ? x.toLocaleString() : 'Not available';
   return <div className="pad">
-    <PageTitle title="Lifetime communications" description="All retained messaging and broadcast records for this business." action={<button className="btn btn-wire" disabled={resource.loading} onClick={resource.retry}>Refresh report</button>}/>
+    <PageTitle title="Communications report" description="Choose all retained history or a reporting period for this business." action={<button className="btn btn-wire" disabled={resource.loading} onClick={resource.retry}>Refresh report</button>}/>
+    <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20,alignItems:'end'}}>
+      <label>Period <select value={mode} onChange={e=>setMode(e.target.value)}><option value="lifetime">All time</option><option value="period">Custom dates</option></select></label>
+      {mode==='period'&&<><label>Start date <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>End date <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></>}
+      <button className="btn btn-gold" onClick={applyPeriod}>Apply period</button>
+    </div>
+    <p className="report-note">Dates include the whole selected day in your browser’s time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}. Contact, conversation and automation counts always show current records.</p>
+    {periodError&&<p role="alert">{periodError}</p>}
     <ResourceState resource={resource}>
-      {report && <><p className="report-note">Report through {new Date(report.generated_at).toLocaleString()} (your local time). Exports include the UTC cutoff.</p>
+      {report && <><p className="report-note">{report.scope==='period' ? 'Selected period: '+new Date(report.period.start_inclusive).toLocaleDateString()+' through '+new Date(new Date(report.period.end_exclusive).getTime()-1).toLocaleDateString()+'. ' : 'All time. '}Report through {new Date(report.generated_at).toLocaleString()} (your local time). Exports include the UTC cutoff.</p>
       <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}}>
         <button className="btn btn-gold" onClick={()=>download('summary')}>Export summary CSV</button>
         <button className="btn btn-wire" onClick={()=>download('campaigns')}>Export campaigns CSV</button>
