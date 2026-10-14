@@ -808,6 +808,8 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   };
   const send = async () => {
     if (["image", "document"].includes(selectedTemplate?.header_media_type) && !broadcastHeaderFile) return setNotice({ok:false,text:"Select the template header file before sending."});
+    if (sendInFlight.current) return;
+    sendInFlight.current = true;
     setSending(true); setNotice(null);
     try {
       const form = new FormData();
@@ -815,9 +817,14 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       form.append("template_id", templateId); form.append("variable_mappings", JSON.stringify(mappings));
       if (broadcastHeaderFile) form.append("header_media", broadcastHeaderFile);
       const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", body: form });
-      const result = await response.json(); setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted · ${result.failed} failed` }); setReview(null); setTemplateId(""); setMappings({}); refetchHistory();
+      const result = await response.json();
+      setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
+      setReview(null); setTemplateId(""); setMappings({}); setBroadcastHeaderFile(null);
+      setNumberId(""); setGroupId(""); writeDraft(draftKey, null);
+      refetchHistory();
+      onRouteOpen(result.activity_id || null);
     } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
-    finally { setSending(false); }
+    finally { sendInFlight.current = false; setSending(false); }
   };
 
   const statusFor = (broadcast) => {
@@ -832,6 +839,8 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   return (
     <div className="pad" style={{ padding: 28 }}>
       <PageHead title={composing ? "New campaign" : "Campaigns"} sub="Create broadcasts, review your audience and follow campaign activity." action={<button className={"btn "+(composing?"btn-wire":"btn-gold")} onClick={()=>onRouteOpen(composing?null:"new")}>{composing?"Back to campaigns":"New campaign"}</button>} />
+      {!composing && notice && <p className="draft-notice" role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
+      {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
       {composing && <><p className="draft-notice" role="status">{draftSaved ? "Draft saved in this browser tab. Review your audience before sending." : "Draft could not be saved on this device. Keep this page open."}</p>
       <div className="campaign-compose-grid"><div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
@@ -869,7 +878,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
         })}
       </div>
       </>}
-      {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
+
     </div>
   );
 }
