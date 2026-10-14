@@ -1,0 +1,33 @@
+export function csvCell(value) {
+  if (value === null || value === undefined) return '"Not available"';
+  let text = String(value);
+  // Excel treats a quoted cell beginning with these characters as a formula.
+  if (/^[\s]*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+export function csv(rows) {
+  return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+export function summaryRows(report) {
+  const rows = [['Metric','Value','Definition'],['Workspace',report.workspace_id,'Selected authorized business'],['Report generated UTC',report.generated_at,'Inclusive creation cutoff'],
+    ['Recorded messages',report.messages.total,'All retained messages through cutoff'],
+    ['Inbound messages',report.messages.inbound,'Recorded inbound direction'],
+    ['Outbound messages',report.messages.outbound,'Recorded outbound direction; not necessarily delivered'],
+    ['Other/missing direction',report.messages.other_direction,'Not classified as inbound or outbound'],
+    ['Recorded correspondents',report.messages.recorded_correspondents,'Normalized phone; contact ID fallback'],
+    ['Current contacts',report.current.contacts,'Current record count'],
+    ['Current conversations',report.current.conversations,'Current record count; not resolved count'],
+    ['Current automations',report.current.automations,'Current record count; not executions'],
+    ['Recorded broadcasts',report.broadcasts.total,'Includes scheduled and unfinished records'],
+    ['First recorded message UTC',report.messages.first_recorded_at,'Retained history start'],
+    ['Last recorded message UTC',report.messages.last_recorded_at,'Retained history end']];
+  for (const [status,count] of Object.entries(report.messages.outbound_statuses)) rows.push(['Outbound status: '+status,count,'Stored latest status; not an inferred rate']);
+  for (const [status,count] of Object.entries(report.broadcasts.statuses)) rows.push(['Broadcast status: '+status,count,'Current recorded status']);
+  for (const metric of report.unavailable) rows.push([metric,null,'Not established by these records']);
+  for (const definition of report.definitions) rows.push(['Definition','',definition]);
+  return rows;
+}
+export function campaignRows(report) {
+  return [['Workspace','Report generated UTC','Campaign ID','Name','Status','Created UTC','Scheduled UTC','Completed UTC','Recorded accepted','Recorded failed','Audience entries'],
+    ...report.broadcasts.campaigns.map(c => [report.workspace_id,report.generated_at,c.id,c.name,c.status,c.created_at,c.scheduled_at,c.completed_at,c.accepted,c.failed,c.recorded_recipients])];
+}
