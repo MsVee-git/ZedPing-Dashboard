@@ -55,17 +55,30 @@ export function LifetimeCommunicationsReport({customer,request}:any) {
         ['Recorded correspondents',report.messages.recorded_correspondents],['Recorded broadcasts',report.broadcasts.total],
         ['Current contacts',report.current.contacts],['Current conversations',report.current.conversations],['Current automations',report.current.automations]
       ].map(([label,value])=><div className="metric" key={String(label)}><strong>{number(value)}</strong><span>{label}</span></div>)}</div>
-      <Surface title="Recorded outbound statuses">
-        <p className="surface-message">Accepted or sent does not prove delivery. These are stored statuses, not delivery or read rates.</p>
+      {report.delivery&&<Surface title="Delivery and read receipts">
+        <p className="surface-message">Read messages are included in Delivered. Unconfirmed means no provider receipt was saved; it does not mean delivered or failed. Read receipts may be unavailable, so missing Read does not prove unread.</p>
+        <div className="metric-grid">{[
+          ['Delivered (includes read)',report.delivery.delivered],['Read',report.delivery.read],['Provider failed',report.delivery.failed],
+          ['Sent — awaiting outcome',report.delivery.sent_pending],['Accepted — awaiting receipt',report.delivery.accepted_pending],
+          ['Unconfirmed legacy messages',report.delivery.unconfirmed],['Recorded submission failures',report.delivery.submission_failures]
+        ].map(([label,value])=><div className="metric" key={String(label)}><strong>{number(value)}</strong><span>{label}</span></div>)}</div>
+        <p className="surface-message">Saved receipt evidence: {report.delivery.first_receipt_at ? new Date(report.delivery.first_receipt_at).toLocaleString()+' to '+new Date(report.delivery.last_receipt_at).toLocaleString() : 'No receipts saved for these messages yet'}. Outcomes are latest evidence, even when receipts arrive after the selected message period.</p>
+        <div className="table-scroll"><table className="work-table"><thead><tr><th>Provider failure reason</th><th>Messages with this reason</th></tr></thead><tbody>
+          {Object.entries(report.delivery.failure_reasons).map(([reason,count])=><tr key={reason}><td>{reason}</td><td>{number(count)}</td></tr>)}
+        </tbody></table></div>
+        {!Object.keys(report.delivery.failure_reasons).length&&<p className="surface-message">No provider failure receipts saved for this selection. This is not proof of zero historical failures.</p>}
+      </Surface>}
+      <Surface title="Stored outbound statuses">
+        <p className="surface-message">Older sent records may represent submission acceptance. Use the receipt metrics above for confirmed outcomes.</p>
         <div className="table-scroll"><table className="work-table"><thead><tr><th>Status</th><th>Messages</th></tr></thead><tbody>
           {Object.entries(report.messages.outbound_statuses).map(([status,count])=><tr key={status}><td>{status}</td><td>{number(count)}</td></tr>)}
         </tbody></table></div>
         {!Object.keys(report.messages.outbound_statuses).length&&<p className="surface-message">No recorded outbound messages.</p>}
       </Surface>
       <Surface title="Broadcast history">
-        <p className="surface-message">Showing {Math.min(100,report.broadcasts.campaigns.length)} of {report.broadcasts.campaigns.length} records. The CSV includes every report record. Accepted counts are already represented where messages were stored.</p>
-        <div className="table-scroll"><table className="work-table"><thead><tr><th>Campaign</th><th>Status</th><th>Accepted</th><th>Failed</th><th>Audience entries</th></tr></thead><tbody>
-          {report.broadcasts.campaigns.slice(0,100).map((c:any)=><tr key={c.id}><td>{c.name}</td><td>{c.status}</td><td>{number(c.accepted)}</td><td>{number(c.failed)}</td><td>{number(c.recorded_recipients)}</td></tr>)}
+        <p className="surface-message">Showing {Math.min(100,report.broadcasts.campaigns.length)} of {report.broadcasts.campaigns.length} records. The CSV includes every report record. Submission counts are separate from delivery outcomes. Receipt metrics require explicitly linked messages; older campaigns show Not available.</p>
+        <div className="table-scroll"><table className="work-table"><thead><tr><th>Campaign</th><th>Status</th><th>Accepted</th><th>Submission failed</th><th>Delivered</th><th>Read</th><th>Provider failed</th><th>Pending / unconfirmed</th><th>Audience entries</th></tr></thead><tbody>
+          {report.broadcasts.campaigns.slice(0,100).map((c:any)=><tr key={c.id}><td>{c.name}</td><td>{c.status}</td><td>{number(c.accepted)}</td><td>{number(c.failed)}</td><td>{number(c.delivery?.delivered)}</td><td>{number(c.delivery?.read)}</td><td>{number(c.delivery?.failed)}</td><td>{number(c.delivery ? c.delivery.sent_pending+c.delivery.accepted_pending+c.delivery.unconfirmed : null)}</td><td>{number(c.recorded_recipients)}</td></tr>)}
         </tbody></table></div>
       </Surface>
       <Surface title="Report definitions"><ul>{report.definitions.map((text:string)=><li key={text} style={{margin:'8px 24px'}}>{text}</li>)}</ul><p className="surface-message">Not available: {report.unavailable.join('; ')}.</p></Surface>
