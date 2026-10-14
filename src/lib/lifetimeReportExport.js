@@ -10,7 +10,8 @@ export function csv(rows) {
 }
 export function summaryRows(report) {
   const rows = [['Metric','Value','Definition'],['Workspace',report.workspace_id,'Selected authorized business'],['Report generated UTC',report.generated_at,'Inclusive creation cutoff'],
-    ['Recorded messages',report.messages.total,'All retained messages through cutoff'],
+    ['Scope',report.scope,'Lifetime or selected period'],['Period start UTC',report.period?.start_inclusive,'Inclusive; blank for lifetime'],['Period end UTC',report.period?.end_exclusive,'Exclusive; blank for lifetime'],
+    ['Recorded messages',report.messages.total,'Retained messages within selected bounds and creation cutoff'],
     ['Inbound messages',report.messages.inbound,'Recorded inbound direction'],
     ['Outbound messages',report.messages.outbound,'Recorded outbound direction; not necessarily delivered'],
     ['Other/missing direction',report.messages.other_direction,'Not classified as inbound or outbound'],
@@ -28,6 +29,6 @@ export function summaryRows(report) {
   return rows;
 }
 export function campaignRows(report) {
-  return [['Workspace','Report generated UTC','Campaign ID','Name','Status','Created UTC','Scheduled UTC','Completed UTC','Recorded accepted','Recorded failed','Audience entries'],
-    ...report.broadcasts.campaigns.map(c => [report.workspace_id,report.generated_at,c.id,c.name,c.status,c.created_at,c.scheduled_at,c.completed_at,c.accepted,c.failed,c.recorded_recipients])];
+  return [['Workspace','Report generated UTC','Period start UTC','Period end UTC','Campaign ID','Name','Status','Created UTC','Scheduled UTC','Completed UTC','Recorded accepted','Recorded failed','Audience entries'],
+    ...report.broadcasts.campaigns.map(c => [report.workspace_id,report.generated_at,report.period?.start_inclusive,report.period?.end_exclusive,c.id,c.name,c.status,c.created_at,c.scheduled_at,c.completed_at,c.accepted,c.failed,c.recorded_recipients])];
 }
