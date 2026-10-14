@@ -1,0 +1,22 @@
+name: Lifetime report build and tests
+on:
+  pull_request:
+    paths:
+      - 'src/LifetimeCommunicationsReport.tsx'
+      - 'src/WorkspaceReports.tsx'
+      - 'src/lib/lifetimeReportExport.js'
+      - 'test/lifetimeReportExport.test.js'
+      - '.github/workflows/lifetime-reports.yml'
+permissions:
+  contents: read
+jobs:
+  report-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: node --test test/lifetimeReportExport.test.js
+      - run: npm run build
