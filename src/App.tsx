@@ -15,6 +15,7 @@ import { ChatbotFlows } from "./ChatbotFlows";
 import { CustomAutomationBuilder } from "./CustomAutomationBuilder";
 import { ZoeAI } from "./ZoeAI";
 import { TeamMembers } from "./TeamMembers";
+import { MyAccount } from "./MyAccount";
 import { ContactsImport } from "./ContactsImport";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
 import { captureInvitationToken, clearInvitationToken } from "./lib/invitationFlow";
@@ -33,6 +34,17 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const API = "https://zedping-backend-production.up.railway.app";
 const ZEDPING_WA = "260778621167";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+async function verifyAccountPassword(email, password, userId) {
+  const verifier = createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "zedping.account-verification" }
+  });
+  try {
+    const { data, error } = await verifier.auth.signInWithPassword({ email, password });
+    if (error || data?.user?.id !== userId) throw new Error("Your current password could not be verified. Please try again.");
+  } finally {
+    await verifier.auth.signOut({ scope: "local" }).catch(() => {});
+  }
+}
 const WORKSPACE_STORAGE_KEY = "zedping.activeWorkspaceId";
 const nativeRequest = window.fetch.bind(window);
 
@@ -702,6 +714,7 @@ function Sidebar({ active, setActive, user, customer, onLogout, open, onClose })
           </div>)}
         </nav>
         <div style={{ padding: "8px 8px 14px" }}>
+          <RouteLink route="account" navigate={next=>{setActive(next);onClose();}} className={"slink "+(active==="account"?"active":"")} aria-current={active==="account"?"page":undefined}><Ic n="settings" s={15}/><span>My Account</span></RouteLink>
           <button className="slink" onClick={onLogout} style={{ color: "rgba(239,68,68,0.6)" }}>
             <Ic n="logout" s={13} c="rgba(239,68,68,0.6)" /> Sign Out
           </button>
@@ -726,7 +739,7 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWo
         </select>}
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--cream)" }}>{switching ? "Switching workspace…" : (customer?.business_name || "My Business")}</div>
-          <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{user?.email}</div>
+          <div className="mono" style={{ fontSize: 10, color: "var(--mist)" }}>{user?.user_metadata?.name ? user.user_metadata.name + " · " : ""}{user?.email}</div>
         </div>
         <div style={{ width: 32, height: 32, background: "var(--green)", border: "1px solid var(--wire2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <span className="editorial" style={{ color: "var(--gold2)", fontSize: 15, fontWeight: 600 }}>{initial}</span>
@@ -2379,8 +2392,8 @@ export default function App() {
       const code = params.get("code");
       const type = params.get("type");
 
-      if (code || type === "recovery") {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
           setAuthError(error.message || "We could not verify this link.");
         } else if (data?.session && type === "recovery") {
@@ -2534,6 +2547,7 @@ export default function App() {
     analytics: { title:"Analytics", comp:<WorkspaceReports customer={customer} request={workspaceRequest} tab={route.tab||"messaging"}/> },
     billing: { title:"Billing", comp:<WorkspaceBilling customer={customer}/> },
     integrations: { title:"Integrations", comp:<WorkspaceIntegrations/> },
+    account: { title: "My Account", comp: user ? <MyAccount key={user.id} user={user} auth={supabase.auth} verifyPassword={verifyAccountPassword} /> : null },
     settings:    { title: "Settings",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
   };
 

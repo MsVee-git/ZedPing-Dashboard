@@ -29,7 +29,7 @@ function authHarness(loaded = identity) {
   return { callback, calls, timers, context };
 }
 
-for (const event of ['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION']) {
+for (const event of ['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION', 'USER_UPDATED']) {
   test(`${event} preserves a loaded workspace and the mounted signup component`, () => {
     const h = authHarness();
     h.callback(event, { user });
@@ -53,8 +53,8 @@ test('a different account must reload workspace', () => {
   assert.deepEqual(h.calls, [['loadWorkspace', 'another-owner']]);
 });
 
-test('user updates and verification changes still reload workspace', () => {
-  for (const [event, nextUser] of [['USER_UPDATED', user], ['SIGNED_IN', { ...user, email_confirmed_at: '2026-10-02' }], ['SIGNED_IN', { ...user, email_confirmed_at: null }]]) {
+test('verification changes still reload workspace', () => {
+  for (const [event, nextUser] of [['USER_UPDATED', { ...user, email_confirmed_at: null }], ['SIGNED_IN', { ...user, email_confirmed_at: '2026-10-02' }], ['SIGNED_IN', { ...user, email_confirmed_at: null }]]) {
     const h = authHarness();
     h.callback(event, { user: nextUser });
     assert.equal(h.timers.length, 1);
