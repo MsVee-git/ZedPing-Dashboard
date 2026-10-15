@@ -3,7 +3,7 @@ import { routeToPath } from './lib/dashboardRouting';
 
 export const navigation = [
   { label:'Workspace', items:[['overview','Overview','home'],['messages','Team Inbox','messages'],['contacts','Contacts','contacts'],['broadcasts','Campaigns','broadcast']] },
-  { label:'Build', items:[['automations','Automations','flow'],['zoeAi','Zed AI','auto'],['content','Content Library','catalog']] },
+  { label:'Build', items:[['automations','Automations','flow'],['zoeAi','ZedPing Ai','auto'],['content','Content Library','catalog']] },
   { label:'Manage', items:[['whatsapp','WhatsApp','messages'],['analytics','Analytics','chart'],['settings','Settings','settings']] }
 ];
 export function parentSection(section: string) {
@@ -21,7 +21,7 @@ export function SectionTabs({route,navigate}: any) {
     : parent==='automations' ? [[{section:'automations'},'Library'],[{section:'automations',tab:'keywords'},'Active automations'],['chatbotFlows','Chatbot flows']]
     : parent==='whatsapp' ? [['whatsapp','Numbers & connection'],['templates','Templates']]
     : parent==='settings' ? [['account','My Account'],['settings','Business profile'],['team','Team'],['integrations','Integrations'],['billing','Billing']]
-    : parent==='analytics' ? ['messaging','campaigns','conversations','automations','ai'].map(tab=>[{section:'analytics',tab:tab==='messaging'?undefined:tab},tab==='ai'?'Zed AI':tab.charAt(0).toUpperCase()+tab.slice(1)]) : [];
+    : parent==='analytics' ? ['messaging','campaigns','conversations','automations','ai'].map(tab=>[{section:'analytics',tab:tab==='messaging'?undefined:tab},tab==='ai'?'ZedPing Ai':tab.charAt(0).toUpperCase()+tab.slice(1)]) : [];
   if(!items.length)return null;
   return <nav className="section-tabs" aria-label={parent+' pages'}>{items.map(([target,label]:any)=>{
     const value=typeof target==='string'?{section:target}:target;

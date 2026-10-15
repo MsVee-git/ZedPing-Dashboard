@@ -4,7 +4,7 @@ export function conversationHandlingStatus(conversation) {
   if (conversation?.status === 'resolved') return { label: 'Resolved', badge: 'badge-cream' };
   if (conversation?.status === 'needs_attention' || conversation?.control_mode === 'needs_attention') return { label: 'NEEDS ATTENTION', badge: 'badge-gold' };
   if (conversation?.control_mode === 'human') return { label: 'TEAM MEMBER HANDLING', badge: 'badge-blue' };
-  if (conversation?.control_mode === 'automation') return { label: 'ZED AI HANDLING', badge: 'badge-green' };
+  if (conversation?.control_mode === 'automation') return { label: 'ZedPing Ai HANDLING', badge: 'badge-green' };
   return { label: 'Status unavailable', badge: 'badge-cream' };
 }
 

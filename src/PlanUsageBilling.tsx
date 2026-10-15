@@ -9,16 +9,16 @@ export function PlanUsageBilling({ customer }: any) {
   const selected = proposedPlans.find(plan => plan.id === current);
   const contact = (text: string) => support + encodeURIComponent(text);
   return <div className="pad plan-usage-page">
-    <PageTitle title="Plan & usage" description="Your subscription, messaging balance and ZedPing AI usage." />
+    <PageTitle title="Plan & usage" description="Your subscription, messaging balance and ZedPing Ai usage." />
     <Surface title="Current subscription">
       <div className="billing-plan"><div><h2>{selected?.name || 'Plan unavailable'}</h2><p className="muted">{customer?.subscription_status || 'Status unavailable'}</p></div>
       <a className="btn btn-wire" href={contact('Hello ZedPing, please confirm my current subscription and billing terms.')} target="_blank" rel="noreferrer">Manage subscription</a></div>
       <p className="surface-footnote">Your existing subscription terms remain in effect. The packages below are upcoming and do not change your current bill.</p>
     </Surface>
     <div className="usage-cards">
-      {['Template messages', 'Extra messaging balance', 'ZedPing AI replies'].map(label => <Surface key={label} title={label}>
+      {['Template messages', 'Extra messaging balance', 'ZedPing Ai replies'].map(label => <Surface key={label} title={label}>
         <strong className="usage-unknown">—</strong><p className="muted">Balance not available yet</p>
-        <p className="surface-footnote">{label === 'ZedPing AI replies' ? 'AI usage will be shown separately from WhatsApp messaging usage.' : label === 'Extra messaging balance' ? 'Purchased usage will appear here once top-ups are available.' : 'Your billing period, used messages and remaining allowance will appear here when usage tracking is available.'}</p>
+        <p className="surface-footnote">{label === 'ZedPing Ai replies' ? 'AI usage will be shown separately from WhatsApp messaging usage.' : label === 'Extra messaging balance' ? 'Purchased usage will appear here once top-ups are available.' : 'Your billing period, used messages and remaining allowance will appear here when usage tracking is available.'}</p>
       </Surface>)}
     </div>
     <Surface title="Upcoming packages">
@@ -28,7 +28,7 @@ export function PlanUsageBilling({ customer }: any) {
         <tr><th scope="row">Monthly subscription</th>{proposedPlans.map(plan => <td key={plan.id}>K{number(plan.price)}</td>)}</tr>
         <tr><th scope="row">Included template messages</th>{proposedPlans.map(plan => <td key={plan.id}>{number(plan.templates)}</td>)}</tr>
         <tr><th scope="row">Chatflows & automations</th>{proposedPlans.map(plan => <td key={plan.id}>Included</td>)}</tr>
-        <tr><th scope="row">ZedPing AI agents</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.agents ? (plan.agents === 1 ? '1 agent' : 'Up to 3 agents') : 'Not included'}</td>)}</tr>
+        <tr><th scope="row">ZedPing Ai agents</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.agents ? (plan.agents === 1 ? '1 agent' : 'Up to 3 agents') : 'Not included'}</td>)}</tr>
         <tr><th scope="row">AI replies / month · provisional</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.aiReplies ? number(plan.aiReplies) + ' shared across agents' : 'Not included'}</td>)}</tr>
         <tr><th scope="row">Knowledge answers & staff handoff</th><td>Rule-based flows</td><td>AI answers & basic handoff</td><td>AI answers & advanced routing*</td></tr>
         <tr><th scope="row">Connected-system AI actions*</th><td>Not included</td><td>Not included</td><td>Approved integrations</td></tr>

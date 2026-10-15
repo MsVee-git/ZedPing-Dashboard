@@ -6,7 +6,7 @@ function SnapshotWorkspaceReports({customer,request,tab='messaging'}:any){
   const paths={messaging:'/messages',campaigns:'/broadcasts/scheduled',conversations:'/conversations/counts',automations:'/automations',ai:'/ai-agents'};
   const resource=useResource(request,paths[tab]||paths.messaging,customer.id);
   const rows=Array.isArray(resource.data)?resource.data:tab==='ai'?resource.data?.agents||[]:[];
-  const titles={messaging:'Messaging',campaigns:'Campaigns',conversations:'Conversations',automations:'Automations',ai:'Zed AI'};
+  const titles={messaging:'Messaging',campaigns:'Campaigns',conversations:'Conversations',automations:'Automations',ai:'ZedPing Ai'};
   const metrics=tab==='conversations' ? [['Needs attention',resource.data?.needs_attention],['AI handling',resource.data?.zoe],['Resolved',resource.data?.resolved]]
     : tab==='messaging' ? [['Recorded messages',rows.length],['Inbound',rows.filter((r:any)=>r.direction==='inbound').length],['Outbound',rows.filter((r:any)=>r.direction==='outbound').length]]
     : tab==='campaigns' ? [['Recorded campaigns',rows.length],['Processed',rows.filter((r:any)=>r.status==='completed').length],['Failed',rows.filter((r:any)=>r.status==='failed').length]]
