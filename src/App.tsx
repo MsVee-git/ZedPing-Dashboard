@@ -752,7 +752,7 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWo
 function MobTopbar({ onMenu, onLogout, workspaces, activeWorkspaceId, onWorkspaceChange, switching }) {
   return (
     <div className="mob-bar">
-      <button aria-label="Open navigation" onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--cream)", padding: 4 }}><Ic n="menu" s={20} c="var(--cream)" /></button>
+      <button aria-label="Open navigation" onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "#ffffff", padding: 4 }}><Ic n="menu" s={20} c="#ffffff" /></button>
       {workspaces.length > 1 ? <select aria-label="Active workspace" value={activeWorkspaceId || ""} onChange={event => onWorkspaceChange(event.target.value)} disabled={switching} className="input" style={{ width: "42%", padding: "6px 8px", fontSize: 11, opacity: switching ? 0.6 : 1 }}>
         {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
       </select> : <Logo size="sm" />}
