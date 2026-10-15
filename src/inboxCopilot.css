@@ -1,0 +1,9 @@
+.inbox-copilot{border:1px solid var(--wire);border-radius:16px;padding:18px;margin-bottom:18px;background:var(--panel)}
+.copilot-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.copilot-heading strong{font-size:18px}.inbox-copilot p{font-size:15px;line-height:1.6;margin:8px 0;overflow-wrap:anywhere}
+.copilot-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}.inbox-copilot .copilot-note{font-size:14px;color:var(--mist)}
+.copilot-result{border-top:1px solid var(--wire);padding:16px 0}.copilot-draft{white-space:pre-wrap;border-left:3px solid var(--gold);padding:10px 14px}
+.inbox-copilot button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+@media(max-width:600px){.copilot-actions{flex-direction:column}.copilot-actions .btn{width:100%;white-space:normal}}
+
+.inbox-copilot .btn{font-size:14px;min-height:44px}

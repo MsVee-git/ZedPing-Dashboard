@@ -15,6 +15,7 @@ import { ChatbotFlows } from "./ChatbotFlows";
 import { CustomAutomationBuilder } from "./CustomAutomationBuilder";
 import { ZoeAI } from "./ZoeAI";
 import { TeamMembers } from "./TeamMembers";
+import { InboxCopilot } from "./InboxCopilot";
 import { MyAccount } from "./MyAccount";
 import { ContactsImport } from "./ContactsImport";
 import { provisionWorkspaceWithGateway } from "./lib/workspaceProvisioning";
@@ -1109,6 +1110,7 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [filter,setFilter]=useQueryState('view','all');
   const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
+  const copilotRequest=useCallback((path,init={})=>apiFetch(API+path,init),[customer?.id]);
   const {rows,counts,members,loading,error}=queue;
   const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
   const [reply,setReply]=useReplyDraft(customer?.id,user?.id,selectedId);
@@ -1223,6 +1225,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   };
   return <div className="pad inbox-page">
     <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Triage waiting chats and manage your team’s workload."/></div>
+    <InboxCopilot key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} />
     <div className="inbox-filters" role="group" aria-label="Inbox views">
       {INBOX_VIEWS.map(([id,label])=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{label}{counts?` (${counts[id]??0})`:''}</button>)}
       <button className="btn btn-wire" disabled={loading||busy||replying} onClick={()=>{queue.refresh();if(selectedId)openConversation(selectedId,true,true);}}>Refresh</button>
