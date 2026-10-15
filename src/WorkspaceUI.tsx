@@ -7,7 +7,7 @@ export const navigation = [
   { label:'Manage', items:[['whatsapp','WhatsApp','messages'],['analytics','Analytics','chart'],['settings','Settings','settings']] }
 ];
 export function parentSection(section: string) {
-  return ({contactGroups:'contacts', chatbotFlows:'automations', templates:'whatsapp',team:'settings',billing:'settings',integrations:'settings'})[section] || section;
+  return ({contactGroups:'contacts', chatbotFlows:'automations', templates:'whatsapp',team:'settings',account:'settings',billing:'settings',integrations:'settings'})[section] || section;
 }
 export function RouteLink({ route, navigate, children, className='', ...props }: any) {
   return <a {...props} className={className} href={routeToPath(typeof route === 'string' ? {section:route} : route)} onClick={event=>{
@@ -20,7 +20,7 @@ export function SectionTabs({route,navigate}: any) {
   const items = parent==='contacts' ? [['contacts','All contacts'],['contactGroups','Groups & segments']]
     : parent==='automations' ? [[{section:'automations'},'Library'],[{section:'automations',tab:'keywords'},'Active automations'],['chatbotFlows','Chatbot flows']]
     : parent==='whatsapp' ? [['whatsapp','Numbers & connection'],['templates','Templates']]
-    : parent==='settings' ? [['settings','Business profile'],['team','Team'],['integrations','Integrations'],['billing','Billing']]
+    : parent==='settings' ? [['account','My Account'],['settings','Business profile'],['team','Team'],['integrations','Integrations'],['billing','Billing']]
     : parent==='analytics' ? ['messaging','campaigns','conversations','automations','ai'].map(tab=>[{section:'analytics',tab:tab==='messaging'?undefined:tab},tab==='ai'?'Zed AI':tab.charAt(0).toUpperCase()+tab.slice(1)]) : [];
   if(!items.length)return null;
   return <nav className="section-tabs" aria-label={parent+' pages'}>{items.map(([target,label]:any)=>{

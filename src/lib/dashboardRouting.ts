@@ -6,7 +6,7 @@ export const sectionPaths = Object.freeze({
   content: '/content-library', zoeAi: '/zed-ai/agents',
   whatsapp: '/whatsapp/numbers', templates: '/whatsapp/templates',
   analytics: '/analytics/messaging', team: '/settings/team', settings: '/settings/business',
-  billing: '/settings/billing', integrations: '/settings/integrations'
+  account: '/settings/account', billing: '/settings/billing', integrations: '/settings/integrations'
 });
 const exact = new Map<string, string>(Object.entries(sectionPaths).map(([section, path]) => [path, section]));
 Object.entries({ '/broadcasts':'broadcasts', '/contact-groups':'contactGroups', '/automations':'automations', '/chatbot-flows':'chatbotFlows', '/zoe-ai':'zoeAi', '/whatsapp-templates':'templates', '/team-members':'team', '/settings':'settings', '/whatsapp':'whatsapp', '/zed-ai':'zoeAi', '/analytics':'analytics' }).forEach(([path,section])=>exact.set(path,section));
