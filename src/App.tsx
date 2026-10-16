@@ -3,6 +3,7 @@
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
 import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
@@ -788,6 +789,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [review, setReview] = useState(null);
   const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
   const [notice, setNotice] = useState(null);
   const [activityFilter, setActivityFilter] = useQueryState("status", "all");
   const activityId = routeCampaignId && routeCampaignId !== "new" ? routeCampaignId : null;
@@ -825,7 +827,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
     if (["image", "document"].includes(selectedTemplate?.header_media_type) && !broadcastHeaderFile) return setNotice({ok:false,text:"Select the template header file before sending."});
     if (sendInFlight.current) return;
     sendInFlight.current = true;
-    setSending(true); setNotice(null);
+    setSending(true); setNotice(null); setSendResult(null);
     try {
       const form = new FormData();
       form.append("whatsapp_number_id", numberId); form.append("contact_group_id", groupId);
@@ -833,6 +835,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       if (broadcastHeaderFile) form.append("header_media", broadcastHeaderFile);
       const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", body: form });
       const result = await response.json();
+      setSendResult(result);
       setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
       setReview(null); setTemplateId(""); setMappings({}); setBroadcastHeaderFile(null);
       setNumberId(""); setGroupId(""); writeDraft(draftKey, null);
@@ -854,7 +857,8 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   return (
     <div className="pad" style={{ padding: 28 }}>
       <PageHead title={composing ? "New campaign" : "Campaigns"} sub="Create broadcasts, review your audience and follow campaign activity." action={<button className={"btn "+(composing?"btn-wire":"btn-gold")} onClick={()=>onRouteOpen(composing?null:"new")}>{composing?"Back to campaigns":"New campaign"}</button>} />
-      {!composing && notice && <p className="draft-notice" role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
+      {!composing && sendResult && (!activityId || activityId === sendResult.activity_id) && <BroadcastSubmissionReceipt result={sendResult} />}
+      {!composing && notice && !sendResult && <p className="draft-notice" role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
       {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
       {composing && <><p className="draft-notice" role="status">{draftSaved ? "Draft saved in this browser tab. Review your audience before sending." : "Draft could not be saved on this device. Keep this page open."}</p>
       <div className="campaign-compose-grid"><div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
