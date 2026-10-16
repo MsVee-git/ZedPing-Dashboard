@@ -4,6 +4,8 @@ on:
     paths:
       - 'src/App.tsx'
       - 'src/BroadcastDetails.tsx'
+      - 'test/broadcastSendHandler.test.js'
+      - 'src/broadcastComposer.test.js'
       - '.github/workflows/broadcast-submission.yml'
 permissions:
   contents: read
@@ -16,4 +18,5 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: node --test test/broadcastSendHandler.test.js src/broadcastComposer.test.js
       - run: npm run build

@@ -775,6 +775,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   const draftKey = "zedping.campaign.v1:" + customer.id + ":" + user.id;
   const [storedDraft] = useState(() => readDraft(draftKey) || {});
   const templateRequest = useRef(0);
+  const sendInFlight = useRef(false);
   const previousTemplateNumber = useRef(storedDraft.numberId || "");
   const [draftSaved,setDraftSaved] = useState(true);
   const [numberId, setNumberId] = useState(storedDraft.numberId || "");
