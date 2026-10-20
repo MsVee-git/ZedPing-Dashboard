@@ -74,3 +74,84 @@
  .inbox-control { flex-wrap:wrap; }
  .inbox-bulk { position:sticky; top:0; z-index:3; background:var(--panel); }
 }
+
+/* Inbox-specific specificity intentionally overrides the shared workspace skin. */
+.workspace .inbox-page .team-inbox { position:relative; display:grid; grid-template-columns:minmax(250px,.85fr) minmax(0,1.8fr); grid-template-rows:minmax(0,1fr); }
+.workspace .inbox-page .inbox-details { display:none; }
+.workspace .inbox-page.inbox-details-open .inbox-details { display:block; position:absolute; inset:0 0 0 auto; width:min(340px,100%); max-height:none; z-index:6; overflow-y:auto; box-shadow:-8px 0 24px #152c2420; }
+.inbox-details-close { margin-bottom:18px; }
+.inbox-toolbar { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-shrink:0; }
+.workspace .inbox-toolbar .inbox-filters { margin:0 0 10px; gap:7px; }
+.workspace .inbox-page .inbox-filters .btn { font-size:14px !important; min-height:42px; padding:8px 12px; }
+.inbox-more-filters { display:flex; align-items:center; gap:6px; font-size:14px; }
+.workspace .inbox-more-filters .input { width:165px; font-size:14px; }
+.inbox-assistant { display:none; }
+.inbox-assistant.is-open { display:block; max-height:35dvh; overflow-y:auto; flex-shrink:0; }
+.inbox-thread-assistant { display:none; }
+.workspace .inbox-page .inbox-selection { align-items:center; font-size:14px; padding:14px; }
+.inbox-list-count { display:block; font-size:12px; color:var(--mist); font-weight:400; margin-top:3px; }
+.inbox-selection-options { display:flex; flex-wrap:wrap; gap:10px; width:100%; padding-top:10px; }
+.inbox-selection-options > span { flex-basis:100%; color:var(--mist); font-size:13px; line-height:1.5; }
+.workspace .inbox-page .inbox-list-row { display:grid; grid-template-columns:minmax(0,1fr); padding:5px 8px; }
+.workspace .inbox-page .inbox-list-row.is-selecting { grid-template-columns:24px minmax(0,1fr); }
+.inbox-list-row input[type=checkbox] { width:20px; height:20px; accent-color:#28634d; }
+.workspace .inbox-page .inbox-open { padding:12px; gap:5px; border-radius:8px; }
+.inbox-open > strong { font-size:15px; font-weight:650; overflow-wrap:anywhere; }
+.workspace .inbox-page .inbox-open > span:not(.badge) { font-size:13px; line-height:1.4; }
+.workspace .inbox-page .inbox-open .badge { font-size:11px !important; }
+.inbox-thread-nav { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--wire); }
+.inbox-thread-nav > span { flex:1; font-size:13px; color:var(--mist); }
+.inbox-back { display:none; }
+.workspace .inbox-page .inbox-conversation-header { gap:8px; padding:12px 16px; }
+.inbox-conversation-header strong { font-size:16px; }
+.inbox-conversation-header small { font-size:12px; line-height:1.5; }
+.inbox-message { min-width:0; max-width:85%; padding:12px 14px; border:1px solid var(--wire); border-radius:12px; background:#fff; align-self:flex-start; }
+.inbox-message.is-outbound { align-self:flex-end; background:#eaf2e4; border-color:#dbe6d3; }
+.inbox-message-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:15px; line-height:1.55; }
+.inbox-image + .inbox-message-body { margin-top:8px; }
+.inbox-message-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; color:var(--mist); font-size:11px; line-height:1.4; }
+.inbox-message-meta .text-button { min-height:30px; }
+.inbox-campaign-context summary { cursor:pointer; font-size:14px; font-weight:600; padding:4px 0; }
+.inbox-campaign-context summary > span { display:block; font-size:12px; font-weight:400; color:var(--mist); margin-top:4px; }
+.inbox-campaign-context[open] .inbox-message-body { margin-top:12px; }
+.workspace .inbox-page .inbox-quote strong { font-size:13px; }
+.workspace .inbox-page .inbox-quote span { font-size:11px; }
+.workspace .inbox-page .inbox-composer textarea { font-size:16px; line-height:22px; }
+.workspace .inbox-page .inbox-composer > div > div { flex-wrap:wrap; min-width:0; }
+.workspace .inbox-page .inbox-composer .btn { white-space:normal; overflow-wrap:anywhere; max-width:100%; }
+.workspace .inbox-page .inbox-composer { padding-bottom:max(12px,env(safe-area-inset-bottom)); }
+@media(max-width:1000px) and (min-width:769px) {
+  .workspace .inbox-page .team-inbox { grid-template-columns:minmax(210px,.8fr) minmax(0,1.5fr); }
+  .inbox-toolbar { flex-wrap:wrap; }
+}
+@media(max-width:768px) {
+  .main.workspace.inbox-workspace { height:100dvh; min-height:0; overflow:hidden; }
+  .workspace.inbox-workspace > .mob-bar { flex:0 0 56px; min-height:56px; position:relative; }
+  .workspace.inbox-workspace > .section-tabs { display:none; }
+  .workspace.inbox-workspace .inbox-route { display:flex; min-height:0; overflow:hidden; }
+  .workspace .pad.inbox-page { display:flex; flex-direction:column; padding:10px !important; min-height:0; max-width:none; width:100%; overflow:hidden; }
+  .inbox-page .inbox-page-heading { display:none; }
+  .workspace .inbox-page .inbox-toolbar { align-items:flex-start; gap:0; }
+  .workspace .inbox-page .inbox-filters { gap:6px; margin-bottom:8px; }
+  .workspace .inbox-page .inbox-filters .btn { min-height:42px; font-size:14px !important; padding:8px 10px; }
+  .inbox-more-filters { font-size:0; }
+  .workspace .inbox-more-filters .input { width:140px; min-height:42px; }
+  .inbox-copilot-toggle { max-width:95px; margin-left:6px; }
+  .workspace .inbox-page .team-inbox { display:flex; flex:1 1 0; min-height:0; flex-direction:column; }
+  .workspace .inbox-page .team-inbox > .inbox-list { flex:1; min-height:0; max-height:none; overflow-y:auto; border:0 !important; }
+  .workspace .inbox-page .team-inbox > .inbox-conversation { display:none; min-height:0; height:auto; max-height:none; }
+  .workspace .inbox-page.inbox-thread-open .team-inbox > .inbox-list { display:none; }
+  .workspace .inbox-page.inbox-thread-open .team-inbox > .inbox-conversation { display:flex; flex:1; min-height:0; }
+  .inbox-page.inbox-thread-open > .inbox-toolbar,.inbox-page.inbox-thread-open > .inbox-bulk { display:none; }
+  .workspace .inbox-page.inbox-thread-open { padding:0 !important; }
+  .inbox-back,.inbox-thread-assistant { display:inline-flex; }
+  .inbox-thread-nav > span { display:none; }
+  .inbox-thread-nav .inbox-back { margin-right:auto; }
+  .workspace .inbox-page .inbox-thread-nav .btn { min-height:42px; font-size:14px !important; }
+  .workspace .inbox-page .inbox-history { padding:12px; }
+  .workspace .inbox-page .inbox-selection { position:sticky; top:0; z-index:1; background:#fff; }
+  .workspace .inbox-page .inbox-selection > .text-button { min-height:44px; padding:8px; }
+  .workspace .inbox-page .inbox-bulk { max-height:25dvh; overflow-y:auto; flex-shrink:0; font-size:14px; margin-bottom:8px; }
+  .workspace .inbox-page .inbox-bulk .btn { font-size:13px !important; min-height:42px; }
+  .inbox-message { max-width:92%; }
+}
