@@ -7,6 +7,7 @@ import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
 import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
+import { InboxMessageBody } from "./InboxMessageBody";
 import "./teamInbox.css";
 import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
@@ -1121,6 +1122,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [reply,setReply]=useReplyDraft(customer?.id,user?.id,selectedId);
   const [replying,setReplying]=useState(false),[replyTarget,setReplyTarget]=useState(null),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
   const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
+  const [selectionMode,setSelectionMode]=useState(false),[detailsOpen,setDetailsOpen]=useState(false),[copilotOpen,setCopilotOpen]=useState(false);
   const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
   const {historyRef,onHistoryScroll}=useInboxScroll(selectedId,thread?.messages,threadLoading);
@@ -1133,12 +1135,13 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
   const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
   useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReplyTarget(null);setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
-  useEffect(()=>{setSelection(new Set());setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
+  useEffect(()=>{setSelection(new Set());setSelectionMode(false);setDetailsOpen(false);setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
   useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
   const openConversation=async(id,markRead=true,force=false)=>{
     if(id===selectedId && thread && markRead && !force)return;
     const request=++requestRef.current,workspace=customer?.id;
     setSelectedId(id);setThreadLoading(true);setThreadError('');setActionError('');
+    setDetailsOpen(false);
     if(id!==selectedId){setThread(null);setReplyTarget(null);setAttachment(null);setLocationDraft(null);}
     if(id!==routeConversationId)onRouteOpen?.(id);
     try {
@@ -1157,8 +1160,9 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   };
   useEffect(()=>{
     if(routeConversationId && routeConversationId!==selectedId)openConversation(routeConversationId);
-    if(!routeConversationId){setSelectedId('');setThread(null);}
+    if(!routeConversationId){requestRef.current++;setSelectedId('');setThread(null);setThreadLoading(false);setDetailsOpen(false);}
   },[routeConversationId,customer?.id]);
+  const closeConversation=()=>{requestRef.current++;setSelectedId('');setThread(null);setThreadLoading(false);setThreadError('');setDetailsOpen(false);setCopilotOpen(false);setReplyTarget(null);setAttachment(null);setLocationDraft(null);onRouteOpen?.('');};
   const runAction=async(path,options={})=>{
     if(actionLock.current || !selectedId)return;
     actionLock.current=true;setBusy(true);setActionError('');const request=requestRef.current,workspace=customer?.id;
@@ -1228,13 +1232,17 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setBusy(false);}
   };
-  return <div className="pad inbox-page">
+  return <div className={'pad inbox-page'+(selectedId?' inbox-thread-open':'')+(detailsOpen?' inbox-details-open':'')}>
     <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Triage waiting chats and manage your team’s workload."/></div>
-    <InboxCopilot key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} />
+    <div className="inbox-toolbar">
     <div className="inbox-filters" role="group" aria-label="Inbox views">
-      {INBOX_VIEWS.map(([id,label])=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{label}{counts?` (${counts[id]??0})`:''}</button>)}
+      {['all','unread','assigned_to_me'].map(id=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{id==='assigned_to_me'?'Mine':id==='unread'?'Unread':'All'}{counts?` (${counts[id]??0})`:''}</button>)}
+      <label className="inbox-more-filters">Filters<select aria-label="More inbox filters" className="input" value={['all','unread','assigned_to_me'].includes(filter)?'':filter} disabled={busy||replying} onChange={e=>{if(e.target.value)setFilter(e.target.value);}}><option value="">More views</option>{INBOX_VIEWS.filter(([id])=>!['all','unread','assigned_to_me'].includes(id)).map(([id,label])=><option key={id} value={id}>{label}{counts?` (${counts[id]??0})`:''}</option>)}</select></label>
       <button className="btn btn-wire" disabled={loading||busy||replying} onClick={()=>{queue.refresh();if(selectedId)openConversation(selectedId,true,true);}}>Refresh</button>
     </div>
+    <button className="btn btn-wire inbox-copilot-toggle" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>{copilotOpen?'Hide assistant':'Ai assistant'}</button>
+    </div>
+    {copilotOpen&&<div className="inbox-assistant is-open"><InboxCopilot initiallyExpanded key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} /></div>}
     {!counts && !loading && <div className="inbox-notice">Counts unavailable. Refresh to retry.</div>}
     {selection.size>0 && <div className="inbox-bulk" role="group" aria-label="Selected conversation actions">
       <strong>{selection.size} {selection.size===1?"chat selected":"chats selected"}</strong>
@@ -1247,28 +1255,28 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     {actionError && <div className="inbox-notice" role="alert">{actionError}</div>}
     <div className="team-inbox">
       <div className="card inbox-list">
-        <div className="inbox-selection"><span>{rows.length} {rows.length===1?"chat shown":"chats shown"}</span><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))} title="Select up to 200 chats already shown in the list">Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView} title="Load and select up to 200 chats matching the current filter">Select chats in this filter</button><span style={{fontSize:11,color:"var(--mist)",flexBasis:"100%"}}>Select up to 200 chats at a time. Filter selection can include chats not yet shown.</span></div>
+        <div className="inbox-selection"><strong>Conversations <span className="inbox-list-count">{rows.length} shown</span></strong><button className="text-button" disabled={busy} aria-pressed={selectionMode} onClick={()=>{setSelectionMode(!selectionMode);setSelection(new Set());}}>{selectionMode?'Done selecting':'Select'}</button>{selectionMode&&<div className="inbox-selection-options"><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select chats in this filter</button><span>Up to 200 chats. Filter selection may include chats not yet shown.</span></div>}</div>
         {error && <div role="alert" className="inbox-notice">{error}</div>}
-        {loading&&!rows.length?<Loader/>:!rows.length?<Empty msg="No conversations in this view"/>:rows.map(conversation=><div key={conversation.id} className="inbox-list-row">
-          <input type="checkbox" aria-label={`Select ${conversation.contacts?.name||conversation.contacts?.phone_number||conversation.id}`} checked={selection.has(conversation.id)} disabled={busy||(!selection.has(conversation.id)&&selection.size>=200)} onChange={()=>toggle(conversation.id)}/>
+        {loading&&!rows.length?<Loader/>:!rows.length?<Empty msg="No conversations in this view"/>:rows.map(conversation=><div key={conversation.id} className={'inbox-list-row'+(selectionMode?' is-selecting':'')}>
+          {selectionMode&&<input type="checkbox" aria-label={`Select ${conversation.contacts?.name||conversation.contacts?.phone_number||conversation.id}`} checked={selection.has(conversation.id)} disabled={busy||(!selection.has(conversation.id)&&selection.size>=200)} onChange={()=>toggle(conversation.id)}/>}
           <button className={'inbox-open '+(selectedId===conversation.id?'selected':'')} onClick={()=>openConversation(conversation.id)}>
             <strong>{conversation.contacts?.name||conversation.contacts?.phone_number||'Unknown contact'}</strong>
-            <span>{conversation.contacts?.phone_number}</span>
+            {conversation.contacts?.name&&conversation.contacts.name!==conversation.contacts?.phone_number&&<span>{conversation.contacts?.phone_number}</span>}
             <span className="inbox-preview">{conversation.last_message?.message_body||'No message preview'}</span>
             <ConversationHandlingStatus conversation={conversation}/>
             <MarketingOptOutBadge contact={conversation.contacts}/>
             <span>{conversation.last_message_at?new Date(conversation.last_message_at).toLocaleString():''}</span>
             <span>{conversation.unread_count>0?`${conversation.unread_count} unread`:'Read'}{conversation.assigned_user_id?` · ${assigneeName(conversation)}`:''}</span>
           </button>
-          <button className="text-button inbox-manage" disabled={busy} aria-label={`Manage ${conversation.contacts?.name||conversation.id}`} onClick={()=>setSelection(new Set([conversation.id]))}>Manage</button>
         </div>)}
         {queue.nextOffset!==null && <button className="btn btn-wire" disabled={loading||busy} onClick={()=>queue.loadMore()}>{loading?'Loading…':'Load more conversations'}</button>}
       </div>
       <div className="card inbox-conversation">
+        {selectedId&&<div className="inbox-thread-nav"><button className="btn btn-wire inbox-back" disabled={replying||busy} onClick={closeConversation}>← Chats</button><span>Conversation</span><button className="btn btn-wire" aria-expanded={detailsOpen} aria-controls="inbox-contact-details" onClick={()=>setDetailsOpen(!detailsOpen)}>{detailsOpen?'Hide details':'Details'}</button><button className="btn btn-wire inbox-thread-assistant" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>Ai assistant</button></div>}
         {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
-          <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||'Customer'}</strong><small>{active.contacts?.phone_number}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
+          <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||active.contacts?.phone_number||'Customer'}</strong>{active.contacts?.name&&active.contacts.name!==active.contacts?.phone_number&&<small>{active.contacts?.phone_number}</small>}<small>{active.assigned_user_id?`Assigned to ${assigneeName(active)}`:'Unassigned'}</small></div><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/></div>
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
-            {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div id={`message-${message.id}`} key={message.id} style={{alignSelf:message.direction==='outbound'?'flex-end':'flex-start',maxWidth:'80%',background:message.direction==='outbound'?'rgba(184,146,42,.16)':'var(--panel2)',border:'1px solid var(--wire)',padding:'10px 12px'}}>{message.reply_to?<QuotedMessage message={message.reply_to}/>:null}{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<div style={{fontSize:13,whiteSpace:'pre-wrap',marginTop:media?.type==='image'?8:0}}>{message.message_body}</div>:!media?<div style={{fontSize:13,color:'var(--mist)'}}>Unsupported message type</div>:null}<div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginTop:7}}><div className="mono" style={{fontSize:9,color:'var(--mist)'}}>{message.direction==='outbound'?'OUTBOUND':'INBOUND'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div>{canReply&&<button type="button" className="text-button" disabled={replying||busy} onClick={()=>{setReplyTarget(message);setLocationDraft(null);}}>Reply</button>}</div></div>})}
+            {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div className={'inbox-message '+(message.direction==='outbound'?'is-outbound':'is-inbound')} id={`message-${message.id}`} key={message.id}>{message.reply_to?<QuotedMessage message={message.reply_to}/>:null}{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<InboxMessageBody message={message}/>:!media?<div className="inbox-message-body">Unsupported message type</div>:null}<div className="inbox-message-meta"><div>{message.direction==='outbound'?'Sent':'Received'} · {message.status||'—'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div>{canReply&&<button type="button" className="text-button" disabled={replying||busy} onClick={()=>{setReplyTarget(message);setLocationDraft(null);}}>Reply</button>}</div></div>})}
           </div>
           {canReply?<form className="inbox-composer" onSubmit={attachment?sendAttachment:sendReply}>{replyTarget&&<div className="inbox-reply-target"><QuotedMessage message={replyTarget}/><button className="text-button" type="button" disabled={replying} onClick={()=>setReplyTarget(null)}>Cancel reply</button></div>}<textarea ref={composerRef} rows={2} className="textarea" aria-label="Reply or caption" placeholder={attachment?'Add an optional caption…':'Write a reply…'} value={reply} disabled={replying||busy} onChange={e=>setReply(e.target.value)}/><input ref={attachmentInputRef} type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={e=>{const file=e.target.files?.[0];if(!file)return;setAttachment({file,type:file.type.startsWith('image/')?'image':'document'});setLocationDraft(null);}}/><div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:6,flexWrap:'wrap'}}><div style={{display:'flex',gap:8}}><button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>attachmentInputRef.current?.click()}>{attachment?`Attached: ${attachment.file.name}`:'Attach image or document'}</button>{attachment&&<button className="text-button" type="button" disabled={replying||busy} onClick={()=>{setAttachment(null);if(attachmentInputRef.current)attachmentInputRef.current.value='';}}>Remove</button>}<button className="btn btn-wire" type="button" disabled={replying||busy} onClick={()=>{setLocationDraft({latitude:'',longitude:'',name:'',address:''});setAttachment(null);}}>Send location</button></div><button className="btn btn-gold" type="submit" disabled={replying||busy||(!attachment&&!reply.trim())}>{replying?'Sending…':attachment?'Send attachment':'Send reply'}</button></div></form>:<div className="inbox-control">
             <span>{active.status==='resolved'?'This conversation is resolved.':active.control_mode==='automation'?'ZedPing Ai is handling this chat.':active.control_mode==='needs_attention'?'This conversation needs a team member.':`Handled by ${assigneeName(active)}.`}</span>
@@ -1277,7 +1285,8 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
           </div>}
         </>}
       </div>
-      <div className="card inbox-details" style={{padding:18}}>
+      <div id="inbox-contact-details" className="card inbox-details" style={{padding:18}}>
+        <button className="btn btn-wire inbox-details-close" onClick={()=>setDetailsOpen(false)}>Back to chat</button>
         <div className="label">CONVERSATION DETAILS</div>
         {!active?<p>Choose a conversation for details.</p>:<><strong>{active.contacts?.name||'Customer'}</strong><p>{active.contacts?.phone_number}</p><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/>
           {active.contacts?.marketing_opted_out === true && <p className="inbox-note">Excluded from marketing broadcasts. Customer-initiated support remains available.</p>}

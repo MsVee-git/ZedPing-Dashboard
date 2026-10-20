@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import './inboxCopilot.css';
 
-export function InboxCopilot({ workspaceId, conversationId, request, onOpen, onUseDraft, canUseDraft, hasDraft }: any) {
+export function InboxCopilot({ workspaceId, conversationId, request, onOpen, onUseDraft, canUseDraft, hasDraft, initiallyExpanded = false }: any) {
   const [access,setAccess] = useState<any>(null);
   const [result,setResult] = useState<any>(null);
   const [error,setError] = useState('');
   const [busy,setBusy] = useState(false);
-  const [expanded,setExpanded] = useState(false);
+  const [expanded,setExpanded] = useState(initiallyExpanded);
   const generation = useRef(0);
   const lock = useRef(false);
   useEffect(() => {
