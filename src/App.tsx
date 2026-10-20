@@ -202,6 +202,38 @@ async function verifyWorkspaceSelection(workspaces, preferredId) {
   throw lastError || new Error("No authorized workspace is available for this account.");
 }
 
+
+function MessagingAccessNotice({ customer, navigate }) {
+  const [access, setAccess] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await workspaceRequest("/workspace/messaging-access");
+        const next = await response.json();
+        if (!cancelled) setAccess(next);
+      } catch { if (!cancelled) setAccess(null); }
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 60000);
+    window.addEventListener("focus", refresh);
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener("focus", refresh); };
+  }, [customer.id]);
+  const notices = {
+    renewal_required: ["Renewal required — template messaging paused", "Your messaging period has ended. Contact ZedPing to renew your plan and restore broadcasts and automated template messages."],
+    allowance_exhausted: ["Message allowance used — template messaging paused", "You have used your included template messages. Request a usage top-up or renew when your next period begins."],
+    activation_required: ["Messaging activation required", "Your template messaging allowance has not been activated. Contact ZedPing for assistance."],
+    unavailable: ["Messaging balance unavailable", "We could not confirm your template messaging allowance. Contact ZedPing if you cannot send."]
+  };
+  const notice = notices[access?.state];
+  if (!notice) return null;
+  return <aside role="status" aria-live="polite" style={{margin:16,padding:16,border:"1px solid #bb8b2b",borderRadius:12,background:"#fff6de",color:"#263d30",fontSize:16,lineHeight:1.5}}>
+    <strong>{notice[0]}</strong><p style={{margin:"6px 0 12px"}}>{notice[1]}</p>
+    <button type="button" onClick={() => navigate("billing")} style={{font:"inherit",marginRight:16,textDecoration:"underline"}}>View plan &amp; usage</button>
+    <a href="https://wa.me/260778621167?text=Hello%20ZedPing%2C%20please%20help%20restore%20my%20messaging%20allowance." target="_blank" rel="noreferrer" style={{color:"inherit",textDecoration:"underline"}}>Contact ZedPing</a>
+  </aside>;
+}
+
 import faceliftCss from "./facelift.css?inline";
 
 const css = `
@@ -2599,6 +2631,7 @@ export default function App() {
         <main id="workspace-content" className={"main workspace" + (active === "messages" ? " inbox-workspace" : "")}>
           <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
+          {!workspaceChanging && customer && <MessagingAccessNotice key={customer.id} customer={customer} navigate={navigate}/>}
           <SectionTabs route={route} navigate={navigate}/>
           {route.invalid && <div className="route-notice" role="alert">This page is unavailable. Choose a destination from the navigation.</div>}
           {workspaceChanging ? <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }} role="status" aria-live="polite"><div className="spin" style={{ width: 24, height: 24 }} /><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2, textTransform: "uppercase" }}>Loading workspace</div></div> : <div key={customer?.id} className={active === "messages" ? "inbox-route" : undefined} style={{ flex: 1, overflowY: active === "messages" ? undefined : "auto" }}>{cur.comp}</div>}
