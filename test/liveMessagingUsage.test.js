@@ -1,0 +1,10 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { messagingUsageView } from '../src/lib/planUsage.js';
+const active = { state: 'active', allowance: 5000, used: 1, period_start: '2026-10-19T22:00:00Z', period_end: '2026-11-19T22:00:00Z' };
+test('shows actual server allowance rather than plan default', () => { const result = messagingUsageView({ ...active, allowance: 5300 }); assert.equal(result.balance.remaining, 5299); assert.equal(result.warning, null); });
+test('warns at eighty percent and pauses at exhaustion', () => { assert.match(messagingUsageView({ ...active, used: 4000 }).warning, /80%/); const result = messagingUsageView({ ...active, used: 5000, state: 'allowance_exhausted' }); assert.equal(result.balance.remaining, 0); assert.match(result.warning, /paused/); });
+test('renewal hides expired balance', () => { const result = messagingUsageView({ ...active, state: 'renewal_required' }); assert.equal(result.balance, null); assert.match(result.message, /renew/); });
+test('direct Meta does not show tracked balance', () => { assert.equal(messagingUsageView({ ...active, state: 'not_managed' }).balance, null); });
+test('invalid data cannot become spendable balance', () => { for (const change of [{ allowance: -1 }, { used: '2' }, { period_end: 'invalid' }, { period_end: active.period_start }]) assert.equal(messagingUsageView({ ...active, ...change }).balance, null); });
+test('unknown response never invents balance', () => { for (const data of [null, {}, { state: 'unavailable' }]) assert.equal(messagingUsageView(data).balance, null); });

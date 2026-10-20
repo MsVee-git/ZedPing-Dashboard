@@ -1,10 +1,11 @@
 import { PageTitle, Surface } from './WorkspaceUI';
 import { proposedPlans } from './lib/planUsage';
 import './planUsage.css';
+import { MessagingUsage } from './MessagingUsage';
 
 const number = (value: number) => value.toLocaleString('en-US');
 const support = 'https://wa.me/260778621167?text=';
-export function PlanUsageBilling({ customer }: any) {
+export function PlanUsageBilling({ customer, request }: any) {
   const current = customer?.subscription_plan;
   const selected = proposedPlans.find(plan => plan.id === current);
   const contact = (text: string) => support + encodeURIComponent(text);
@@ -15,8 +16,9 @@ export function PlanUsageBilling({ customer }: any) {
       <a className="btn btn-wire" href={contact('Hello ZedPing, please confirm my current subscription and billing terms.')} target="_blank" rel="noreferrer">Manage subscription</a></div>
       <p className="surface-footnote">Your existing subscription terms remain in effect. The packages below are upcoming and do not change your current bill.</p>
     </Surface>
+    <Surface title="Template message balance"><MessagingUsage customer={customer} request={request} /></Surface>
     <div className="usage-cards">
-      {['Template messages', 'Extra messaging balance', 'ZedPing Ai replies'].map(label => <Surface key={label} title={label}>
+      {['Extra messaging balance', 'ZedPing Ai replies'].map(label => <Surface key={label} title={label}>
         <strong className="usage-unknown">—</strong><p className="muted">Balance not available yet</p>
         <p className="surface-footnote">{label === 'ZedPing Ai replies' ? 'AI usage will be shown separately from WhatsApp messaging usage.' : label === 'Extra messaging balance' ? 'Purchased usage will appear here once top-ups are available.' : 'Your billing period, used messages and remaining allowance will appear here when usage tracking is available.'}</p>
       </Surface>)}
@@ -36,9 +38,9 @@ export function PlanUsageBilling({ customer }: any) {
       <p className="surface-footnote">*Planned features, subject to availability. AI reply allowances are provisional. Customer-service messaging allowances and top-up prices are still being finalized.</p>
     </Surface>
     <Surface title="How your allowance will work">
-      <ul className="usage-explanation"><li>A broadcast to 500 recipients uses 500 template messages. Splitting a list does not reduce usage.</li><li>Broadcasts and automated template notifications share the monthly template allowance.</li><li>AI replies use separate AI credit and may also incur WhatsApp service-message charges.</li><li>Before sending, you will see the recipients, allowance needed and any additional usage price.</li><li>When the included allowance runs out, additional sending requires a prepaid top-up. Top-ups will be paid through ZedPing.</li></ul>
+      <ul className="usage-explanation"><li>A broadcast to 500 recipients uses 500 template messages. Splitting a list does not reduce usage.</li><li>Broadcasts and automated template notifications share the monthly template allowance.</li><li>AI replies and customer-service messages have separate costs and controls.</li><li>Gupshup template sending pauses when the allowance expires or runs out. A broadcast can partially send; check its results before sending again.</li><li>Additional usage requires a verified prepaid top-up arranged through ZedPing.</li></ul>
       <a className="btn btn-wire" href={contact("Hello ZedPing, I would like to request extra messaging usage.")} target="_blank" rel="noreferrer">Request a usage top-up</a>
-      <p className="surface-footnote">Usage controls and centralized billing are not active yet. This page does not collect payments.</p>
+      <p className="surface-footnote">Live balances and allowance enforcement apply to Gupshup-routed template messages. Direct Meta usage is billed separately. This page does not collect payments.</p>
     </Surface>
   </div>;
 }

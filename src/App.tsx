@@ -2594,7 +2594,7 @@ export default function App() {
     team:        { title: "Team Members", comp: <TeamMembers customer={customer} apiFetch={apiFetch} /> },
     whatsapp: { title: "WhatsApp", comp: <div className="pad"><PageTitle title="WhatsApp" description="Your business number, connection status and Meta setup."/><WhatsAppConnection apiFetch={apiFetch} API={API} user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState}/></div> },
     analytics: { title:"Analytics", comp:<WorkspaceReports customer={customer} request={workspaceRequest} tab={route.tab||"messaging"}/> },
-    billing: { title:"Billing", comp:<WorkspaceBilling customer={customer}/> },
+    billing: { title:"Billing", comp:<WorkspaceBilling customer={customer} request={workspaceRequest}/> },
     integrations: { title:"Integrations", comp:<WorkspaceIntegrations/> },
     account: { title: "My Account", comp: user ? <MyAccount key={user.id} user={user} auth={supabase.auth} verifyPassword={verifyAccountPassword} /> : null },
     settings:    { title: "Settings",      comp: <Settings user={user} customer={customer} onWorkspaceUpdated={onWorkspaceUpdated} onConnectionStateChange={updateWhatsAppConnectionState} /> },
