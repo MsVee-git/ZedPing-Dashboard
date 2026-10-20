@@ -1,5 +1,6 @@
 import { AgentBadge, PageTitle, ResourceState, RouteLink, Surface, useResource } from './WorkspaceUI';
 import { PlanUsageSnapshot } from './PlanUsageSnapshot';
+import { WebsiteEnquiries } from './WebsiteEnquiries';
 import { conversationHandlingStatus } from './ConversationHandlingStatus';
 
 export function connectionLabel(connection:any) {
@@ -32,6 +33,7 @@ export function WorkspaceOverview({customer,request,navigate}:any){
     <div className="connection-strip"><div><span className={'status-dot '+(connectionLabel(connection)==='Connected'?'good':'warning')}/><strong>WhatsApp · {setup.loading?'Checking connection…':setup.error?'Status unavailable':connectionLabel(connection)}</strong><span className="muted">{connection?.phone_number||'Manage your business number'}</span></div><RouteLink route="whatsapp" navigate={navigate}>View numbers →</RouteLink></div>
     {checklist&&<details className="setup-strip"><summary><strong>{checklist.completed===checklist.total?'Setup complete':'Finish setup'}</strong><span>{checklist.completed} of {checklist.total} complete</span><span className="setup-open">View checklist</span></summary><div className="setup-checklist">{checklist.items?.map((item:any)=><div key={item.key}>{item.complete?'✓':'○'} {item.label}</div>)}<RouteLink route="settings" navigate={navigate} className="btn btn-wire">Continue setup</RouteLink></div></details>}
     <div className="metric-grid">{metrics.map(([label,value,section])=><RouteLink key={label} route={section} navigate={navigate} className="metric"><strong>{value}</strong><span>{label}</span></RouteLink>)}</div>
+    {customer.id==='3b25fffa-f0c4-4d98-a69c-fbbeb7afe6c3'&&['owner','admin'].includes(customer.role)&&<WebsiteEnquiries key={customer.id} customer={customer} request={request}/>}
     <div className="overview-columns"><div>
       <Surface title="Needs your attention" action={<RouteLink route="messages" navigate={navigate}>Open inbox →</RouteLink>}>
         <ResourceState resource={attention} empty={!rows.length}>{rows.slice(0,4).map((row:any)=><div className="attention-row" key={row.id}><div className="avatar">{(row.contacts?.name||'?').slice(0,1)}</div><div><strong>{row.contacts?.name||row.contacts?.phone_number||'Customer'}</strong><p>{row.last_message_preview||row.last_message_body||conversationHandlingStatus(row).label}</p></div><RouteLink className="btn btn-wire" route={{section:'messages',resourceKind:'conversation',resourceId:row.id}} navigate={navigate}>Open</RouteLink></div>)}</ResourceState>
