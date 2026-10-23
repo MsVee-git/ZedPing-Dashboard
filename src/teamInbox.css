@@ -186,3 +186,11 @@
   .workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle { grid-area:assistant; }
   .workspace .inbox-page.inbox-thread-open > .inbox-toolbar { display:none; }
 }
+
+.inbox-conversation-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.workspace .inbox-page .inbox-conversation-actions .btn { min-height:42px; font-size:14px; padding:8px 14px; }
+.inbox-resolution-help { margin:0; padding:8px 16px; font-size:13px; line-height:1.5; color:var(--mist); border-bottom:1px solid var(--wire); }
+@media(max-width:768px) {
+  .inbox-conversation-actions { justify-content:flex-start; width:100%; }
+  .workspace .inbox-page .inbox-toolbar .inbox-filters > .btn:nth-child(3) { white-space:normal; height:auto; min-height:42px; }
+}

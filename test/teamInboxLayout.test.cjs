@@ -37,7 +37,8 @@ test('mobile separates list and thread, preserves drafts, and pins composer insi
   await reply.fill('Preserved reply draft');await page.getByRole('button',{name:'← Chats',exact:true}).click();
   assert.equal(await page.locator('.inbox-list').isVisible(),true);
   await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();assert.equal(await reply.inputValue(),'Preserved reply draft');
-  await page.getByRole('button',{name:'Details',exact:true}).click();await page.getByRole('button',{name:'Resolve Conversation',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Resolve & return to AI',exact:true}).isVisible(),true);
+  await page.getByRole('button',{name:'Details',exact:true}).click();await page.getByRole('button',{name:'Resolve & return to AI',exact:true}).waitFor();
   await page.getByRole('button',{name:'Back to chat',exact:true}).click();assert.equal(await page.locator('.inbox-details').isVisible(),false);
   assert.deepEqual(errors,[]);
  }finally{await close();}
@@ -65,6 +66,23 @@ test('desktop retains independent list and conversation; background and native q
   assert.equal(await page.locator('.inbox-campaign-context .inbox-message-body').isVisible(),true);
   await page.getByRole('combobox',{name:'More inbox filters'}).selectOption('zoe');
   await page.waitForFunction(()=>document.querySelectorAll('.inbox-open').length===1);
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+});
+
+test('Resolve is visible in the chat header and closes the handoff without sending a message',options,async()=>{
+ const {page,errors,close}=await setup(1366,900);try{
+  await page.getByRole('button',{name:'My conversations (1)',exact:true}).waitFor();
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  const resolve=page.getByRole('button',{name:'Resolve & return to AI',exact:true});
+  assert.equal(await resolve.isVisible(),true);
+  assert.equal(await page.locator('.inbox-details').isVisible(),false);
+  await resolve.click();
+  await page.getByText('Conversation resolved. The next customer message returns to your configured AI and automations.',{exact:true}).waitFor();
+  assert.equal(await resolve.count(),0);
+  const writes=await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method!=='GET'));
+  assert.equal(writes.filter(r=>r.path==='/conversations/human/resolve').length,1);
+  assert.equal(writes.filter(r=>r.path.endsWith('/reply')).length,0);
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });
