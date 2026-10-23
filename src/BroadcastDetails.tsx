@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import { BroadcastSubmissionReceipt } from './BroadcastSubmissionReceipt';
+import { campaignReceipt, campaignStatus } from './lib/campaignStatus.js';
 
 type Activity = {
   id: string; broadcast_name?: string; message?: string; status?: string;
@@ -18,10 +20,10 @@ export function BroadcastHistoryFacts({ activity }: { activity: Activity }) {
   const rows = [
     ["Broadcast name", activity.broadcast_name || "Untitled Broadcast"],
     ["Stored message / template", activity.message || "Not recorded"],
-    ["Status", activity.status === "completed" ? "Processed" : activity.status || "Not recorded"],
+    ["Status", campaignStatus(activity).label],
     ["Created", recordedTime(activity.created_at)],
     ["Scheduled / send started", recordedTime(activity.scheduled_at)],
-    ["Processing completed", recordedTime(activity.completed_at)],
+    ["Sending completed", recordedTime(activity.completed_at)],
     ["Recorded recipients", activity.recorded_recipients ?? "Not recorded"],
     ["Accepted for sending", activity.sent_count ?? "Not recorded"],
     ["Submission failures", activity.failed_count ?? "Not recorded"],
@@ -36,6 +38,9 @@ export function BroadcastHistoryFacts({ activity }: { activity: Activity }) {
     ["Sending telephone number at send time", "Not recorded"]
   ];
   return <>
+    <BroadcastSubmissionReceipt result={campaignReceipt(activity)} />
+    {activity.status === 'sending' && <p role="status" style={{fontSize:16}}>Sending broadcast… This status updates automatically. You can leave this page and check it again later.</p>}
+    {activity.delivery && activity.delivery.failed > 0 && <p style={{fontSize:14,lineHeight:1.6}}>{activity.delivery.failed} messages were not delivered by WhatsApp. See the provider failure reasons below. A Sent status does not mean every recipient received the message.</p>}
     <dl style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "10px 20px", fontSize: 12 }}>
       {rows.map(([label, value]) => <React.Fragment key={label}><dt style={{ color: "var(--mist)" }}>{label}</dt><dd style={{ margin: 0, color: "var(--cream)", overflowWrap: "anywhere" }}>{value}</dd></React.Fragment>)}
     </dl>

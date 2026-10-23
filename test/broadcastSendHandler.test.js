@@ -30,7 +30,7 @@ test('Send click reaches submission and opens the resulting activity',async()=>{
   const h=harness(async(url,options)=>{calls++;assert.equal(url,'https://example.invalid/broadcasts/send-template');assert.equal(options.method,'POST');return {json:async()=>({activity_id:'activity',accepted:2,failed:0})};});
   await h.send();
   assert.equal(calls,1);
-  assert.ok(h.events.some(e=>e[0]==='completed'&&e[1].accepted===2));
+  assert.ok(h.events.some(e=>e[0]==='completed'&&e[1]?.accepted===2));
   assert.ok(h.events.some(e=>e[0]==='route'&&e[1]==='activity'));
   assert.deepEqual(h.events.at(-1),['sending',false]);
 });

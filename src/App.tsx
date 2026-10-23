@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
+import { campaignStatus } from "./lib/campaignStatus.js";
 import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
 import { InboxMessageBody } from "./InboxMessageBody";
@@ -806,6 +807,18 @@ function PageHead({ label, title, sub, action }) {
 function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   const { data: history, loading: historyLoading, error: historyError, refetch: refetchHistory } = useAPI("/broadcasts/scheduled");
   const { data: setup, loading: setupLoading, error: setupError } = useAPI("/broadcasts/setup");
+  const historyRefresh = useRef(refetchHistory);
+  const historySnapshot = useRef(history);
+  historyRefresh.current = refetchHistory;
+  historySnapshot.current = history;
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') historyRefresh.current(); };
+    const timer = window.setInterval(() => {
+      if ((historySnapshot.current || []).some(item => item.status === 'sending')) refresh();
+    }, 10000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [customer.id]);
   const draftKey = "zedping.campaign.v1:" + customer.id + ":" + user.id;
   const [storedDraft] = useState(() => readDraft(draftKey) || {});
   const templateRequest = useRef(0);
@@ -874,23 +887,18 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       setNumberId(""); setGroupId(""); writeDraft(draftKey, null);
       refetchHistory();
       onRouteOpen(result.activity_id || null);
-    } catch (error) { setNotice({ ok: false, text: error.message || "Broadcast could not be sent." }); }
+    } catch (error) { setNotice({ ok: false, text: error.message || "We could not confirm the result. Check campaign activity before retrying; sending may still be continuing." }); }
     finally { sendInFlight.current = false; setSending(false); }
   };
 
-  const statusFor = (broadcast) => {
-    if (broadcast.status === "completed") return { label: "PROCESSED", cls: "badge-green" };
-    if (broadcast.status === "failed") return { label: "FAILED", cls: "badge-cream" };
-    if (broadcast.status === "pending") return { label: "SCHEDULED", cls: "badge-gold" };
-    if (broadcast.status === "sending") return { label: "SENDING", cls: "badge-blue" };
-    return { label: broadcast.status || "UNKNOWN", cls: "badge-cream" };
-  };
-  const activity = (history || []).filter(broadcast => activityFilter === "all" || statusFor(broadcast)?.label.toLowerCase() === activityFilter);
+  const statusFor = campaignStatus;
+  const activity = (history || []).filter(broadcast => activityFilter === "all" ||
+    (activityFilter === "processed" ? broadcast.status === "completed" : statusFor(broadcast).label.toLowerCase() === activityFilter));
 
   return (
     <div className="pad" style={{ padding: 28 }}>
       <PageHead title={composing ? "New campaign" : "Campaigns"} sub="Create broadcasts, review your audience and follow campaign activity." action={<button className={"btn "+(composing?"btn-wire":"btn-gold")} onClick={()=>onRouteOpen(composing?null:"new")}>{composing?"Back to campaigns":"New campaign"}</button>} />
-      {!composing && sendResult && (!activityId || activityId === sendResult.activity_id) && <BroadcastSubmissionReceipt result={sendResult} />}
+      {!composing && sendResult && !activityId && <BroadcastSubmissionReceipt result={sendResult} />}
       {!composing && notice && !sendResult && <p className="draft-notice" role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
       {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
       {composing && <><p className="draft-notice" role="status">{draftSaved ? "Draft saved in this browser tab. Review your audience before sending." : "Draft could not be saved on this device. Keep this page open."}</p>
@@ -911,10 +919,10 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       </div>
       <aside className="work-surface campaign-preview"><header><h2>Campaign preview</h2></header><div className="campaign-preview-body"><span className="badge badge-cream">{selectedTemplate?.status||"Choose a template"}</span><p>{selectedTemplate?.body_preview||"Your approved template will appear here."}</p></div><div className="surface-footnote"><strong>Before you send</strong><p>Confirm the sending number, audience and template variables. The review step checks eligible recipients and marketing opt-outs.</p></div></aside></div>
       </>}
-      {!composing && <><div className="campaign-summary"><strong>Campaign activity</strong><span>Processing status is separate from delivery receipts.</span></div>
+      {!composing && <><div className="campaign-summary"><strong>Campaign activity</strong><span>Sent confirms submission. Delivery and read receipts are shown in Details.</span></div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Campaign Activity</div>
-        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sending","Sending"],["processed","Processed"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sending","Sending"],["processed","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
       </div>
       <div className="card">
         {historyLoading ? <Loader /> : historyError ? <div className="surface-message" role="alert">{historyError} <button className="btn btn-wire" onClick={refetchHistory}>Try again</button></div> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
