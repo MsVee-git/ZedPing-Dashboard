@@ -879,15 +879,18 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       form.append("whatsapp_number_id", numberId); form.append("contact_group_id", groupId);
       form.append("template_id", templateId); form.append("variable_mappings", JSON.stringify(mappings));
       if (broadcastHeaderFile) form.append("header_media", broadcastHeaderFile);
-      const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", body: form });
+      const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", headers: { Prefer: "respond-async" }, body: form });
       const result = await response.json();
-      setSendResult(result);
-      setNotice({ ok: true, text: `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
+      const started = result.status === 'sending';
+      setSendResult(started ? null : result);
+      setNotice({ ok: true, text: started
+        ? 'Broadcast started. You can follow its progress below and leave this page safely.'
+        : `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
       setReview(null); setTemplateId(""); setMappings({}); setBroadcastHeaderFile(null);
       setNumberId(""); setGroupId(""); writeDraft(draftKey, null);
       refetchHistory();
       onRouteOpen(result.activity_id || null);
-    } catch (error) { setNotice({ ok: false, text: error.message || "We could not confirm the result. Check campaign activity before retrying; sending may still be continuing." }); }
+    } catch (error) { setNotice({ ok: false, text: `${error.message || 'Connection interrupted.'} Check campaign activity before retrying; sending may still be continuing.` }); }
     finally { sendInFlight.current = false; setSending(false); }
   };
 

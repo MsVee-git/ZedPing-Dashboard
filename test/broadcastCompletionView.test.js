@@ -30,3 +30,10 @@ test('details remain Sending until the stored campaign finishes',()=>{
   assert.match(html,/Sending broadcast/);
   assert.doesNotMatch(html,/>Sent<\/button>/);
 });
+
+test('sending details show saved progress instead of requiring the original send request',()=>{
+  const html=render({id:'running',status:'sending',sent_count:20,failed_count:5,recorded_recipients:85});
+  assert.match(html,/<progress[^>]*value="25"[^>]*max="85"/);
+  assert.match(html,/25 of 85 recipients processed/);
+  assert.doesNotMatch(html,/>Sent<\/button>/);
+});

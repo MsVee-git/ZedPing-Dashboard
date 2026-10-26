@@ -39,7 +39,14 @@ export function BroadcastHistoryFacts({ activity }: { activity: Activity }) {
   ];
   return <>
     <BroadcastSubmissionReceipt result={campaignReceipt(activity)} />
-    {activity.status === 'sending' && <p role="status" style={{fontSize:16}}>Sending broadcast… This status updates automatically. You can leave this page and check it again later.</p>}
+    {activity.status === 'sending' && <div role="status" style={{fontSize:16,marginBottom:16}}>
+      <strong>Sending broadcast…</strong>
+      <p style={{fontSize:14,lineHeight:1.6}}>This updates automatically. You can leave this page; sending continues.</p>
+      {activity.recorded_recipients != null && activity.recorded_recipients > 0 && <>
+        <progress aria-label="Broadcast submission progress" value={(activity.sent_count || 0)+(activity.failed_count || 0)} max={activity.recorded_recipients} style={{width:'100%',accentColor:'var(--gold)'}} />
+        <p style={{fontSize:14}}>{(activity.sent_count || 0)+(activity.failed_count || 0)} of {activity.recorded_recipients} recipients processed.</p>
+      </>}
+    </div>}
     {activity.delivery && activity.delivery.failed > 0 && <p style={{fontSize:14,lineHeight:1.6}}>{activity.delivery.failed} messages were not delivered by WhatsApp. See the provider failure reasons below. A Sent status does not mean every recipient received the message.</p>}
     <dl style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "10px 20px", fontSize: 12 }}>
       {rows.map(([label, value]) => <React.Fragment key={label}><dt style={{ color: "var(--mist)" }}>{label}</dt><dd style={{ margin: 0, color: "var(--cream)", overflowWrap: "anywhere" }}>{value}</dd></React.Fragment>)}

@@ -46,3 +46,15 @@ test('a failed submission releases the guard and allows a deliberate retry',asyn
   await h.send();assert.ok(h.events.some(e=>e[0]==='notice'&&e[1]?.ok===false));
   await h.send();assert.equal(calls,2);assert.ok(h.events.some(e=>e[0]==='route'&&e[1]==='retry'));
 });
+
+test('202 acknowledgement opens saved progress without claiming Sent or waiting for completion',async()=>{
+  const h=harness(async(url,options)=>{
+    assert.equal(options.headers.Prefer,'respond-async');
+    return {status:202,json:async()=>({status:'sending',activity_id:'in-progress',total_recipients:85})};
+  });
+  await h.send();
+  assert.ok(h.events.some(e=>e[0]==='route'&&e[1]==='in-progress'));
+  assert.equal(h.events.filter(e=>e[0]==='completed'&&e[1]!==null).length,0);
+  assert.ok(h.events.some(e=>e[0]==='notice'&&e[1]?.text.includes('Broadcast started')));
+  assert.deepEqual(h.events.at(-1),['sending',false]);
+});
