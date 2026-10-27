@@ -102,6 +102,8 @@ test('desktop gives messages most of the thread and assistant does not shrink hi
   await page.getByRole('textbox',{name:'Ask about your open inbox'}).waitFor();
   const after=await page.locator('.inbox-history').boundingBox();
   assert.equal(after.height,before.height);
+  await page.getByRole('button',{name:'Close assistant',exact:true}).click();
+  assert.equal(await page.locator('.inbox-assistant').count(),0);
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });

@@ -1286,7 +1286,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     </div>
     <button className="btn btn-wire inbox-copilot-toggle" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>{copilotOpen?'Hide assistant':'Ai assistant'}</button>
     </div>
-    {copilotOpen&&<div className="inbox-assistant is-open"><InboxCopilot initiallyExpanded key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} /></div>}
+    {copilotOpen&&<div className="inbox-assistant is-open"><button type="button" className="btn btn-wire inbox-assistant-close" onClick={()=>setCopilotOpen(false)}>Close assistant</button><InboxCopilot initiallyExpanded key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} /></div>}
     {!counts && !loading && <div className="inbox-notice">Counts unavailable. Refresh to retry.</div>}
     {selection.size>0 && <div className="inbox-bulk" role="group" aria-label="Selected conversation actions">
       <strong>{selection.size} {selection.size===1?"chat selected":"chats selected"}</strong>

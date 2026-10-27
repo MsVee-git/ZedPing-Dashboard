@@ -220,3 +220,5 @@
 @media(max-width:768px) {
   .workspace .inbox-page .inbox-assistant.is-open { top:8px; right:8px; width:calc(100% - 16px); max-height:calc(100% - 16px); }
 }
+
+.workspace .inbox-page .inbox-assistant-close { display:block; position:sticky; top:8px; z-index:1; margin:8px 8px 0 auto; background:var(--panel); }
