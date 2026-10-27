@@ -107,3 +107,36 @@ test('desktop gives messages most of the thread and assistant does not shrink hi
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });
+
+test('opening a Copilot result closes the assistant and opens the full chat on desktop and mobile',options,async()=>{
+ for(const width of [1366,390]){
+ const {page,errors,close}=await setup(width,768);try{
+  await page.locator('.inbox-copilot-toggle').click();
+  await page.getByRole('button',{name:'Summarise open inbox',exact:true}).click();
+  await page.getByRole('button',{name:'School enquiries → Open conversation',exact:true}).click();
+  await page.getByRole('textbox',{name:'Reply or caption'}).waitFor();
+  assert.equal(await page.locator('.inbox-assistant').count(),0);
+  const history=await page.locator('.inbox-history').boundingBox();assert.ok(history.height>=200,JSON.stringify(history));
+  assert.equal(await page.locator('.inbox-conversation-header').getByText('School enquiries',{exact:true}).isVisible(),true);
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+ }
+});
+test('staff follow-ups and customer replies move chats to the top without refresh and preserve drafts',options,async()=>{
+ const {page,errors,close}=await setup(1366,768);try{
+  await page.evaluate(()=>window.receiveFixtureMessage('auto','New product enquiry'));
+  await page.waitForFunction(()=>document.querySelector('.inbox-open strong')?.textContent==='Product enquiry');
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  await page.getByRole('textbox',{name:'Reply or caption'}).fill('Following up on school fees');
+  await page.getByRole('button',{name:'Send reply',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('.inbox-open strong')?.textContent==='School enquiries');
+  await page.getByRole('textbox',{name:'Reply or caption'}).fill('Unsent draft to keep');
+  await page.evaluate(()=>window.receiveFixtureMessage('auto','Customer has replied again'));
+  await page.waitForFunction(()=>document.querySelector('.inbox-open strong')?.textContent==='Product enquiry');
+  assert.equal(await page.getByRole('textbox',{name:'Reply or caption'}).inputValue(),'Unsent draft to keep');
+  await page.evaluate(()=>window.receiveFixtureMessage('human','Please send the fee schedule'));
+  await page.locator('.inbox-history').getByText('Please send the fee schedule',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'Reply or caption'}).inputValue(),'Unsent draft to keep');
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+});

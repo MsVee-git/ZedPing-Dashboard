@@ -1,3 +1,4 @@
+import { mergeInboxRows, sortInboxRows } from './lib/inboxActivity';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const INBOX_VIEWS = [['needs_attention','Needs Attention'],['zoe','AI handling'],['assigned_to_me','My conversations'],['unassigned_human','Unassigned'],['unread','Unread'],['resolved','Resolved'],['all','All']];
@@ -27,17 +28,18 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
       if(version===countGeneration.current && workspace.current===workspaceId)setCounts(data);
     } catch { if(version===countGeneration.current && workspace.current===workspaceId)setCounts(null); }
   },[apiFetch,api,workspaceId]);
-  const loadPage=useCallback(async(offset=0,append=false)=>{
-    const version=++generation.current;setLoading(true);setError('');
+  const loadPage=useCallback(async(offset=0,append=false,background=false)=>{
+    const version=++generation.current;if(!background)setLoading(true);setError('');
     try {
       const response=await apiFetch(`${api}/conversations?view=${view}&offset=${offset}`);const data=await response.json();
       if(!response.ok || !Array.isArray(data.conversations))throw new Error(data.error || 'Unable to load conversations');
       if(version!==generation.current || workspace.current!==workspaceId)return;
-      setRows(old=>append?[...new Map([...old,...data.conversations].map(row=>[row.id,row])).values()]:data.conversations);
-      setNextOffset(data.next_offset);
+      const next = append || (background && data.next_offset!==null) ? mergeInboxRows(rowsRef.current,data.conversations).filter(row=>matchesInboxView(row,view,userId)) : sortInboxRows(data.conversations);
+      rowsRef.current=next;setRows(next);
+      setNextOffset(data.next_offset===null?null:next.length);
     } catch(error) { if(version===generation.current)setError(error.message); }
     finally { if(version===generation.current)setLoading(false); }
-  },[apiFetch,api,workspaceId,view]);
+  },[apiFetch,api,workspaceId,view,userId]);
   useEffect(()=>{setRows([]);setNextOffset(null);loadPage();return()=>{generation.current++};},[loadPage]);
   useEffect(()=>{
     let current=true;setCounts(null);setMembers([]);refreshCounts();
@@ -59,14 +61,17 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
     }while(offset!==null && selected.size<200 && pages<4);
     const selectedRows=[...selected.values()];setRows(selectedRows);setNextOffset(offset);setLoading(false);
     return selectedRows;
-  },[apiFetch,api,workspaceId,view]);
+  },[apiFetch,api,workspaceId,view,userId]);
   const patchRow=useCallback(row=>{
     if(!row)return;
     const {view:currentView,userId:currentUser}=viewRef.current;
-    const removed=rowsRef.current.some(item=>item.id===row.id)&&!matchesInboxView(row,currentView,currentUser);
-    setRows(old=>old.map(item=>item.id===row.id?{...item,...row}:item).filter(item=>matchesInboxView(item,currentView,currentUser)));
-    if(removed)setNextOffset(offset=>offset===null?null:Math.max(0,offset-1));
+    // Partial activity events can update known rows; only joined API rows can add a new chat.
+    const exists=rowsRef.current.some(item=>item.id===row.id);
+    if(!exists && !row.contacts)return;
+    const next=mergeInboxRows(rowsRef.current,[row]).filter(item=>matchesInboxView(item,currentView,currentUser));
+    rowsRef.current=next;setRows(next);
+    if(exists && !next.some(item=>item.id===row.id))setNextOffset(offset=>offset===null?null:Math.max(0,offset-1));
   },[]);
-  const refresh=useCallback(()=>Promise.all([loadPage(),refreshCounts()]),[loadPage,refreshCounts]);
+  const refresh=useCallback((background=false)=>Promise.all([loadPage(0,false,background),refreshCounts()]),[loadPage,refreshCounts]);
   return {rows,counts,members,loading,error,nextOffset,selectView,loadMore:()=>loadPage(nextOffset,true),refresh,refreshCounts,patchRow};
 }

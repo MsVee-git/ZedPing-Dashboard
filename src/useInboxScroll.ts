@@ -25,7 +25,8 @@ export function useInboxScroll(selectedId, messages, loading) {
       followLatest.current = history.scrollHeight - history.scrollTop - history.clientHeight < 80;
     }
   };
-  return { historyRef, onHistoryScroll };
+  const scrollToLatest=()=>{followLatest.current=true;if(historyRef.current)historyRef.current.scrollTop=historyRef.current.scrollHeight;};
+  return { historyRef, onHistoryScroll, scrollToLatest };
 }
 
 // Size only the reply field; sending and conversation state stay with TeamInbox.

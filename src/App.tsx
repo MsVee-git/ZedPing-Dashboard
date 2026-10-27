@@ -7,6 +7,7 @@ import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
 import { campaignStatus } from "./lib/campaignStatus.js";
 import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
+import { useInboxLiveUpdates } from "./useInboxLiveUpdates";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
 import { InboxMessageBody } from "./InboxMessageBody";
 import "./teamInbox.css";
@@ -1168,7 +1169,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [selectionMode,setSelectionMode]=useState(false),[detailsOpen,setDetailsOpen]=useState(false),[copilotOpen,setCopilotOpen]=useState(false);
   const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
-  const {historyRef,onHistoryScroll}=useInboxScroll(selectedId,thread?.messages,threadLoading);
+  const {historyRef,onHistoryScroll,scrollToLatest}=useInboxScroll(selectedId,thread?.messages,threadLoading);
   const active=thread?.conversation;
   const canManageAssignment=['owner','admin'].includes(customer?.role);
   const isHuman=active?.status==='open' && active?.control_mode==='human';
@@ -1206,6 +1207,18 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     if(routeConversationId && routeConversationId!==selectedId)openConversation(routeConversationId);
     if(!routeConversationId){requestRef.current++;setSelectedId('');setThread(null);setThreadLoading(false);setDetailsOpen(false);}
   },[routeConversationId,customer?.id]);
+  useInboxLiveUpdates(supabase,customer?.id,event=>{
+    if(event.conversation)queue.patchRow(event.conversation);
+    if(event.message)queue.patchRow({id:event.conversationId,last_message_at:event.message.created_at,last_message:event.message});
+  },async changedIds=>{
+    void queue.refresh(true);
+    if(!selectedId || (changedIds.length && !changedIds.includes(selectedId)))return;
+    const id=selectedId,version=requestRef.current,workspace=customer?.id;
+    try {
+      const response=await apiFetch(`${API}/conversations/${id}`);const payload=await response.json();
+      if(response.ok && version===requestRef.current && workspace===workspaceRef.current){setThread(payload);queue.patchRow(payload.conversation);}
+    }catch { /* Keep the current thread and unsent reply during transient failures. */ }
+  });
   const closeConversation=()=>{requestRef.current++;setSelectedId('');setThread(null);setThreadLoading(false);setThreadError('');setDetailsOpen(false);setCopilotOpen(false);setReplyTarget(null);setAttachment(null);setLocationDraft(null);onRouteOpen?.('');};
   const runAction=async(path,options={})=>{
     if(actionLock.current || !selectedId)return;
@@ -1226,7 +1239,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
       const response=await apiFetch(`${API}/conversations/${selectedId}/reply`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:reply,reply_to_message_id:replyTarget?.id||null})});
       const payload=await response.json();if(!response.ok)throw new Error(payload.error || 'Unable to send reply');
       if(workspace!==workspaceRef.current)return;
-      queue.patchRow(payload.conversation);
+      queue.patchRow({...payload.conversation,last_message:{message_body:reply,direction:'outbound',status:payload.message_status||'accepted'}});
       if(request===requestRef.current){setReply('');setReplyTarget(null);await openConversation(selectedId,false);}
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setReplying(false);}
@@ -1286,7 +1299,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     </div>
     <button className="btn btn-wire inbox-copilot-toggle" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>{copilotOpen?'Hide assistant':'Ai assistant'}</button>
     </div>
-    {copilotOpen&&<div className="inbox-assistant is-open"><button type="button" className="btn btn-wire inbox-assistant-close" onClick={()=>setCopilotOpen(false)}>Close assistant</button><InboxCopilot initiallyExpanded key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={openConversation} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} /></div>}
+    {copilotOpen&&<div className="inbox-assistant is-open"><button type="button" className="btn btn-wire inbox-assistant-close" onClick={()=>setCopilotOpen(false)}>Close assistant</button><InboxCopilot initiallyExpanded key={`${customer?.id}:${selectedId}`} workspaceId={customer?.id} conversationId={selectedId} request={copilotRequest} onOpen={id=>{setCopilotOpen(false);setDetailsOpen(false);scrollToLatest();void openConversation(id,true,true);}} onUseDraft={setReply} canUseDraft={canReply&&!attachment&&!locationDraft&&!replying&&!busy} hasDraft={Boolean(reply.trim())} /></div>}
     {!counts && !loading && <div className="inbox-notice">Counts unavailable. Refresh to retry.</div>}
     {selection.size>0 && <div className="inbox-bulk" role="group" aria-label="Selected conversation actions">
       <strong>{selection.size} {selection.size===1?"chat selected":"chats selected"}</strong>
