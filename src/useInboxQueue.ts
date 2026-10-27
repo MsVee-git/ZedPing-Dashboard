@@ -67,9 +67,10 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
     const {view:currentView,userId:currentUser}=viewRef.current;
     // Partial activity events can update known rows; only joined API rows can add a new chat.
     const exists=rowsRef.current.some(item=>item.id===row.id);
-    if(!exists && !row.contacts)return;
+    if(!exists && (!row.contacts || (rowsRef.current.length && sortInboxRows([...rowsRef.current,row])[0].id!==row.id)))return;
     const next=mergeInboxRows(rowsRef.current,[row]).filter(item=>matchesInboxView(item,currentView,currentUser));
     rowsRef.current=next;setRows(next);
+    if(!exists && next.some(item=>item.id===row.id))setNextOffset(offset=>offset===null?null:offset+1);
     if(exists && !next.some(item=>item.id===row.id))setNextOffset(offset=>offset===null?null:Math.max(0,offset-1));
   },[]);
   const refresh=useCallback((background=false)=>Promise.all([loadPage(0,false,background),refreshCounts()]),[loadPage,refreshCounts]);
