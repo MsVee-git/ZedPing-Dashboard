@@ -86,3 +86,22 @@ test('Resolve is visible in the chat header and closes the handoff without sendi
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });
+
+
+test('desktop gives messages most of the thread and assistant does not shrink history',options,async()=>{
+ const {page,errors,close}=await setup(1366,768);try{
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  const history=page.getByRole('region',{name:'Message history'});
+  await page.locator('.inbox-history').waitFor();
+  const before=await page.locator('.inbox-history').boundingBox();
+  assert.ok(before.height>=340,`Message history is only ${before.height}px high`);
+  assert.equal(await page.locator('.inbox-thread-nav').isVisible(),false);
+  assert.equal(await page.getByRole('button',{name:'Details',exact:true}).isVisible(),true);
+  const composer=await page.locator('.inbox-composer').boundingBox();assert.ok(composer.y+composer.height<=768);
+  await page.locator('.inbox-copilot-toggle').click();
+  await page.getByRole('textbox',{name:'Ask about your open inbox'}).waitFor();
+  const after=await page.locator('.inbox-history').boundingBox();
+  assert.equal(after.height,before.height);
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+});

@@ -196,3 +196,27 @@
 }
 
 .inbox-image-preview{display:block;max-width:420px;color:var(--mist);font-size:13px}.inbox-image-preview .inbox-image{width:100%;min-height:120px}.inbox-image-preview span{display:block;margin-top:6px}
+
+/* Keep the conversation, rather than repeated headings, as the main work area. */
+.workspace .inbox-page { position:relative; width:100%; max-width:none; }
+.workspace .inbox-page .inbox-conversation-header { min-height:64px; padding:8px 14px; }
+.workspace .inbox-page .inbox-composer { padding:8px 12px; }
+.workspace .inbox-page .inbox-composer .textarea { min-height:56px; height:56px; padding:8px 12px; }
+.workspace .inbox-page .inbox-composer .btn { min-height:40px; padding:8px 12px; }
+.workspace .inbox-page .inbox-conversation-actions .btn { min-height:40px; padding:8px 12px; }
+.workspace .inbox-page .inbox-assistant.is-open { position:absolute; z-index:8; top:64px; right:16px; width:min(460px,calc(100% - 32px)); max-height:calc(100% - 80px); overflow-y:auto; background:var(--panel); border:1px solid var(--wire); border-radius:14px; box-shadow:0 12px 40px #152c2430; }
+.workspace .inbox-page .inbox-assistant .inbox-copilot { margin-bottom:0; border:0; }
+@media(min-width:769px) {
+  .main.workspace.inbox-workspace > .desk-bar { height:60px !important; min-height:60px; }
+  .workspace .pad.inbox-page { padding:12px 16px !important; }
+  .workspace .inbox-page .inbox-page-heading { display:none; }
+  .workspace .inbox-page .inbox-thread-nav { display:none; }
+  .workspace .inbox-page .team-inbox { min-height:420px; grid-template-columns:minmax(230px,.75fr) minmax(0,1.85fr); }
+  .workspace .inbox-page .inbox-history { padding:16px; }
+}
+@media(min-width:769px) and (max-height:620px) {
+  .main.workspace.inbox-workspace .inbox-route { overflow-y:auto; }
+}
+@media(max-width:768px) {
+  .workspace .inbox-page .inbox-assistant.is-open { top:8px; right:8px; width:calc(100% - 16px); max-height:calc(100% - 16px); }
+}
