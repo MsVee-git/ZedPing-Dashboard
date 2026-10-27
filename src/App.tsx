@@ -1370,12 +1370,16 @@ function QuotedMessage({ message }) {
 
 function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {
   const [state,setState]=useState({ status:'loading',url:'' });
+  const [retry,setRetry]=useState(0);
+  const image = media.type==='image'||String(media.mime_type||'').startsWith('image/');
   useEffect(()=>{
-    if(media.type!=='image')return;
+    if(!image)return;
+    setState({status:'loading',url:''});
     let active=true,url='';
     (async()=>{
       try {
         const response=await apiFetch(`${API}/conversations/${conversationId}/messages/${messageId}/media`,{cache:'no-store'});
+        if(!response.ok)throw new Error('Image is unavailable');
         const blob=await response.blob();
         if(!blob.type.startsWith('image/'))throw new Error('Image is unavailable');
         url=URL.createObjectURL(blob);
@@ -1383,7 +1387,7 @@ function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {
       } catch (_) { if(active)setState({status:'unavailable',url:''}); }
     })();
     return()=>{active=false;if(url)URL.revokeObjectURL(url)};
-  },[apiFetch,conversationId,messageId,media.type]);
+  },[apiFetch,conversationId,messageId,image,retry]);
   const download=async()=>{
     try { const response=await apiFetch(`${API}/conversations/${conversationId}/messages/${messageId}/media`,{cache:'no-store'});const blob=await response.blob();if(!blob.size)throw new Error('Attachment unavailable');const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=media.filename||'document';anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
     catch (_) { setState({status:'unavailable',url:''}); }
@@ -1392,10 +1396,10 @@ function InboxMedia({ conversationId, messageId, media, direction, apiFetch }) {
     const latitude=Number(media.latitude),longitude=Number(media.longitude);const label=media.name||media.address||'Shared location';
     return <div className="inbox-location"><strong>{label}</strong>{media.address&&media.name?<div>{media.address}</div>:null}<div className="mono">{latitude.toFixed(6)}, {longitude.toFixed(6)}</div><a href={`https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}`} target="_blank" rel="noreferrer">Open in maps</a></div>;
   }
-  if(media.type==='document')return <div className="inbox-document"><strong>Document</strong><span>{media.filename||'Attachment'}</span>{media.caption&&<span>{media.caption}</span>}<button className="text-button" type="button" onClick={download}>Download document</button>{state.status==='unavailable'&&<span role="status">Document unavailable</span>}</div>;
+  if(media.type==='document'&&!image)return <div className="inbox-document"><strong>Document</strong><span>{media.filename||'Attachment'}</span>{media.caption&&<span>{media.caption}</span>}<button className="text-button" type="button" onClick={download}>Download document</button>{state.status==='unavailable'&&<span role="status">Document unavailable</span>}</div>;
   if(state.status==='loading')return <div className="inbox-media-state">Loading image…</div>;
-  if(state.status==='unavailable')return <div className="inbox-media-state" role="status">Image unavailable</div>;
-  return <img className="inbox-image" src={state.url} alt={`${direction==='outbound'?'Outgoing':'Incoming'} WhatsApp image`}/>;
+  if(state.status==='unavailable')return <div className="inbox-media-state" role="status">Image unavailable <button type="button" className="text-button" onClick={()=>setRetry(value=>value+1)}>Retry preview</button></div>;
+  return <a className="inbox-image-preview" href={state.url} target="_blank" rel="noreferrer" aria-label="Open full-size image"><img className="inbox-image" src={state.url} onError={()=>setState({status:"unavailable",url:""})} alt={`${direction==='outbound'?'Outgoing':'Incoming'} WhatsApp image`}/><span>Open full-size image</span></a>;
 }
 
 // ── AUTOMATIONS ───────────────────────────────────────────────────────────────
@@ -1790,7 +1794,7 @@ function TemplateComposer({ onSubmitted, onClose }) {
     <form onSubmit={submit}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(140px,.7fr) minmax(130px,.55fr)", gap: 12 }}><div><label className="label">Template name</label><input className="input" value={draft.name} onChange={e=>update("name",e.target.value)} placeholder="booking_reminder" maxLength={100} required /></div><div><label className="label">Category</label><select className="input" value={draft.category} onChange={e=>update("category",e.target.value)}><option value="UTILITY">Utility</option><option value="MARKETING">Marketing</option></select></div><div><label className="label">Language</label><select className="input" value={draft.language} onChange={e=>update("language",e.target.value)}><option value="en_US">English (US)</option><option value="en_GB">English (UK)</option><option value="en">English</option></select></div></div>
       <div style={{ display:"grid",gridTemplateColumns:"minmax(160px,.55fr) minmax(0,1fr)",gap:12,marginTop:16 }}><div><label className="label">Header</label><select className="input" value={draft.header_type} onChange={e=>{update("header_type",e.target.value);setHeaderFile(null)}}><option value="none">No header</option><option value="text">Text</option><option value="image">Image</option><option value="document">Document (PDF)</option></select></div>{draft.header_type==="text"&&<div><label className="label">Header text</label><input className="input" value={draft.header_text} onChange={e=>update("header_text",e.target.value)} maxLength={60} required /></div>}{mediaHeader&&<div><label className="label">{draft.header_type==="image"?"Header image (JPEG/PNG, up to 10 MB)":"Header document (PDF, up to 10 MB)"}</label><input className="input" type="file" accept={draft.header_type==="image"?"image/jpeg,image/png":"application/pdf"} onChange={e=>setHeaderFile(e.target.files?.[0]||null)} required /></div>}</div>
-      <div style={{ marginTop:16 }}><label className="label">Message body</label><textarea className="input" value={draft.body} onChange={e=>update("body",e.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required style={{minHeight:110,resize:"vertical",paddingTop:12}} /><div style={{color:malformedVariables?"var(--error-text)":"var(--mist)",fontSize:10,marginTop:6}}>{malformedVariables?"Placeholders must be consecutive.":"Use optional numbered placeholders: {{1}}, {{2}}."}</div></div>
+      <div style={{ marginTop:16 }}><label className="label">Message body</label><textarea className="input" value={draft.body} onChange={e=>update("body",e.target.value)} placeholder="Hello {{1}}, your appointment is confirmed." maxLength={1024} required rows={12} aria-label="Template message body" style={{height:"clamp(300px, 45vh, 560px)",minHeight:300,resize:"vertical",padding:16,fontSize:16,lineHeight:1.7}} /><div style={{color:malformedVariables?"var(--error-text)":"var(--mist)",fontSize:10,marginTop:6}}>{malformedVariables?"Placeholders must be consecutive.":"Use optional numbered placeholders: {{1}}, {{2}}."}</div></div>
       {!!rawVariables.length&&!malformedVariables&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginTop:12}}>{rawVariables.map((number,index)=><div key={number}><label className="label">Example for {"{{"+number+"}}"}</label><input className="input" value={draft.variable_examples[index]||""} onChange={e=>{const values=[...draft.variable_examples];values[index]=e.target.value;update("variable_examples",values)}} required maxLength={128}/></div>)}</div>}
       <div style={{marginTop:14}}><label className="label">Footer (optional)</label><input className="input" value={draft.footer_text} onChange={e=>update("footer_text",e.target.value)} maxLength={60} placeholder="Reply STOP to opt out" /></div>
       <div style={{marginTop:16,borderTop:"1px solid var(--wire)",paddingTop:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><label className="label">Buttons (optional)</label><button type="button" className="btn btn-wire" onClick={addButton} disabled={draft.buttons.length>=3}>Add button</button></div>{draft.buttons.map((button,index)=><div key={index} style={{display:"grid",gridTemplateColumns:"150px minmax(130px,.6fr) minmax(0,1fr) auto",gap:8,marginTop:8}}><select className="input" value={button.type} onChange={e=>updateButton(index,"type",e.target.value)}><option value="quick_reply">Quick reply</option><option value="url">URL</option><option value="phone_number">Phone number</option></select><input className="input" value={button.text} onChange={e=>updateButton(index,"text",e.target.value)} placeholder="Button text" maxLength={25} required/>{button.type==="url"?<input className="input" value={button.url||""} onChange={e=>updateButton(index,"url",e.target.value)} placeholder="https://example.com" required/>:button.type==="phone_number"?<input className="input" value={button.phone_number||""} onChange={e=>updateButton(index,"phone_number",e.target.value)} placeholder="+260..." required/>:<div/>}<button type="button" className="btn btn-wire" onClick={()=>update("buttons",draft.buttons.filter((_,item)=>item!==index))}>Remove</button></div>)}</div>

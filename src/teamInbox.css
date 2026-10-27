@@ -194,3 +194,5 @@
   .inbox-conversation-actions { justify-content:flex-start; width:100%; }
   .workspace .inbox-page .inbox-toolbar .inbox-filters > .btn:nth-child(3) { white-space:normal; height:auto; min-height:42px; }
 }
+
+.inbox-image-preview{display:block;max-width:420px;color:var(--mist);font-size:13px}.inbox-image-preview .inbox-image{width:100%;min-height:120px}.inbox-image-preview span{display:block;margin-top:6px}
