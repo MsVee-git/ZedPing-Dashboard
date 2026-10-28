@@ -4,7 +4,7 @@ import {
   canStartEmbeddedSignupCompletion,
   embeddedSignupCompletionPayload,
   embeddedSignupRecoveryOutcome,
-  emptyEmbeddedSignupPending
+  emptyEmbeddedSignupPending, pendingSignupStorageKey, savePendingSignup, loadPendingSignup
 } from "../src/lib/embeddedSignupRecovery.js";
 
 const session = { session_id: "123e4567-e89b-12d3-a456-426614174000", state: "x".repeat(32) };
@@ -73,4 +73,17 @@ test("login code before FINISH waits for the selected phone", () => {
   assert.equal(canStartEmbeddedSignupCompletion(pending, false), false);
   pending.phoneNumberId = "123456789";
   assert.equal(canStartEmbeddedSignupCompletion(pending, false), true);
+});
+
+
+test('saved setup is scoped to workspace/user, strips the OAuth code and rejects stale or malformed timestamps',()=>{
+ const saved=new Map(),storage={setItem:(k,v)=>saved.set(k,v),getItem:k=>saved.get(k),removeItem:k=>saved.delete(k)};
+ const key=pendingSignupStorageKey('workspace','user');
+ savePendingSignup(storage,key,{session,phoneNumberId:'123456',completionSubmitted:true,code:'one-use-code'},1000);
+ assert.ok(!storage.getItem(key).includes('one-use-code'));
+ assert.equal(loadPendingSignup(storage,key,2000).phoneNumberId,'123456');
+ assert.equal(loadPendingSignup(storage,pendingSignupStorageKey('other','user'),2000),null);
+ assert.equal(loadPendingSignup(storage,key,1000+24*60*60*1000+1),null);
+ storage.setItem(key,JSON.stringify({session,phoneNumberId:'123456',completionSubmitted:true}));
+ assert.equal(loadPendingSignup(storage,key,2000),null);
 });

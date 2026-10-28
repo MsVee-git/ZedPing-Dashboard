@@ -39,7 +39,7 @@ const HelpCenter = lazy(()=>import("./HelpCenter").then(module=>({default:module
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
 const API = "https://zedping-backend-production.up.railway.app";
-const ZEDPING_WA = "260778621167";
+const ZEDPING_WA = "260778621168";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 async function verifyAccountPassword(email, password, userId) {
   const verifier = createClient(SUPABASE_URL, SUPABASE_ANON, {
@@ -234,7 +234,7 @@ function MessagingAccessNotice({ customer, navigate }) {
   return <aside role="status" aria-live="polite" style={{margin:16,padding:16,border:"1px solid #bb8b2b",borderRadius:12,background:"#fff6de",color:"#263d30",fontSize:16,lineHeight:1.5}}>
     <strong>{notice[0]}</strong><p style={{margin:"6px 0 12px"}}>{notice[1]}</p>
     <button type="button" onClick={() => navigate("billing")} style={{font:"inherit",marginRight:16,textDecoration:"underline"}}>View plan &amp; usage</button>
-    <a href="https://wa.me/260778621167?text=Hello%20ZedPing%2C%20please%20help%20restore%20my%20messaging%20allowance." target="_blank" rel="noreferrer" style={{color:"inherit",textDecoration:"underline"}}>Contact ZedPing</a>
+    <a href="https://wa.me/260778621168?text=Hello%20ZedPing%2C%20please%20help%20restore%20my%20messaging%20allowance." target="_blank" rel="noreferrer" style={{color:"inherit",textDecoration:"underline"}}>Contact ZedPing</a>
   </aside>;
 }
 

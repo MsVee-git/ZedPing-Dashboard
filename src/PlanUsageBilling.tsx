@@ -4,7 +4,7 @@ import './planUsage.css';
 import { MessagingUsage } from './MessagingUsage';
 
 const number = (value: number) => value.toLocaleString('en-US');
-const support = 'https://wa.me/260778621167?text=';
+const support = 'https://wa.me/260778621168?text=';
 export function PlanUsageBilling({ customer, request }: any) {
   const current = customer?.subscription_plan;
   const selected = proposedPlans.find(plan => plan.id === current);

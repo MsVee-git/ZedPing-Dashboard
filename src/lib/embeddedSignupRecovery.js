@@ -34,3 +34,22 @@ export function embeddedSignupRecoveryOutcome({ connection, errorMessage = "" })
   if (/session has expired|session is no longer valid/i.test(errorMessage)) return "expired";
   return "recoverable_error";
 }
+
+export function pendingSignupStorageKey(workspaceId,userId) {
+  return workspaceId&&userId?`zedping.signup.${workspaceId}.${userId}`:null;
+}
+export function savePendingSignup(storage,key,pending,now=Date.now()) {
+  if(!key)return;
+  try {
+    if(!pending?.session || !pending.completionSubmitted){storage.removeItem(key);return;}
+    storage.setItem(key,JSON.stringify({savedAt:now,session:pending.session,phoneNumberId:pending.phoneNumberId,finishWabaId:pending.finishWabaId,completionSubmitted:true}));
+  }catch { /* A blocked storage API must not interrupt signup. */ }
+}
+export function loadPendingSignup(storage,key,now=Date.now()) {
+  if(!key)return null;
+  try {
+    const value=JSON.parse(storage.getItem(key)||'null');
+    if(!value || !Number.isFinite(value.savedAt) || value.savedAt>now || now-value.savedAt>24*60*60*1000 || !value.session?.session_id || !value.session?.state || !value.phoneNumberId || value.completionSubmitted!==true){storage.removeItem(key);return null;}
+    return {...emptyEmbeddedSignupPending(),session:value.session,phoneNumberId:value.phoneNumberId,finishWabaId:value.finishWabaId||null,completionSubmitted:true};
+  }catch{return null;}
+}

@@ -27,7 +27,7 @@ export function HelpCenter({ guideId, navigate }:any) {
     speech.onerror=()=>{if(utterance.current===speech){utterance.current=null;setAudio('idle');setAudioError('Read-aloud could not start. Try your browser or device’s text-to-speech option.');}};
     utterance.current=speech;setAudioError('');setAudio('playing');window.speechSynthesis.speak(speech);
   }
-  const support='https://wa.me/260778621167?text='+encodeURIComponent(`Hello ZedPing, I need help${guide?' with '+guide.title:''}.`);
+  const support='https://wa.me/260778621168?text='+encodeURIComponent(`Hello ZedPing, I need help${guide?' with '+guide.title:''}.`);
   const matches=searchHelpGuides(query,category);
   return <div className="pad help-center">
     <PageTitle title="Help & Guides" description="Practical steps for using ZedPing, from your first login to daily follow-ups." action={<a className="btn btn-wire" href={support} target="_blank" rel="noreferrer">Contact support</a>}/>

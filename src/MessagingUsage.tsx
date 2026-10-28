@@ -31,7 +31,7 @@ export function MessagingUsage({ customer, request, compact = false }: any) {
   const view = messagingUsageView(data);
   const format = (value: number) => value.toLocaleString('en-US');
   const date = (value: string) => new Date(value).toLocaleDateString('en-GB', { timeZone: 'Africa/Lusaka', day: 'numeric', month: 'short', year: 'numeric' });
-  const topUp = 'https://wa.me/260778621167?text=' + encodeURIComponent(`Hello ZedPing, I would like to purchase extra template messages. Workspace: ${customer.business_name || ''}. Plan: ${customer.subscription_plan || ''}. Please confirm the price and payment instructions.`);
+  const topUp = 'https://wa.me/260778621168?text=' + encodeURIComponent(`Hello ZedPing, I would like to purchase extra template messages. Workspace: ${customer.business_name || ''}. Plan: ${customer.subscription_plan || ''}. Please confirm the price and payment instructions.`);
   return <div style={{ padding: compact ? '0' : '0 22px 22px', fontSize: 16, lineHeight: 1.6 }}>
     {!data ? <p role="status">Loading messaging balance…</p> : view.balance ? <>
       <strong style={{ display: 'block', fontSize: compact ? 28 : 36 }}>{format(view.balance.remaining)} remaining</strong>

@@ -20,7 +20,7 @@ function SnapshotWorkspaceReports({customer,request,tab='messaging'}:any){
 }
 
 export { PlanUsageBilling as WorkspaceBilling } from './PlanUsageBilling';
-export function WorkspaceIntegrations(){return <div className="pad"><PageTitle title="Integrations" description="Connect the tools your team uses."/><Surface title="Workspace integrations"><p className="surface-message">WhatsApp is managed under WhatsApp → Numbers & connection. For special integrations, contact ZedPing to discuss your requirements.</p><a className="btn btn-wire billing-action" href="https://wa.me/260778621167?text=Hello%20ZedPing%2C%20I%20would%20like%20to%20discuss%20an%20integration." target="_blank" rel="noreferrer">Discuss an integration</a></Surface></div>;}
+export function WorkspaceIntegrations(){return <div className="pad"><PageTitle title="Integrations" description="Connect the tools your team uses."/><Surface title="Workspace integrations"><p className="surface-message">WhatsApp is managed under WhatsApp → Numbers & connection. For special integrations, contact ZedPing to discuss your requirements.</p><a className="btn btn-wire billing-action" href="https://wa.me/260778621168?text=Hello%20ZedPing%2C%20I%20would%20like%20to%20discuss%20an%20integration." target="_blank" rel="noreferrer">Discuss an integration</a></Surface></div>;}
 
 export function WorkspaceReports(props:any) {
   return !props.tab || ['messaging','campaigns'].includes(props.tab)
