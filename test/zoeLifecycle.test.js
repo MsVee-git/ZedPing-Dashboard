@@ -16,8 +16,8 @@ test('Zoe lifecycle UI keeps members read-only and labels every deployment state
 })
 
 test('Go Live is reviewed before its mutation and test-mode return remains explicit', () => {
-  assert.match(source, /async function reviewActivation\(\)/)
-  assert.match(source, /setActivationReview\(result\)/)
+  assert.match(source, /async function reviewActivation\(mode = \'test\'\)/)
+  assert.match(source, /setActivationReview\(\{\.\.\.result, mode\}\)/)
   assert.match(source, /onClick=\{selected\?\.lifecycle_status === "active" \? goLive : activate\}/)
   assert.match(source, /onClick=\{returnToTest\}/)
   assert.match(source, /to Test Mode\? Only approved test contacts will receive responses\./)
