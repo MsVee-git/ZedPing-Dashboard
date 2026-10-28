@@ -1,12 +1,15 @@
+import {businessVerificationGuide,industryGuides,schoolMessageExamples} from './helpUseCases.js';
 export const helpGuides = [
   {id:'getting-started',category:'Getting started',title:'Your first day on ZedPing',minutes:5,section:'overview',intro:'Set up your workspace, check your WhatsApp connection, and practise with a small audience before messaging clients.',steps:[
     'Sign in with your ZedPing email and password. Check the business name shown in the sidebar before working with client information.',
+    'Before onboarding, complete the Meta business verification required by ZedPing. Prepare your ZRA tax certificate, PACRA certificate, working website and professional email on your business domain. Read the business-verification guide for the full checklist.',
     'Open Overview and review the connection banner, setup checklist, and message balance. Complete any outstanding setup tasks shown for your workspace.',
     'Open WhatsApp → Numbers & connection. Confirm that the correct business number is connected. If setup is incomplete, follow the connection flow or ask your workspace administrator.',
     'Open Settings → Business profile and check the business details. Owners and administrators manage workspace configuration.',
     'Add a small group of contacts who have agreed to receive your messages. Create an approved template, then send a test to a contact you control.',
     'Open Team Inbox to check the response. Practise taking a conversation, replying, and resolving it. Review the campaign delivery report before sending to a larger group.'
-  ],practice:'Run a complete practice cycle: one approved template to your own test contact, one customer reply, one staff reply, then resolve the chat.',notes:['Available features and controls depend on your plan and workspace role.','Use My Account to manage your personal name and password. Workspace business details are separate.'],related:['contacts-groups','templates','inbox-replies']},
+  ],practice:'Run a complete practice cycle: one approved template to your own test contact, one customer reply, one staff reply, then resolve the chat.',notes:['Available features and controls depend on your plan and workspace role.','Use My Account to manage your personal name and password. Workspace business details are separate.'],related:['business-verification','contacts-groups','templates','inbox-replies']},
+  businessVerificationGuide,
   {id:'inbox-replies',category:'Team Inbox',title:'Read and reply to customer messages',minutes:4,section:'messages',intro:'Use Team Inbox to see recent conversations, take ownership, and follow up without losing the customer’s context.',steps:[
     'Open Team Inbox. Use All, Unread, My conversations, or More views to find the conversations you need.',
     'Select a conversation. Read the latest customer message and earlier messages. Expand Previous campaign when you need the background of a broadcast.',
@@ -118,6 +121,7 @@ export const helpGuides = [
     'Ask the colleague to follow the invitation and sign in with the intended email address.',
     'Assign work in Team Inbox and check My conversations to verify each person sees their own assigned conversations.'
   ],notes:['Personal profile changes are separate from your business name and WhatsApp display-name configuration.','Each colleague should use their own login. If a button is unavailable, check your workspace role with an administrator.'],related:['getting-started','handoff-resolve']},
+  ...industryGuides,
   {id:'school-examples',category:'Practical examples',title:'Broadcast ideas for a school',minutes:4,section:'broadcasts',intro:'Use focused parent and prospect groups so each message reaches the people it is relevant to.',steps:[
     'Create groups by campus, grade, or enquiry type where appropriate, and keep the intended audience up to date.',
     'Use parent meeting reminders to share the date, time, location, and who should attend.',
@@ -125,13 +129,13 @@ export const helpGuides = [
     'Use personalized fee reminders only with accurate individual details. Review every variable mapping and recipient before sending.',
     'For prospective parents, send relevant admissions or open-day information to contacts who agreed to receive it.',
     'Monitor replies in Team Inbox. Assign questions to the right staff member and resolve the conversation after helping.'
-  ],example:'Good morning {{1}}. [School name], [Campus], invites Grade 3 parents to a meeting on {{2}} at {{3}}. Please reply if you need directions or further information.',notes:['Use these as drafting ideas and submit the appropriate template for approval. Confirm the category for the actual purpose of the message.','Avoid broadcasting sensitive individual learner information. Check audience and variable mappings carefully.'],related:['contacts-groups','templates','campaigns']}
+  ],examples:schoolMessageExamples,notes:['Use these as drafting ideas and submit the appropriate template for approval. Confirm the category for the actual purpose of the message.','Avoid broadcasting sensitive individual learner information. Check audience and variable mappings carefully.'],related:['contacts-groups','templates','campaigns']}
 ];
 export const helpCategories = ['All guides',...new Set(helpGuides.map(guide=>guide.category))];
 export function searchHelpGuides(query='',category='All guides') {
   const words=query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-  return helpGuides.filter(guide=>(category==='All guides'||guide.category===category)&&words.every(word=>[guide.title,guide.intro,guide.category,...guide.steps,...(guide.notes||[]),guide.example||''].join(' ').toLowerCase().includes(word)));
+  return helpGuides.filter(guide=>(category==='All guides'||guide.category===category)&&words.every(word=>[guide.title,guide.intro,guide.category,...guide.steps,...(guide.notes||[]),guide.example||'',...(guide.checklist||[]),...(guide.examples||[]).flatMap(item=>[item.title,item.audience,item.message,item.followUp])].join(' ').toLowerCase().includes(word)));
 }
 export function guideNarration(guide) {
-  return [guide.title,guide.intro,...guide.steps.map((step,index)=>`Step ${index+1}. ${step}`),guide.example?`Example. ${guide.example}`:'',guide.practice?`Try it. ${guide.practice}`:'',...(guide.notes||[])].filter(Boolean).join('\n\n');
+  return [guide.title,guide.intro,...(guide.checklist||[]).map(item=>`Required. ${item}`),...guide.steps.map((step,index)=>`Step ${index+1}. ${step}`),guide.example?`Example. ${guide.example}`:'',...(guide.examples||[]).map(item=>`${item.title}. Audience: ${item.audience}. Example message: ${item.message}. Follow-up: ${item.followUp}`),guide.practice?`Try it. ${guide.practice}`:'',...(guide.notes||[])].filter(Boolean).join('\n\n');
 }

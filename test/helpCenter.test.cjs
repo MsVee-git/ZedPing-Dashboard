@@ -54,3 +54,24 @@ test('mobile guides fit the screen and search has a recoverable empty state',opt
   await page.screenshot({path:'/tmp/zedping-help-mobile.png',fullPage:true});assert.deepEqual(errors,[]);
  }finally{await close();}
 });
+
+
+test('industry guides provide audience-specific messages and staff actions, with a distinct onboarding policy',options,async()=>{
+ const{page,errors,close}=await setup(390);try{
+  await page.getByRole('link',{name:'View required checklist',exact:true}).click();
+  await page.getByRole('heading',{name:'Required: verify your business on Meta',exact:true}).waitFor();
+  assert.equal(await page.locator('.help-required li').count(),4);
+  assert.ok(await page.locator('.help-required').textContent().then(text=>text.includes('ZRA')&&text.includes('PACRA')&&text.includes('website')&&text.includes('email')));
+  await page.getByText(/four-item checklist and mandatory verification are ZedPing onboarding requirements/).waitFor();
+  await page.getByRole('link',{name:'← All guides',exact:true}).click();
+  for(const [query,title] of [['restaurants','Restaurants: bookings, takeaway and repeat visits'],['garages','Garages: recover leads and keep customers informed'],['hospitals','Hospitals and clinics: appointments and patient administration']]){
+    await page.getByRole('searchbox',{name:'What do you want to do?'}).fill(query);
+    await page.getByRole('link',{name:new RegExp(title.split(':')[0]+':')}).click();
+    await page.getByRole('heading',{name:title,exact:true}).waitFor();assert.ok(await page.locator('.help-use-case').count()>=4);
+    assert.ok(await page.locator('.help-use-case').first().textContent().then(text=>text.includes('Who to send it to:')&&text.includes('What staff do next:')));
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.getByRole('link',{name:'← All guides',exact:true}).click();
+  }
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+});
