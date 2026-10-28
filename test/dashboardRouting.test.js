@@ -9,6 +9,7 @@ const context={exports:{}};vm.runInNewContext(code,context);
 const {parseDashboardRoute:parse,routeToPath:path}=context.exports;
 test('canonical pages and resource links round-trip without losing identity',()=>{
   for(const [url,section,kind,id] of [
+    ['/help','help'],['/help/guides/campaigns','help','guide','campaigns'],
     ['/campaigns','broadcasts'],['/campaigns/new','broadcasts','campaign','new'],['/campaigns/c1','broadcasts','campaign','c1'],
     ['/contacts/groups/g1','contactGroups','contactGroup','g1'],['/automations/flows/f1','chatbotFlows','flow','f1'],
     ['/zed-ai/agents/a1','zoeAi','agent','a1'],['/team-inbox/c1','messages','conversation','c1'],

@@ -4,7 +4,7 @@ import { routeToPath } from './lib/dashboardRouting';
 export const navigation = [
   { label:'Workspace', items:[['overview','Overview','home'],['messages','Team Inbox','messages'],['contacts','Contacts','contacts'],['broadcasts','Campaigns','broadcast']] },
   { label:'Build', items:[['automations','Automations','flow'],['zoeAi','ZedPing Ai','auto'],['content','Content Library','catalog']] },
-  { label:'Manage', items:[['whatsapp','WhatsApp','messages'],['analytics','Analytics','chart'],['settings','Settings','settings']] }
+  { label:'Manage', items:[['whatsapp','WhatsApp','messages'],['analytics','Analytics','chart'],['settings','Settings','settings'],['help','Help & Guides','catalog']] }
 ];
 export function parentSection(section: string) {
   return ({contactGroups:'contacts', chatbotFlows:'automations', templates:'whatsapp',team:'settings',account:'settings',billing:'settings',integrations:'settings'})[section] || section;

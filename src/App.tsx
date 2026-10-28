@@ -1,7 +1,7 @@
 // @ts-nocheck
 // Contact-group bulk selection is intentionally rendered from this existing
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
@@ -33,6 +33,8 @@ import { WorkspaceOverview } from "./WorkspaceOverview";
 import { WorkspaceReports, WorkspaceBilling, WorkspaceIntegrations } from "./WorkspaceReports";
 import { useQueryState, useReplyDraft, readDraft, writeDraft } from "./usePageState";
 import redesignCss from "./workspace.css?inline";
+
+const HelpCenter = lazy(()=>import("./HelpCenter").then(module=>({default:module.HelpCenter})));
 
 const SUPABASE_URL = "https://zzhqhgeyxbdqdkacrviq.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6aHFoZ2V5eGJkcWRrYWNydmlxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwMDMwNDEsImV4cCI6MjA5NDU3OTA0MX0.C4xDheJF3qOB7L3LWZKryNgE4-eMc05kJi4qwDhp-sI";
@@ -2611,6 +2613,7 @@ export default function App() {
   };
 
   const pages = {
+    help: { title:"Help & Guides", comp:<Suspense fallback={<Loader/>}><HelpCenter guideId={route.resourceKind === "guide" ? route.resourceId : null} navigate={navigate}/></Suspense> },
     overview:    { title: "Overview",     comp: <WorkspaceOverview customer={customer} request={workspaceRequest} navigate={navigate} /> },
     broadcasts:  { title: "Campaigns",   comp: <Broadcasts customer={customer} user={user} routeCampaignId={route.resourceId} onRouteOpen={resourceId=>navigate({section:"broadcasts",resourceId,resourceKind:"campaign"})} /> },
     contacts:    { title: "Contacts",     comp: <Contacts customer={customer} onNavigate={navigate} onRouteOpen={resourceId=>navigate({section:"contactGroups",resourceId,resourceKind:"contactGroup"})} /> },

@@ -1,6 +1,6 @@
 // Canonical destinations; old customer bookmarks remain valid below.
 export const sectionPaths = Object.freeze({
-  overview: '/dashboard', messages: '/team-inbox', contacts: '/contacts',
+  help: '/help', overview: '/dashboard', messages: '/team-inbox', contacts: '/contacts',
   contactGroups: '/contacts/groups', broadcasts: '/campaigns',
   automations: '/automations/library', chatbotFlows: '/automations/flows',
   content: '/content-library', zoeAi: '/zed-ai/agents',
@@ -11,6 +11,7 @@ export const sectionPaths = Object.freeze({
 const exact = new Map<string, string>(Object.entries(sectionPaths).map(([section, path]) => [path, section]));
 Object.entries({ '/broadcasts':'broadcasts', '/contact-groups':'contactGroups', '/automations':'automations', '/chatbot-flows':'chatbotFlows', '/zoe-ai':'zoeAi', '/whatsapp-templates':'templates', '/team-members':'team', '/settings':'settings', '/whatsapp':'whatsapp', '/zed-ai':'zoeAi', '/analytics':'analytics' }).forEach(([path,section])=>exact.set(path,section));
 const resources = [
+  { prefix:'/help/guides/', section:'help', kind:'guide' },
   { prefix:'/zed-ai/agents/', section:'zoeAi', kind:'agent' },
   { prefix:'/automations/flows/', section:'chatbotFlows', kind:'flow' },
   { prefix:'/content-library/', section:'content', kind:'content' },
