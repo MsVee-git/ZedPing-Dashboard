@@ -36,7 +36,10 @@ test('mobile separates list and thread, preserves drafts, and pins composer insi
   assert.ok(geometry.bottom<=geometry.viewport+1,JSON.stringify(geometry));assert.ok(geometry.width<=390);
   await reply.fill('Preserved reply draft');await page.getByRole('button',{name:'← Chats',exact:true}).click();
   assert.equal(await page.locator('.inbox-list').isVisible(),true);
-  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();assert.equal(await reply.inputValue(),'Preserved reply draft');
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  // Restoring a per-conversation draft happens after the selected-ID render.
+  await page.waitForFunction(()=>document.querySelector('textarea[aria-label="Reply or caption"]')?.value==='Preserved reply draft');
+  assert.equal(await reply.inputValue(),'Preserved reply draft');
   assert.equal(await page.getByRole('button',{name:'Resolve & return to AI',exact:true}).isVisible(),true);
   await page.getByRole('button',{name:'Details',exact:true}).click();await page.getByRole('button',{name:'Resolve & return to AI',exact:true}).waitFor();
   await page.getByRole('button',{name:'Back to chat',exact:true}).click();assert.equal(await page.locator('.inbox-details').isVisible(),false);

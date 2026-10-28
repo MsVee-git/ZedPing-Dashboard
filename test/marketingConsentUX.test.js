@@ -3,17 +3,18 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 import { createRequire } from 'node:module'
-import ts from 'typescript'
+import { buildSync } from 'esbuild'
+import { fileURLToPath } from 'node:url'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 const require = createRequire(import.meta.url)
 function component(file) {
-  const source = fs.readFileSync(new URL('../src/' + file, import.meta.url), 'utf8')
-  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, esModuleInterop: true } })
-  const context = { exports: {}, require, AbortController }
-  vm.runInNewContext(outputText, context)
-  return context.exports
+  const filename=fileURLToPath(new URL('../src/'+file,import.meta.url))
+  const built=buildSync({entryPoints:[filename],bundle:true,write:false,platform:'node',format:'cjs',jsx:'automatic',external:['react','react/*']})
+  const context={module:{exports:{}},require,AbortController}
+  vm.runInNewContext(built.outputFiles[0].text,context)
+  return context.module.exports
 }
 const { MarketingOptOutBadge, BroadcastReviewSummary } = component('MarketingConsent.tsx')
 const { BroadcastHistoryFacts, BroadcastDetails } = component('BroadcastDetails.tsx')
@@ -46,9 +47,9 @@ test('Review displays server-provided 5/4/1/0 and identifies the excluded contac
 test('processed history renders stored counts and zero failures without inventing consent or delivery', () => {
   const activity = { id: 'past', broadcast_name: 'lead_followup', message: '[Template] lead_followup (en_US)', status: 'completed', recorded_recipients: 5, sent_count: 5, failed_count: 0, created_at: '2026-09-25 11:06:36.235774' }
   const markup = render(BroadcastHistoryFacts, { activity })
-  assert.match(markup, /Processed/)
+  assert.match(markup, /Sent/)
   assert.match(markup, /Recorded recipients<\/dt><dd[^>]*>5/)
-  assert.match(markup, /Failed<\/dt><dd[^>]*>0/)
+  assert.match(markup, /Submission failures<\/dt><dd[^>]*>0/)
   assert.match(markup, /Marketing opted out at send time<\/dt><dd[^>]*>Not recorded/)
   assert.match(markup, /does not confirm delivery/)
   assert.equal(render(BroadcastHistoryFacts, { activity, contacts: [{ marketing_opted_out: true }] }), markup)

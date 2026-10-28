@@ -54,9 +54,9 @@ test('new Text creation establishes one server record before later autosaves pat
   assert.match(source, /if \(!creating \|\| type !== "TEXT" \|\| !newTextDirty/)
 })
 
-test('Image rows load and render state-aware Zoe knowledge actions', () => {
+test('Image rows load and render state-aware ZedPing Ai knowledge actions', () => {
   assert.match(source, /if \(selected\?\.content_type === "IMAGE"\) void loadImageKnowledge\(selected\)/)
-  for (const label of ['Extract knowledge for Zoe', 'Extracting…', 'Review Zoe knowledge', 'View Zoe knowledge', 'Extract again', 'Retry extraction']) {
+  for (const label of ['Extract knowledge for ZedPing Ai', 'Extracting…', 'Review ZedPing Ai knowledge', 'View ZedPing Ai knowledge', 'Extract again', 'Retry extraction']) {
     assert.ok(source.includes(label), `expected ${label}`)
   }
 })
