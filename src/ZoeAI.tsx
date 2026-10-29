@@ -50,10 +50,11 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
   const updateLivePending = useRef(false);
   const [updateLiveReview,setUpdateLiveReview]=useState(false);
   const [updateLiveError,setUpdateLiveError]=useState("");
+  const [shareableFiles,setShareableFiles]=useState([]);
 
   async function load() {
     try {
-      const results = await Promise.all([apiFetch("/ai-agents/library"),apiFetch("/ai-agents"),apiFetch("/ai-agents/knowledge-items"),apiFetch("/ai-agents/numbers")]);
+      const results = await Promise.all([apiFetch("/ai-agents/library"),apiFetch("/ai-agents"),apiFetch("/ai-agents/knowledge-items"),apiFetch("/ai-agents/numbers"),apiFetch("/ai-agents/shareable-items")]);
       setTemplates(((await results[0].json()).templates || []).map(item => ({
         ...item,
         role: item.title === "Vehicle service information"
@@ -65,6 +66,7 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
       setSelected(current=>current ? loadedAgents.find(item=>String(item.id)===String(current.id)) || current : current);
       setKnowledge((await results[2].json()).items || []);
       setNumbers((await results[3].json()).numbers || []);
+      setShareableFiles((await results[4].json()).items || []);
       return loadedAgents;
     } catch (error) { setNotice(error?.message || "We could not load ZedPing Ai."); }
   }
@@ -92,12 +94,17 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
     if (!canManage) return;
     const source=agent || {};
     setMessages([]); setTest(null); setNotice("");
-    setDraft({id:source.id || null,template_key:source.template_key || template.key,assistant_name:source.name || "",communication_style:source.configuration?.communication_style || "professional",whatsapp_number_id:source.whatsapp_number_id || numbers[0]?.id || "",knowledge_item_ids:(source.knowledge || []).map(item=>item.id),handoff:{person:true,unknown:true,quote_or_buy:true,phrases:[],...(source.configuration?.handoff || {})},commercial_action:quotationAction(source.configuration?.commercial_action)});
+    setDraft({id:source.id || null,template_key:source.template_key || template.key,assistant_name:source.name || "",communication_style:source.configuration?.communication_style || "professional",whatsapp_number_id:source.whatsapp_number_id || numbers[0]?.id || "",knowledge_item_ids:(source.knowledge || []).map(item=>item.id),shareable_content_item_ids:(source.configuration?.shareable_content_item_ids || source.configuration?.shareable_attachments || []).map(item=>typeof item === 'string' ? item : item.id).filter(Boolean),handoff:{person:true,unknown:true,quote_or_buy:true,phrases:[],...(source.configuration?.handoff || {})},commercial_action:quotationAction(source.configuration?.commercial_action)});
   }
   function toggleKnowledge(id) {
     const ids=draft.knowledge_item_ids || [];
     const next=ids.includes(id) ? ids.filter(value=>value!==id) : ids.length < 5 ? ids.concat(id) : ids;
     setDraft({...draft,knowledge_item_ids:next});
+  }
+  function toggleShareableFile(id) {
+    const ids=draft.shareable_content_item_ids || [];
+    const next=ids.includes(id) ? ids.filter(value=>value!==id) : ids.length < 10 ? ids.concat(id) : ids;
+    setDraft({...draft,shareable_content_item_ids:next});
   }
   async function save() {
     if (saving) return;
@@ -259,6 +266,7 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
       <label className="label" style={{marginTop:16}}>Communication style</label><select className="input" value={draft.communication_style} onChange={e=>setDraft({...draft,communication_style:e.target.value})}>{styles.map(value=><option key={value}>{value}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Future connected WhatsApp number</label><select className="input" value={draft.whatsapp_number_id} onChange={e=>setDraft({...draft,whatsapp_number_id:e.target.value})}>{numbers.map(item=><option key={item.id} value={item.id}>{item.phone_number}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Approved knowledge (up to 5)</label>{knowledge.length ? knowledge.map(item=><label key={item.id} style={{display:"block",padding:"7px 0"}}><input type="checkbox" checked={draft.knowledge_item_ids.includes(item.id)} onChange={()=>toggleKnowledge(item.id)}/> {item.name} · {item.source_type === "image" ? "Image" : "Text"}</label>) : <p style={{color:"var(--mist)"}}>No eligible approved knowledge yet. Review and approve an Image extraction in Content Library before selecting it here.</p>}
+      <section aria-label="Files this agent can share" style={{marginTop:20,padding:14,border:"1px solid var(--wire)",background:"var(--panel2)"}}><label className="label">Files this agent can share</label><p style={{margin:"6px 0 10px",color:"var(--cream2)"}}>Select approved images or PDFs this agent may send when a customer clearly asks for them. If several files could match, the agent will ask which one they mean.</p>{shareableFiles.length ? shareableFiles.map(item=><label key={item.id} style={{display:"block",padding:"5px 0"}}><input aria-label={`Share file: ${item.name}`} type="checkbox" checked={(draft.shareable_content_item_ids || []).includes(item.id)} onChange={()=>toggleShareableFile(item.id)}/> {item.name} · {item.source_type === 'image' ? 'Image' : 'PDF'}</label>) : <p style={{color:"var(--mist)"}}>No active images or PDFs are available in Content Library.</p>}</section>
       <label className="label" style={{marginTop:16}}>Handoff behaviour</label>{[["person","Customer asks for a person"],["unknown","No approved answer"]].map(([key,label])=><label key={key} style={{display:"block",padding:"5px 0"}}><input type="checkbox" checked={draft.handoff[key]!==false} onChange={e=>setDraft({...draft,handoff:{...draft.handoff,[key]:e.target.checked}})}/> {label}</label>)}
       <section aria-label="Commercial actions" style={{marginTop:20,padding:14,border:"1px solid var(--wire)",background:"var(--panel2)"}}><label className="label">Commercial actions</label><p style={{margin:"6px 0 10px",color:"var(--cream2)"}}>Your agent can recognise when a customer wants to proceed or requests a quotation, collect the details you choose conversationally, then send the conversation to your team.</p><label style={{display:"block",padding:"5px 0"}}><input aria-label="Handle quotation requests" type="checkbox" checked={!!commercialAction} onChange={e=>setQuotationEnabled(e.target.checked)}/> Handle quotation requests</label>{commercialAction && <div style={{marginTop:12}}><p><strong>Action type:</strong> Quotation</p><label className="label" style={{marginTop:12}}>Qualification fields</label>{quotationFields.map(field=>{const selected=(commercialAction.qualification_fields || []).some(item=>item.key===field.key); return <label key={field.key} style={{display:"block",padding:"5px 0"}}><input aria-label={`Qualification field: ${field.label}`} type="checkbox" checked={selected} disabled={field.required} onChange={()=>toggleQuotationField(field)}/> {field.label}{field.required ? " (required)" : " (optional)"}</label>})}<label className="label" style={{marginTop:12}}>Team Inbox handoff reason</label><input aria-label="Quotation handoff reason" className="input" value={commercialAction.handoff_reason} maxLength={120} onChange={e=>setDraft({...draft,commercial_action:{...commercialAction,handoff_reason:e.target.value}})}/></div>}</section>
       <p style={{marginTop:12,color:"var(--gold2)"}}>Saving changes updates the draft. It does not change the Live agent until Update Live Agent is used.</p>

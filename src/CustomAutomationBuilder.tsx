@@ -32,7 +32,11 @@ export function CustomAutomationBuilder({ item, rules, content, flows, resources
   const change = (key: string, value: any) => { setDraft(current => ({ ...current, [key]: value })); setReview(null); setResult(''); setError(''); };
   const conflicts = review ? phraseConflicts(review, rules, item?.id) : [];
   const actionLabels = { send_text: 'Send a message', content_library: 'Use Content Library', start_chatbot_flow: 'Start a chatbot flow', human_handoff: 'Hand off to the team' };
-  const contentOptions = content.filter(x => !x.archived_at && ['TEXT', 'LINK'].includes(x.content_type));
+  const contentOptions = content.filter(x => !x.archived_at && (
+    ['TEXT', 'LINK'].includes(x.content_type) ||
+    (x.content_type === 'IMAGE' && ['image/jpeg','image/png','image/webp'].includes(x.mime_type)) ||
+    (x.content_type === 'DOCUMENT' && x.mime_type === 'application/pdf')
+  ));
   const flowOptions = flows.filter(x => !x.archived_at && x.lifecycle_status === 'published' && x.is_active);
   const validate = () => {
     const payload = customAutomationPayload(draft);
@@ -67,7 +71,7 @@ export function CustomAutomationBuilder({ item, rules, content, flows, resources
       <label className="label" htmlFor="custom-action">Then</label>
       <select id="custom-action" className="input" value={draft.kind} onChange={e => change('kind', e.target.value)}>{Object.entries(actionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
       {draft.kind === 'send_text' && <><label className="label" htmlFor="custom-response">Message to send</label><textarea id="custom-response" className="textarea" maxLength={4096} value={draft.response} onChange={e => change('response', e.target.value)} /></>}
-      {draft.kind === 'content_library' && <><label className="label" htmlFor="custom-content">Content</label><select id="custom-content" className="input" disabled={resourcesLoading || !!resourcesError} value={draft.contentId} onChange={e => change('contentId', e.target.value)}><option value="">Choose Text or Link content</option>{contentOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></>}
+      {draft.kind === 'content_library' && <><label className="label" htmlFor="custom-content">Content</label><select id="custom-content" className="input" disabled={resourcesLoading || !!resourcesError} value={draft.contentId} onChange={e => change('contentId', e.target.value)}><option value="">Choose Text, Link, Image, or PDF content</option>{contentOptions.map(x => <option key={x.id} value={x.id}>{x.name}{x.content_type === 'IMAGE' ? ' · Image' : x.content_type === 'DOCUMENT' ? ' · PDF' : ''}</option>)}</select><p>Images and PDFs are sent as WhatsApp attachments. Archived files cannot be sent.</p></>}
       {draft.kind === 'start_chatbot_flow' && <><label className="label" htmlFor="custom-flow">Published flow</label><select id="custom-flow" className="input" disabled={resourcesLoading || !!resourcesError} value={draft.flowId} onChange={e => change('flowId', e.target.value)}><option value="">Choose an active published flow</option>{flowOptions.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></>}
       {draft.kind === 'human_handoff' && <p>This moves the conversation to Team Inbox and pauses automation for human assistance.</p>}
       {resourcesError && ['content_library', 'start_chatbot_flow'].includes(draft.kind) && <p role="alert">Unable to load content or flows. Close and reopen the builder to retry.</p>}
