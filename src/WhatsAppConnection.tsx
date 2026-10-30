@@ -365,7 +365,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
             Start here in ZedPing. Sign in to Meta to authorize your business and select your WhatsApp number. ZedPing handles the partner setup and connection checks automatically; a separate partner-portal login is not required.
           </p>
 
-          {!profileComplete && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>Complete and save the business profile above before connecting WhatsApp.</div>}
+          {!profileComplete && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 14 }}><p style={{ margin: "0 0 10px" }}>Complete and save your business profile before connecting WhatsApp.</p><a className="btn btn-wire" href="/settings/business">Complete business profile →</a></div>}
           {!emailVerified && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>Verify your email before connecting WhatsApp.</div>}
           {!canManage && <div role="status" style={{ marginTop: 14, color: "var(--mist)", fontSize: 12 }}>Only workspace owners and admins can connect WhatsApp.</div>}
           {!configured && canManage && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 12 }}>WhatsApp self-connection is being configured for this environment. Contact ZedPing support to connect your number.</div>}
