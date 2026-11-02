@@ -289,7 +289,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       const session = await prepared.json();
       if(workspaceRef.current!==startWorkspace || !mounted.current)return;
       pending.current.session = session;
-      const loginOptions = embeddedSignupLoginOptions(embeddedSignupConfigId, pending.current.session);
+      const loginOptions = embeddedSignupLoginOptions(embeddedSignupConfigId, pending.current.session, metaAppId);
 
       const FB = await loadFacebookSdk(metaAppId);
       if(workspaceRef.current!==startWorkspace || pending.current.session!==session)return;

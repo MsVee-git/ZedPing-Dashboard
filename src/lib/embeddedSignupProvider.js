@@ -1,4 +1,11 @@
-export function embeddedSignupLoginOptions(configId, session) {
+export function embeddedSignupLoginOptions(configId, session, appId) {
+  if (typeof configId !== 'string' || !/^[0-9]{5,32}$/.test(configId)) {
+    throw new Error('WhatsApp signup configuration is invalid. Contact ZedPing support.');
+  }
+  if ((session?.meta_app_id && session.meta_app_id !== appId) ||
+      (session?.meta_config_id && session.meta_config_id !== configId)) {
+    throw new Error('WhatsApp signup settings do not match. Contact ZedPing support before continuing.');
+  }
   const options = {
     config_id: configId,
     response_type: 'code',
@@ -9,8 +16,13 @@ export function embeddedSignupLoginOptions(configId, session) {
     if (typeof session.solution_id !== 'string' || !/^[0-9]+$/.test(session.solution_id)) {
       throw new Error('WhatsApp partner setup is incomplete. Contact support.');
     }
-    options.extras.setup = { solutionID: session.solution_id };
-    options.extras.sessionInfoVersion = '3';
+    // Use the partner-hosted launch contract, rather than mixing it with
+    // the direct Meta flow's extras.version option.
+    options.extras = {
+      setup: { solutionID: session.solution_id },
+      featureType: '',
+      sessionInfoVersion: '3'
+    };
   } else if (session?.provider && session.provider !== 'meta') {
     throw new Error('WhatsApp connection provider is unsupported.');
   }
