@@ -829,12 +829,13 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   const previousTemplateNumber = useRef(storedDraft.numberId || "");
   const [draftSaved,setDraftSaved] = useState(true);
   const [numberId, setNumberId] = useState(storedDraft.numberId || "");
+  const [audienceType, setAudienceType] = useState(storedDraft.audienceType || "contact_group");
   const [groupId, setGroupId] = useState(storedDraft.groupId || "");
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState(storedDraft.templateId || "");
   const [broadcastHeaderFile, setBroadcastHeaderFile] = useState(null);
   const [mappings, setMappings] = useState(storedDraft.mappings || {});
-  useEffect(() => { setDraftSaved(writeDraft(draftKey, {numberId,groupId,templateId,mappings})); }, [draftKey,numberId,groupId,templateId,mappings]);
+  useEffect(() => { setDraftSaved(writeDraft(draftKey, {numberId,audienceType,groupId,templateId,mappings})); }, [draftKey,numberId,audienceType,groupId,templateId,mappings]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [review, setReview] = useState(null);
   const [sending, setSending] = useState(false);
@@ -864,10 +865,10 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   useEffect(() => { setBroadcastHeaderFile(null); }, [templateId, numberId]);
   const updateMapping = (number, source, value = "") => setMappings((current) => ({ ...current, [number]: { source, ...(source === "fixed" ? { value } : {}) } }));
   const reviewBroadcast = async () => {
-    if (!numberId || !groupId || !templateId) return setNotice({ ok: false, text: "Choose a WhatsApp number, Contact Group and approved template." });
+    if (!numberId || !templateId || (audienceType === "contact_group" && !groupId)) return setNotice({ ok: false, text: "Choose a WhatsApp number, audience and approved template." });
     setSending(true); setNotice(null);
     try {
-      const response = await apiFetch(`${API}/broadcasts/review-template`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_number_id: numberId, contact_group_id: groupId, template_id: templateId, variable_mappings: mappings }) });
+      const response = await apiFetch(`${API}/broadcasts/review-template`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ whatsapp_number_id: numberId, audience_type: audienceType, ...(audienceType === "contact_group" ? { contact_group_id: groupId } : {}), template_id: templateId, variable_mappings: mappings }) });
       setReview(await response.json());
     } catch (error) { setNotice({ ok: false, text: error.message || "Could not prepare the broadcast review." }); }
     finally { setSending(false); }
@@ -879,7 +880,8 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
     setSending(true); setNotice(null); setSendResult(null);
     try {
       const form = new FormData();
-      form.append("whatsapp_number_id", numberId); form.append("contact_group_id", groupId);
+      form.append("whatsapp_number_id", numberId); form.append("audience_type", audienceType);
+      if (audienceType === "contact_group") form.append("contact_group_id", groupId);
       form.append("template_id", templateId); form.append("variable_mappings", JSON.stringify(mappings));
       if (broadcastHeaderFile) form.append("header_media", broadcastHeaderFile);
       const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", headers: { Prefer: "respond-async" }, body: form });
@@ -890,7 +892,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
         ? 'Broadcast started. You can follow its progress below and leave this page safely.'
         : `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
       setReview(null); setTemplateId(""); setMappings({}); setBroadcastHeaderFile(null);
-      setNumberId(""); setGroupId(""); writeDraft(draftKey, null);
+      setNumberId(""); setAudienceType("contact_group"); setGroupId(""); writeDraft(draftKey, null);
       refetchHistory();
       onRouteOpen(result.activity_id || null);
     } catch (error) { setNotice({ ok: false, text: `${error.message || 'Connection interrupted.'} Check campaign activity before retrying; sending may still be continuing.` }); }
@@ -914,7 +916,8 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {setupError && <div className="mono" style={{ color: "var(--error-text)", fontSize: 11 }}>{setupError}</div>}
           <div><label className="label">Sending WhatsApp number</label><select className="input" value={numberId} onChange={event => setNumberId(event.target.value)} disabled={setupLoading}><option value="">Select a connected number…</option>{(setup?.numbers || []).map(number => <option key={number.id} value={number.id}>{connectedWhatsAppNumberLabel(number)}</option>)}</select></div>
-          <div><label className="label">Contact Group</label><select className="input" value={groupId} onChange={event => setGroupId(event.target.value)} disabled={setupLoading}><option value="">Select a Contact Group…</option>{(setup?.groups || []).map(group => <option key={group.id} value={group.id}>{group.name}{group.total_contacts ? ` — ${group.total_contacts} contacts` : ""}</option>)}</select></div>
+          <div><label className="label">Audience</label><select className="input" value={audienceType} onChange={event => { setAudienceType(event.target.value); setReview(null); }} disabled={setupLoading}><option value="contact_group">Contact Group</option><option value="all_contacts">All contacts</option></select></div>
+          {audienceType === "contact_group" ? <div><label className="label">Contact Group</label><select className="input" value={groupId} onChange={event => setGroupId(event.target.value)} disabled={setupLoading}><option value="">Select a Contact Group…</option>{(setup?.groups || []).map(group => <option key={group.id} value={group.id}>{group.name}{group.total_contacts ? ` — ${group.total_contacts} contacts` : ""}</option>)}</select></div> : <p style={{fontSize:12,color:"var(--mist)",margin:0}}>All contacts in this workspace will be reviewed server-side. Marketing opt-outs, duplicates and invalid recipients remain excluded.</p>}
           <div><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><label className="label">Approved WhatsApp template</label>{numberId && <button className="btn btn-wire" onClick={loadTemplates} disabled={loadingTemplates} style={{ padding: "5px 8px", fontSize: 9 }}>{loadingTemplates ? "Refreshing…" : "Refresh templates"}</button>}</div><select className="input" value={templateId} onChange={event => setTemplateId(event.target.value)} disabled={!numberId || loadingTemplates}><option value="">{numberId ? "Select a template…" : "Select a number first"}</option>{templates.map(template => <option key={template.id} value={template.id} disabled={!template.sendable}>{template.name} · {template.language} · {template.status}{template.sendable ? "" : " — unavailable"}</option>)}</select></div>
           {selectedTemplate && <div style={{ padding: 12, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}><div className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{selectedTemplate.category} · {selectedTemplate.language} · {selectedTemplate.status}</div><div style={{ color: "var(--mist)", fontSize: 13, marginTop: 7, whiteSpace: "pre-wrap" }}>{selectedTemplate.body_preview || "This template has no text body preview."}</div>{selectedTemplate.unavailable_reason && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 8 }}>{selectedTemplate.unavailable_reason}</div>}</div>}
           {["image", "document"].includes(selectedTemplate?.header_media_type) && <div><label className="label">Template header {selectedTemplate.header_media_type}</label><input className="input" type="file" accept={selectedTemplate.header_media_type === "image" ? "image/jpeg,image/png" : "application/pdf"} disabled={sending} onChange={event => {setBroadcastHeaderFile(event.target.files?.[0] || null); setReview(null);}}/><p style={{fontSize:13,color:"var(--mist)",marginTop:8}}>Select the image or PDF to include with this broadcast. The template approval sample is not automatically attached.</p></div>}

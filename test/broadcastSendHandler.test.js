@@ -15,10 +15,10 @@ function declaration(name){
 function harness(apiFetch){
   const events=[];
   const context={useRef:value=>({current:value}),selectedTemplate:{header_media_type:'text'},broadcastHeaderFile:null,
-    numberId:'number',groupId:'group',templateId:'template',mappings:{},draftKey:'workspace-user',
+    numberId:'number',audienceType:'contact_group',groupId:'group',templateId:'template',mappings:{},draftKey:'workspace-user',
     FormData:class {append(){}},apiFetch,API:'https://example.invalid',
     setSendResult:value=>events.push(['completed',value]),setSending:value=>events.push(['sending',value]),setNotice:value=>events.push(['notice',value]),
-    setReview(){},setTemplateId(){},setMappings(){},setBroadcastHeaderFile(){},setNumberId(){},setGroupId(){},writeDraft(){},
+    setReview(){},setTemplateId(){},setMappings(){},setBroadcastHeaderFile(){},setNumberId(){},setAudienceType(){},setGroupId(){},writeDraft(){},
     refetchHistory:()=>events.push(['refresh']),onRouteOpen:id=>events.push(['route',id])};
   const lock=declaration('sendInFlight');
   const code=(lock?lock.getText(ast):'')+'\n'+declaration('send').getText(ast)+'\nglobalThis.sendHandler=send;';
