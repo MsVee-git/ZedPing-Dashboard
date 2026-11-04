@@ -59,7 +59,9 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
   const metaAppId = import.meta.env.VITE_META_APP_ID;
   const embeddedSignupConfigId = import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID;
   const configured = Boolean(metaAppId && embeddedSignupConfigId);
-  const connection = context?.whatsapp_connection || null;
+  // A disconnected historical row is retained for audit/history. It is not an
+  // active provisioning attempt and must not block a fresh signup.
+  const connection = context?.whatsapp_connection?.status === "disconnected" ? null : context?.whatsapp_connection || null;
   const onboarding = context?.onboarding || {};
   const role = context?.role || customer?.role || "member";
   const canManage = ["owner", "admin"].includes(role);
@@ -81,7 +83,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       let latest = await response.json();
       if (!mounted.current || workspaceRef.current!==workspace || sequence!==refreshSequence.current) return;
       const row=latest.whatsapp_connection;
-      if(row?.id && row.status!=='connected' && ['owner','admin'].includes(latest.role) && !probeRunning.current){
+      if(row?.id && row.status==='provisioning' && ['owner','admin'].includes(latest.role) && !probeRunning.current){
         probeRunning.current=true;
         try {
           const checked=await apiFetch(`${API}/whatsapp-connections/${row.id}/provision/status`,{method:'POST'});
@@ -94,6 +96,12 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
         finally{probeRunning.current=false;}
       }
       if (!mounted.current || workspaceRef.current!==workspace || sequence!==refreshSequence.current) return;
+      if (latest?.whatsapp_connection?.status === "disconnected") {
+        pending.current = emptyEmbeddedSignupPending();
+        persistPending();
+        completionStarted.current = false;
+        setPhase("idle");
+      }
       setContext(latest);
       // A lost completion response must not hide a successfully finalized number.
       if (embeddedSignupRecoveryOutcome({ connection: latest?.whatsapp_connection }) === "complete") {
