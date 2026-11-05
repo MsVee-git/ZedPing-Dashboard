@@ -199,3 +199,23 @@ body {font-weight:400;}
 .workspace .usage-snapshot-body .usage-snapshot dd,
 .workspace .usage-snapshot-body .surface-footnote { font-size:15px; line-height:1.6; }
 .workspace .usage-snapshot-body .btn { font-size:14px; }
+
+/* Content review remains usable on narrow phones. */
+.content-library-layout>*,.knowledge-review-columns>*{min-width:0}
+.content-library-layout button{max-width:100%;overflow-wrap:anywhere}
+.knowledge-review-modal .textarea{min-height:130px;font-size:15px;line-height:1.5;resize:vertical}
+.knowledge-review-modal input{min-width:0;max-width:100%;box-sizing:border-box}
+.knowledge-review-modal .btn{white-space:normal;max-width:100%}
+.knowledge-review-modal{overscroll-behavior:contain}
+@media(max-width:768px){
+ .workspace .content-library-layout{grid-template-columns:minmax(0,1fr)!important}
+ .workspace .content-library-layout>.card{min-width:0;max-width:100%;overflow-wrap:anywhere}
+ .workspace .content-library-layout>.card:first-child{max-height:260px;overflow-y:auto!important}
+ .workspace .content-library-layout>.card>button{align-items:flex-start;gap:8px!important;padding:12px!important}
+ .workspace .content-library-layout>.card>button .mono{flex-shrink:0}
+ .workspace .knowledge-review-modal{width:100%;padding:18px!important;max-height:calc(100dvh - 24px)!important}
+ .workspace .knowledge-review-columns{grid-template-columns:minmax(0,1fr)!important;gap:16px!important}
+ .workspace .knowledge-review-modal .textarea{width:100%;min-height:150px;font-size:16px}
+ .workspace .knowledge-review-modal>div:last-child{flex-wrap:wrap;justify-content:stretch!important}
+ .workspace .knowledge-review-modal>div:last-child>.btn{flex:1;min-width:100px;min-height:44px}
+}

@@ -789,14 +789,14 @@ function Topbar({ title, user, customer, workspaces, onWorkspaceChange, activeWo
   );
 }
 
-function MobTopbar({ onMenu, onLogout, workspaces, activeWorkspaceId, onWorkspaceChange, switching }) {
+function MobTopbar({ onMenu, onExit, workspaces, activeWorkspaceId, onWorkspaceChange, switching }) {
   return (
     <div className="mob-bar">
       <button aria-label="Open navigation" onClick={onMenu} style={{ background: "none", border: "none", cursor: "pointer", color: "#ffffff", padding: 4 }}><Ic n="menu" s={20} c="#ffffff" /></button>
       {workspaces.length > 1 ? <select aria-label="Active workspace" value={activeWorkspaceId || ""} onChange={event => onWorkspaceChange(event.target.value)} disabled={switching} className="input" style={{ width: "42%", padding: "6px 8px", fontSize: 11, opacity: switching ? 0.6 : 1 }}>
         {workspaces.map(workspace => <option key={workspace.id} value={workspace.id}>{workspace.business_name}</option>)}
       </select> : <Logo size="sm" />}
-      <button onClick={onLogout} className="btn btn-danger" style={{ fontSize: 9, padding: "6px 12px" }}>Exit</button>
+      <button onClick={onExit} aria-label="Exit page and return to overview" className="btn btn-wire" style={{ fontSize: 9, padding: "6px 12px" }}>Exit</button>
     </div>
   );
 }
@@ -2069,6 +2069,9 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const newTextAutosaveTimerRef = useRef(null);
   const [imageKnowledge, setImageKnowledge] = useState([]);
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  const [extractingKnowledge,setExtractingKnowledge]=useState(false),[savingKnowledge,setSavingKnowledge]=useState(false);
+  const extractionLock=useRef(false),reviewLock=useRef(false),knowledgeRequest=useRef(0),selectedContentRef=useRef(selected?.id);
+  selectedContentRef.current=selected?.id;
   const [reviewingKnowledge, setReviewingKnowledge] = useState(null);
   const [knowledgeForm, setKnowledgeForm] = useState({ extracted_text: "", review_notes: "", valid_from: "", valid_until: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -2275,36 +2278,39 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
       setDeleteError(message); setActionError(message);
     } finally { setDeletingContent(false); }
   };
-  const loadImageKnowledge = async (item) => {
+  const loadImageKnowledge = async (item,showReview=false) => {
     if (!item || item.content_type !== "IMAGE") return;
-    setKnowledgeLoading(true);
-    try { const response = await apiFetch(`${API}/content/${item.id}/knowledge-ingestions`); const result = await response.json(); setImageKnowledge(result.ingestions || []); }
+    const request=++knowledgeRequest.current;setKnowledgeLoading(true);
+    try { const response = await apiFetch(`${API}/content/${item.id}/knowledge-ingestions`); const result = await response.json(); if(request===knowledgeRequest.current && selectedContentRef.current===item.id){setImageKnowledge(result.ingestions || []);if(showReview && result.ingestions?.[0])openReview(result.ingestions[0]);} }
     catch (loadError) { setActionError(loadError?.message || "We could not load image knowledge."); }
-    finally { setKnowledgeLoading(false); }
+    finally { if(request===knowledgeRequest.current)setKnowledgeLoading(false); }
   };
   useEffect(() => {
+    knowledgeRequest.current++;setReviewingKnowledge(null);setImageKnowledge([]);
     if (selected?.content_type === "IMAGE") void loadImageKnowledge(selected);
     else setImageKnowledge([]);
   }, [selected?.id]);
   const extractKnowledge = async (item) => {
-    setActionError(""); setKnowledgeLoading(true);
-    try { const response = await apiFetch(`${API}/content/${item.id}/extract-knowledge`, { method: "POST" }); const result = await response.json(); setImageKnowledge((current) => [result.ingestion, ...current]); setKnowledgeForm({ extracted_text: result.ingestion.extracted_text || "", review_notes: (result.ingestion.review_notes || []).join("\n"), valid_from: "", valid_until: "" }); setReviewingKnowledge(result.ingestion); }
+    if(extractionLock.current || reviewLock.current)return;
+    extractionLock.current=true;knowledgeRequest.current++;setExtractingKnowledge(true);setReviewingKnowledge(null);
+    setActionError(""); setKnowledgeLoading(false);
+    try { const response = await apiFetch(`${API}/content/${item.id}/extract-knowledge`, { method: "POST" }); const result = await response.json(); if(selectedContentRef.current!==item.id)return; setImageKnowledge((current) => [result.ingestion, ...current.filter(run=>run.id!==result.ingestion.id)]); setKnowledgeForm({ extracted_text: result.ingestion.extracted_text || "", review_notes: (result.ingestion.review_notes || []).join("\n"), valid_from: "", valid_until: "" }); setReviewingKnowledge(result.ingestion); }
     catch (extractError) { setActionError(extractError?.message || "We could not analyze this image."); }
-    finally { setKnowledgeLoading(false); }
+    finally { extractionLock.current=false;setExtractingKnowledge(false); }
   };
   const openReview = (run) => { setKnowledgeForm({ extracted_text: run.extracted_text || "", review_notes: (run.review_notes || []).join("\n"), valid_from: run.revision?.valid_from || "", valid_until: run.revision?.valid_until || "" }); setReviewingKnowledge(run); };
   const saveReview = async (approve = false) => {
-    if (!reviewingKnowledge) return; setKnowledgeLoading(true); setActionError("");
+    if (!reviewingKnowledge || reviewLock.current) return; reviewLock.current=true;setSavingKnowledge(true);setActionError("");
     try {
       const payload = { extracted_text: knowledgeForm.extracted_text, review_notes: knowledgeForm.review_notes.split("\n").map((note) => note.trim()).filter(Boolean) };
       if (!approve) await apiFetch(`${API}/content/knowledge-ingestions/${reviewingKnowledge.id}/review`, { method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
       const response = approve ? await apiFetch(`${API}/content/knowledge-ingestions/${reviewingKnowledge.id}/approve`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ ...payload, valid_from:knowledgeForm.valid_from || null, valid_until:knowledgeForm.valid_until || null }) }) : null;
-      if (response) { const result=await response.json(); setImageKnowledge((current)=>current.map((run)=>run.id===result.ingestion.id?result.ingestion:run)); setReviewingKnowledge(result.ingestion); }
-      else { await loadImageKnowledge(selected); }
+      if (response) { const result=await response.json(); setImageKnowledge((current)=>current.map((run)=>run.id===result.ingestion.id?result.ingestion:run)); setReviewingKnowledge(null); }
+      else { await loadImageKnowledge(selected);setReviewingKnowledge(null); }
     } catch (reviewError) { setActionError(reviewError?.message || "We couldn't save your changes. Please try again."); }
-    finally { setKnowledgeLoading(false); }
+    finally { reviewLock.current=false;setSavingKnowledge(false); }
   };
-  const rejectKnowledge = async () => { if (!reviewingKnowledge) return; try { await apiFetch(`${API}/content/knowledge-ingestions/${reviewingKnowledge.id}/reject`,{method:"POST"}); setReviewingKnowledge(null); await loadImageKnowledge(selected); } catch (rejectError) { setActionError(rejectError?.message || "We could not reject this extraction."); } };
+  const rejectKnowledge = async () => { if (!reviewingKnowledge || reviewLock.current) return;reviewLock.current=true;setSavingKnowledge(true); try { await apiFetch(`${API}/content/knowledge-ingestions/${reviewingKnowledge.id}/reject`,{method:"POST"}); setReviewingKnowledge(null); await loadImageKnowledge(selected); } catch (rejectError) { setActionError(rejectError?.message || "We could not reject this extraction."); } finally {reviewLock.current=false;setSavingKnowledge(false);} };
 
   const refreshTemplate = async (item) => {
     setActionError("");
@@ -2328,7 +2334,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
     return [item.template_status, item.template_language].filter(Boolean).join(" · ");
   };
 
-  return <div className="pad" style={{ padding: 28 }}>
+  return <div className="pad content-library-page" style={{ padding: 28 }}>
     <PageHead label="Reusable content" title="Content Library." sub="Save messages, documents, images and links once, then reuse them across ZedPing." action={canManage ? <button className="btn btn-gold" onClick={() => { setCreating(true); setType(null); setActionError(""); }}><Ic n="plus" s={13} c="var(--ink)" /> Add Content</button> : null} />
     {actionError && <div className="card" role="alert" style={{ padding: 13, marginBottom: 16, color: "var(--error-text)" }}>{actionError}</div>}
     <div className="card" style={{ padding: 14, marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -2336,7 +2342,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>{filters.map(([key, label]) => <button key={key} className={filter === key ? "btn btn-gold" : "btn btn-wire"} onClick={() => setFilter(key)} style={{ padding: "7px 10px", fontSize: 10 }}>{label}</button>)}</div>
       <input className="input" aria-label="Search Content Library" placeholder="Search content" value={search} onChange={(event) => setSearch(event.target.value)} style={{ width: 210 }} />
     </div>
-    {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "var(--error-text)" }}>{error}</div> : !visible.length ? <div className="card" style={{ padding: 28, color: "var(--mist)", textAlign: "center" }}>No content saved here yet.{canManage ? " Add a reusable message, file, link or WhatsApp template reference." : ""}</div> : <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, .8fr)", gap: 16 }}>
+    {loading ? <Loader /> : error ? <div className="card" role="alert" style={{ padding: 20, color: "var(--error-text)" }}>{error}</div> : !visible.length ? <div className="card" style={{ padding: 28, color: "var(--mist)", textAlign: "center" }}>No content saved here yet.{canManage ? " Add a reusable message, file, link or WhatsApp template reference." : ""}</div> : <div className="content-library-layout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(270px, .8fr)", gap: 16 }}>
       <div className="card" style={{ overflow: "hidden" }}>{visible.map((item) => <button key={item.id} onClick={() => { setSelected(item); onRouteOpen?.(item.id); }} style={{ width: "100%", textAlign: "left", background: selected?.id === item.id ? "rgba(196,154,61,.08)" : "transparent", border: 0, borderBottom: "1px solid var(--wire)", padding: "15px 17px", cursor: "pointer", color: "inherit", display: "flex", gap: 12 }}>
         <div aria-label={typeLabel(item.content_type)} style={{ width: 30, height: 30, display: "grid", placeItems: "center", border: "1px solid var(--wire2)", color: "var(--gold2)", flexShrink: 0 }}><Ic n={icon(item.content_type)} s={15} c="currentColor" /></div>
         <div style={{ minWidth: 0, flex: 1 }}><div style={{ color: "var(--cream)", fontWeight: 600, fontSize: 13 }}>{item.name}</div><div style={{ color: "var(--mist)", fontSize: 11, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview(item)}</div></div>
@@ -2348,7 +2354,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         {selected.content_type === "TEXT" && <div style={{ whiteSpace: "pre-wrap", color: "var(--cream2)", fontSize: 12, lineHeight: 1.55, marginTop: 15 }}>{selected.text_content}</div>}
         {selected.content_type === "LINK" && <a href={selected.link_url} target="_blank" rel="noreferrer" style={{ color: "var(--gold2)", display: "block", fontSize: 12, marginTop: 15, wordBreak: "break-all" }}>{selected.link_url}</a>}
         {["DOCUMENT","IMAGE"].includes(selected.content_type) && <><button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>{selected.content_type === "IMAGE" ? "Preview secure image" : "Open secure document"}</button>{selected.content_type === "IMAGE" && previewUrl && <img src={previewUrl} alt={selected.name} style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "contain", marginTop: 14, border: "1px solid var(--wire)" }} />}</>}
-        {selected.content_type === "IMAGE" && <div style={{marginTop:16}}>{(() => { const run=imageKnowledge[0]; const busy=knowledgeLoading || ["pending","processing"].includes(run?.status); if(!run) return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Extract knowledge for ZedPing Ai</button>; if(["pending","processing"].includes(run.status)) return <button className="btn btn-wire" disabled>Extracting…</button>; if(run.status==="ready_for_review") return <><button className="btn btn-gold" onClick={()=>openReview(run)}>Review ZedPing Ai knowledge</button><button className="btn btn-wire" onClick={()=>loadImageKnowledge(selected)} style={{marginLeft:8}}>Refresh</button></>; if(run.status==="approved") return <><button className="btn btn-wire" onClick={()=>loadImageKnowledge(selected)}>View ZedPing Ai knowledge</button>{canManage && <button className="btn btn-gold" onClick={()=>extractKnowledge(selected)} style={{marginLeft:8}}>Extract again</button>}</>; return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Retry extraction</button>; })()}</div>}
+        {selected.content_type === "IMAGE" && <div style={{marginTop:16}}>{(() => { const run=imageKnowledge[0]; const busy=knowledgeLoading || extractingKnowledge || ["pending","processing"].includes(run?.status); if(!run) return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Extract knowledge for ZedPing Ai</button>; if(["pending","processing"].includes(run.status)) return <button className="btn btn-wire" disabled>Extracting…</button>; if(run.status==="ready_for_review") return <><button className="btn btn-gold" disabled={busy} onClick={()=>openReview(run)}>Review ZedPing Ai knowledge</button><button className="btn btn-wire" onClick={()=>loadImageKnowledge(selected)} style={{marginLeft:8}}>Refresh</button></>; if(run.status==="approved") return <><button className="btn btn-wire" disabled={busy} onClick={()=>loadImageKnowledge(selected,true)}>View ZedPing Ai knowledge</button>{canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)} style={{marginLeft:8}}>{extractingKnowledge?"Extracting…":"Extract again"}</button>}</>; return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Retry extraction</button>; })()}</div>}
         {selected.content_type === "WHATSAPP_TEMPLATE_REFERENCE" && <><div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 15 }}>{selected.template_name} · {selected.template_language || "language unavailable"} · {selected.template_status || "status unavailable"}</div>{canManage && <button className="btn btn-wire" onClick={() => refreshTemplate(selected)} style={{ marginTop: 13 }}>Refresh from Meta</button>}</>}
         {canManage && ["TEXT", "LINK"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => beginEdit(selected)} style={{ marginTop: 18 }}>Edit</button>}
         {canManage && !selected.archived_at && <button className="btn btn-wire" onClick={() => archive(selected)} style={{ marginTop: 18, marginLeft: ["TEXT", "LINK"].includes(selected.content_type) ? 8 : 0, color: "var(--error-text)", borderColor: "rgba(239,68,68,.35)" }}>Archive content</button>}
@@ -2369,7 +2375,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={closeEdit} disabled={editSaving}>Cancel</button><button type="submit" className="btn btn-gold" disabled={editSaving}>{editSaving ? "Saving…" : "Save changes"}</button></div>
       </form>
     </div></div>}
-    {reviewingKnowledge && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review image knowledge"><div className="modal" style={{maxWidth:820,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:2}}>ZedPing Ai KNOWLEDGE</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24,marginTop:7}}>Needs your confirmation</h3></div><button className="btn btn-wire" onClick={()=>setReviewingKnowledge(null)}>Close</button></div><div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:16,marginTop:16}}><div><div className="label">Original image</div>{previewUrl ? <img src={previewUrl} alt={selected?.name || "Original image"} style={{width:"100%",maxHeight:300,objectFit:"contain",border:"1px solid var(--wire)"}} /> : <button className="btn btn-wire" onClick={()=>secureOpen(selected)}>Preview secure image</button>}</div><div><label className="label">Information found</label><textarea className="textarea" maxLength="20000" value={knowledgeForm.extracted_text} onChange={e=>setKnowledgeForm(current=>({...current,extracted_text:e.target.value}))}/><label className="label" style={{marginTop:12}}>Needs your confirmation</label><textarea className="textarea" placeholder="One uncertainty per line" value={knowledgeForm.review_notes} onChange={e=>setKnowledgeForm(current=>({...current,review_notes:e.target.value}))}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}><label className="label">Valid from <input className="input" type="date" value={knowledgeForm.valid_from} onChange={e=>setKnowledgeForm(current=>({...current,valid_from:e.target.value}))}/></label><label className="label">Valid until <input className="input" type="date" value={knowledgeForm.valid_until} onChange={e=>setKnowledgeForm(current=>({...current,valid_until:e.target.value}))}/></label></div></div></div><div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" onClick={rejectKnowledge}>Reject</button><button className="btn btn-wire" onClick={()=>saveReview(false)}>Save changes</button><button className="btn btn-gold" onClick={()=>saveReview(true)}>Approve for ZedPing Ai</button></div></div></div>}
+    {reviewingKnowledge && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review image knowledge"><div className="modal knowledge-review-modal" style={{maxWidth:820,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:2}}>ZedPing Ai KNOWLEDGE</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24,marginTop:7}}>{reviewingKnowledge.status==="approved"?"Approved knowledge":"Needs your confirmation"}</h3></div><button className="btn btn-wire" disabled={savingKnowledge} onClick={()=>setReviewingKnowledge(null)}>Close</button></div>{actionError&&<p role="alert" style={{color:"var(--error-text)"}}>{actionError}</p>}<div className="knowledge-review-columns" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:16,marginTop:16}}><div><div className="label">Original image</div>{previewUrl ? <img src={previewUrl} alt={selected?.name || "Original image"} style={{width:"100%",maxHeight:300,objectFit:"contain",border:"1px solid var(--wire)"}} /> : <button className="btn btn-wire" onClick={()=>secureOpen(selected)}>Preview secure image</button>}</div><div><label className="label">Information found</label><textarea readOnly={reviewingKnowledge.status!=="ready_for_review" || savingKnowledge} className="textarea" maxLength="20000" value={knowledgeForm.extracted_text} onChange={e=>setKnowledgeForm(current=>({...current,extracted_text:e.target.value}))}/><label className="label" style={{marginTop:12}}>Needs your confirmation</label><textarea readOnly={reviewingKnowledge.status!=="ready_for_review" || savingKnowledge} className="textarea" placeholder="One uncertainty per line" value={knowledgeForm.review_notes} onChange={e=>setKnowledgeForm(current=>({...current,review_notes:e.target.value}))}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}><label className="label">Valid from <input className="input" type="date" value={knowledgeForm.valid_from} onChange={e=>setKnowledgeForm(current=>({...current,valid_from:e.target.value}))}/></label><label className="label">Valid until <input className="input" type="date" value={knowledgeForm.valid_until} onChange={e=>setKnowledgeForm(current=>({...current,valid_until:e.target.value}))}/></label></div></div></div><div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={rejectKnowledge}>Reject</button><button className="btn btn-wire" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={()=>saveReview(false)}>Save changes</button><button className="btn btn-gold" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={()=>saveReview(true)}>{savingKnowledge?"Saving…":"Approve for ZedPing Ai"}</button></div></div></div>}
     {creating && <div className="modal-bg"><div className="modal" style={{ width: "calc(100vw - 32px)", maxWidth: 1100, maxHeight: "90vh", overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
       {!type ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginTop: 20 }}>{[["TEXT","Text"],["DOCUMENT","Document"],["IMAGE","Image"],["LINK","Link"],["WHATSAPP_TEMPLATE_REFERENCE","WhatsApp Template"]].map(([key,label]) => <button key={key} className="btn btn-wire" onClick={() => begin(key)} style={{ minHeight: 72, justifyContent: "center" }}>{label}</button>)}</div> :
@@ -2699,7 +2705,7 @@ export default function App() {
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <Sidebar active={active} setActive={navigate} user={user} customer={customer} onLogout={onLogout} open={open} onClose={() => setOpen(false)} />
         <main id="workspace-content" className={"main workspace" + (active === "messages" ? " inbox-workspace" : "")}>
-          <MobTopbar onMenu={() => setOpen(true)} onLogout={onLogout} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
+          <MobTopbar onMenu={() => setOpen(true)} onExit={() => {setOpen(false);navigate("overview");}} workspaces={workspaces} activeWorkspaceId={customer?.id || workspaceSwitchTarget} onWorkspaceChange={onWorkspaceChange} switching={workspaceChanging} />
           <Topbar title={cur.title} user={user} customer={customer} workspaces={workspaces} onWorkspaceChange={onWorkspaceChange} activeWorkspaceId={customer?.id || workspaceSwitchTarget} switching={workspaceChanging} />
           {!workspaceChanging && customer && <MessagingAccessNotice key={customer.id} customer={customer} navigate={navigate}/>}
           <SectionTabs route={route} navigate={navigate}/>
