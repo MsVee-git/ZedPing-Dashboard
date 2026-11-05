@@ -1190,6 +1190,8 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
 function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [filter,setFilter]=useQueryState('view','all');
+  const [inboxSearch,setInboxSearch]=useState('');
+  useEffect(()=>setInboxSearch(''),[customer?.id,filter]);
   const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
   const copilotRequest=useCallback((path,init={})=>apiFetch(API+path,init),[customer?.id]);
   const {rows,counts,members,loading,error}=queue;
@@ -1320,11 +1322,13 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setBusy(false);}
   };
+  const visibleRows=rows.filter(conversation=>[conversation.contacts?.name,conversation.contacts?.phone_number,conversation.last_message?.message_body,conversation.assigned_user_id?assigneeName(conversation):''].some(value=>String(value||'').toLowerCase().includes(inboxSearch.trim().toLowerCase())));
   return <div className={'pad inbox-page'+(selectedId?' inbox-thread-open':'')+(detailsOpen?' inbox-details-open':'')}>
     <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Triage waiting chats and manage your team’s workload."/></div>
+    <div className="inbox-masthead"><strong>Team Inbox</strong><span className={error?"inbox-sync has-error":"inbox-sync"} role="status">{error?"Sync needs attention":loading?"Updating…":"Automatic updates enabled"}</span></div>
     <div className="inbox-toolbar">
     <div className="inbox-filters" role="group" aria-label="Inbox views">
-      {['all','unread','assigned_to_me'].map(id=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{id==='assigned_to_me'?'My conversations':id==='unread'?'Unread':'All'}{counts?` (${counts[id]??0})`:''}</button>)}
+      {['all','unread','assigned_to_me'].map(id=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{id==='assigned_to_me'?'My Chats':id==='unread'?'Unread':'All'}<span className="inbox-tab-count">{counts?counts[id]??0:'—'}</span></button>)}
       <label className="inbox-more-filters">Filters<select aria-label="More inbox filters" className="input" value={['all','unread','assigned_to_me'].includes(filter)?'':filter} disabled={busy||replying} onChange={e=>{if(e.target.value)setFilter(e.target.value);}}><option value="">More views</option>{INBOX_VIEWS.filter(([id])=>!['all','unread','assigned_to_me'].includes(id)).map(([id,label])=><option key={id} value={id}>{label}{counts?` (${counts[id]??0})`:''}</option>)}</select></label>
       <button className="btn btn-wire" disabled={loading||busy||replying} onClick={()=>{queue.refresh();if(selectedId)openConversation(selectedId,true,true);}}>Refresh</button>
     </div>
@@ -1343,18 +1347,20 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     {actionError && <div className="inbox-notice" role="alert">{actionError}</div>}
     <div className="team-inbox">
       <div className="card inbox-list">
-        <div className="inbox-selection"><strong>Conversations <span className="inbox-list-count">{rows.length} shown</span></strong><button className="text-button" disabled={busy} aria-pressed={selectionMode} onClick={()=>{setSelectionMode(!selectionMode);setSelection(new Set());}}>{selectionMode?'Done selecting':'Select'}</button>{selectionMode&&<div className="inbox-selection-options"><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select chats in this filter</button><span>Up to 200 chats. Filter selection may include chats not yet shown.</span></div>}</div>
+        <div className="inbox-search"><label><span aria-hidden="true">⌕</span><input type="search" aria-label="Search loaded conversations by name, phone, latest message or assignee" placeholder="Search loaded chats…" value={inboxSearch} onChange={event=>setInboxSearch(event.target.value)}/></label></div>
+        <div className="inbox-selection"><strong><span className="inbox-list-count">Showing {visibleRows.length} of {rows.length} loaded conversations</span></strong><button className="text-button" disabled={busy} aria-pressed={selectionMode} onClick={()=>{setSelectionMode(!selectionMode);setSelection(new Set());}}>{selectionMode?'Done selecting':'Select'}</button>{selectionMode&&<div className="inbox-selection-options"><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select chats in this filter</button><span>Up to 200 chats. Filter selection may include chats not yet shown.</span></div>}</div>
         {error && <div role="alert" className="inbox-notice">{error}</div>}
-        {loading&&!rows.length?<Loader/>:!rows.length?<Empty msg="No conversations in this view"/>:rows.map(conversation=><div key={conversation.id} className={'inbox-list-row'+(selectionMode?' is-selecting':'')}>
+        {loading&&!rows.length?<Loader/>:!visibleRows.length?<Empty msg={inboxSearch?'No loaded chats match your search. Load more or clear search.':'No conversations in this view'}/>:visibleRows.map(conversation=><div key={conversation.id} className={'inbox-list-row'+(selectionMode?' is-selecting':'')}>
           {selectionMode&&<input type="checkbox" aria-label={`Select ${conversation.contacts?.name||conversation.contacts?.phone_number||conversation.id}`} checked={selection.has(conversation.id)} disabled={busy||(!selection.has(conversation.id)&&selection.size>=200)} onChange={()=>toggle(conversation.id)}/>}
           <button className={'inbox-open '+(selectedId===conversation.id?'selected':'')} onClick={()=>openConversation(conversation.id)}>
-            <strong>{conversation.contacts?.name||conversation.contacts?.phone_number||'Unknown contact'}</strong>
-            {conversation.contacts?.name&&conversation.contacts.name!==conversation.contacts?.phone_number&&<span>{conversation.contacts?.phone_number}</span>}
-            <span className="inbox-preview">{conversation.last_message?.message_body||'No message preview'}</span>
-            <ConversationHandlingStatus conversation={conversation}/>
-            <MarketingOptOutBadge contact={conversation.contacts}/>
-            <span>{conversation.last_message_at?new Date(conversation.last_message_at).toLocaleString():''}</span>
-            <span>{conversation.unread_count>0?`${conversation.unread_count} unread`:'Read'}{conversation.assigned_user_id?` · ${assigneeName(conversation)}`:''}</span>
+            <span className={'inbox-avatar avatar-'+(String(conversation.contacts?.phone_number||conversation.id).split('').reduce((sum,char)=>sum+char.charCodeAt(0),0)%5)} aria-hidden="true">{conversation.contacts?.name?conversation.contacts.name.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase():String(conversation.contacts?.phone_number||'?').startsWith('260')||String(conversation.contacts?.phone_number||'').startsWith('+260')?'+260':'#'}{conversation.unread_count>0&&<i/>}</span>
+            <span className="inbox-row-content">
+              <span className="inbox-row-title"><strong>{conversation.contacts?.name||conversation.contacts?.phone_number||'Unknown contact'}</strong><time dateTime={conversation.last_message_at||undefined}>{conversation.last_message_at?new Date(conversation.last_message_at).toLocaleDateString()===new Date().toLocaleDateString()?new Date(conversation.last_message_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):new Date(conversation.last_message_at).toLocaleDateString([],{day:'numeric',month:'short'}):''}</time></span>
+              {conversation.contacts?.name&&<span className="inbox-row-phone">{conversation.contacts?.phone_number}</span>}
+              <span className="inbox-preview">{conversation.last_message?.message_body||'No message preview'}</span>
+              <span className={'inbox-row-meta mode-'+conversation.control_mode}><ConversationHandlingStatus conversation={conversation}/><span className={conversation.unread_count>0?'inbox-unread':'inbox-read'}>{conversation.unread_count>0?`${conversation.unread_count} unread`:'Read'}{conversation.assigned_user_id?` · ${assigneeName(conversation)}`:''}</span></span>
+              <MarketingOptOutBadge contact={conversation.contacts}/>
+            </span>
           </button>
         </div>)}
         {queue.nextOffset!==null && <button className="btn btn-wire" disabled={loading||busy} onClick={()=>queue.loadMore()}>{loading?'Loading…':'Load more conversations'}</button>}
