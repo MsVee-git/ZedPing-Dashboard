@@ -325,3 +325,7 @@
  .workspace .inbox-page .inbox-selection{position:static}
  .workspace .inbox-page.inbox-thread-open{padding:0!important}
 }
+
+.message-delivery{display:inline-flex;align-items:center;gap:4px;color:#718078;font-size:inherit;line-height:1.4;vertical-align:middle}
+.message-delivery svg{flex-shrink:0}
+.workspace .inbox-page .message-delivery.is-read{color:#1685b5}
