@@ -1190,9 +1190,10 @@ function Contacts({ customer, initialTab = "contacts", routeGroupId = null, onRo
 // ── MESSAGE LOG ───────────────────────────────────────────────────────────────
 function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [filter,setFilter]=useQueryState('view','all');
-  const [inboxSearch,setInboxSearch]=useState('');
-  useEffect(()=>setInboxSearch(''),[customer?.id,filter]);
-  const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id);
+  const [inboxSearch,setInboxSearch]=useState(''),[appliedSearch,setAppliedSearch]=useState('');
+  useEffect(()=>{setInboxSearch('');setAppliedSearch('');},[customer?.id]);
+  useEffect(()=>{setSelection(new Set());setSelectionMode(false);},[appliedSearch,filter]);
+  const queue=useInboxQueue(apiFetch,API,customer?.id,filter,user?.id,appliedSearch);
   const copilotRequest=useCallback((path,init={})=>apiFetch(API+path,init),[customer?.id]);
   const {rows,counts,members,loading,error}=queue;
   const [selectedId,setSelectedId]=useState(''),[thread,setThread]=useState(null),[threadLoading,setThreadLoading]=useState(false),[threadError,setThreadError]=useState('');
@@ -1322,10 +1323,10 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setBusy(false);}
   };
-  const visibleRows=rows.filter(conversation=>[conversation.contacts?.name,conversation.contacts?.phone_number,conversation.last_message?.message_body,conversation.assigned_user_id?assigneeName(conversation):''].some(value=>String(value||'').toLowerCase().includes(inboxSearch.trim().toLowerCase())));
+  const visibleRows=rows;
   return <div className={'pad inbox-page'+(selectedId?' inbox-thread-open':'')+(detailsOpen?' inbox-details-open':'')}>
     <div className="inbox-page-heading"><PageHead label="Operations" title="Team Inbox." sub="Triage waiting chats and manage your team’s workload."/></div>
-    <div className="inbox-masthead"><strong>Team Inbox</strong><span className={error?"inbox-sync has-error":"inbox-sync"} role="status">{error?"Sync needs attention":loading?"Updating…":"Automatic updates enabled"}</span></div>
+    <div className="inbox-masthead"><strong>Team Inbox</strong><span className={error?"inbox-sync has-error":"inbox-sync"} role="status">{error?"Sync needs attention":loading?"Updating…":"Auto-updates on"}</span></div>
     <div className="inbox-toolbar">
     <div className="inbox-filters" role="group" aria-label="Inbox views">
       {['all','unread','assigned_to_me'].map(id=><button key={id} className={'btn '+(filter===id?'btn-gold':'btn-wire')} aria-pressed={filter===id} disabled={busy||replying} onClick={()=>setFilter(id)}>{id==='assigned_to_me'?'My Chats':id==='unread'?'Unread':'All'}<span className="inbox-tab-count">{counts?counts[id]??0:'—'}</span></button>)}
@@ -1347,10 +1348,11 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
     {actionError && <div className="inbox-notice" role="alert">{actionError}</div>}
     <div className="team-inbox">
       <div className="card inbox-list">
-        <div className="inbox-search"><label><span aria-hidden="true">⌕</span><input type="search" aria-label="Search loaded conversations by name, phone, latest message or assignee" placeholder="Search loaded chats…" value={inboxSearch} onChange={event=>setInboxSearch(event.target.value)}/></label></div>
-        <div className="inbox-selection"><strong><span className="inbox-list-count">Showing {visibleRows.length} of {rows.length} loaded conversations</span></strong><button className="text-button" disabled={busy} aria-pressed={selectionMode} onClick={()=>{setSelectionMode(!selectionMode);setSelection(new Set());}}>{selectionMode?'Done selecting':'Select'}</button>{selectionMode&&<div className="inbox-selection-options"><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select chats in this filter</button><span>Up to 200 chats. Filter selection may include chats not yet shown.</span></div>}</div>
+        <form className="inbox-search" role="search" onSubmit={event=>{event.preventDefault();if(inboxSearch.trim().length>=2)setAppliedSearch(inboxSearch.trim());else if(!inboxSearch.trim())setAppliedSearch('');}}><label><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" minLength={2} maxLength={120} aria-label="Search all inbox messages, contact names or phone numbers" placeholder="Search messages, names or numbers" value={inboxSearch} onChange={event=>{setInboxSearch(event.target.value);if(!event.target.value)setAppliedSearch('');}}/></label><button className="btn btn-gold" type="submit" disabled={loading||inboxSearch.trim().length<2}>Search</button>{appliedSearch&&<button className="text-button" type="button" onClick={()=>{setInboxSearch('');setAppliedSearch('');}}>Clear</button>}</form>
+        {appliedSearch&&<p className="inbox-search-summary" role="status">Results for “{appliedSearch}” across message history and contacts in this view. Open a chat to read the conversation.</p>}
+        <div className="inbox-selection"><strong><span className="inbox-list-count">{appliedSearch?`${rows.length} matching conversations${queue.nextOffset!==null?' shown':''}`:`${rows.length} conversations${queue.nextOffset!==null?' shown':''}`}</span></strong><button className="text-button" disabled={busy} aria-pressed={selectionMode} onClick={()=>{setSelectionMode(!selectionMode);setSelection(new Set());}}>{selectionMode?'Done selecting':'Select'}</button>{selectionMode&&<div className="inbox-selection-options"><button className="text-button" disabled={busy||!rows.length} onClick={()=>setSelection(new Set(rows.slice(0,200).map(row=>row.id)))}>Select shown chats</button><button className="text-button" disabled={busy||loading||!rows.length} onClick={selectView}>Select chats in this filter</button><span>Up to 200 chats. Filter selection may include chats not yet shown.</span></div>}</div>
         {error && <div role="alert" className="inbox-notice">{error}</div>}
-        {loading&&!rows.length?<Loader/>:!visibleRows.length?<Empty msg={inboxSearch?'No loaded chats match your search. Load more or clear search.':'No conversations in this view'}/>:visibleRows.map(conversation=><div key={conversation.id} className={'inbox-list-row'+(selectionMode?' is-selecting':'')}>
+        {loading&&!rows.length?<Loader/>:!visibleRows.length?<Empty msg={appliedSearch?'No conversations match this search in the selected view.':'No conversations in this view'}/>:visibleRows.map(conversation=><div key={conversation.id} className={'inbox-list-row'+(selectionMode?' is-selecting':'')}>
           {selectionMode&&<input type="checkbox" aria-label={`Select ${conversation.contacts?.name||conversation.contacts?.phone_number||conversation.id}`} checked={selection.has(conversation.id)} disabled={busy||(!selection.has(conversation.id)&&selection.size>=200)} onChange={()=>toggle(conversation.id)}/>}
           <button className={'inbox-open '+(selectedId===conversation.id?'selected':'')} onClick={()=>openConversation(conversation.id)}>
             <span className={'inbox-avatar avatar-'+(String(conversation.contacts?.phone_number||conversation.id).split('').reduce((sum,char)=>sum+char.charCodeAt(0),0)%5)} aria-hidden="true">{conversation.contacts?.name?conversation.contacts.name.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase():String(conversation.contacts?.phone_number||'?').startsWith('260')||String(conversation.contacts?.phone_number||'').startsWith('+260')?'+260':'#'}{conversation.unread_count>0&&<i/>}</span>

@@ -13,7 +13,7 @@ export function matchesInboxView(row,view,userId) {
   return view==='all';
 }
 
-export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
+export function useInboxQueue(apiFetch, api, workspaceId, view, userId, search = '') {
   const [rows,setRows]=useState([]), [counts,setCounts]=useState(null), [members,setMembers]=useState([]);
   const [loading,setLoading]=useState(true), [error,setError]=useState(''), [nextOffset,setNextOffset]=useState(null);
   const rowsRef=useRef(rows); rowsRef.current=rows;
@@ -31,7 +31,7 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
   const loadPage=useCallback(async(offset=0,append=false,background=false)=>{
     const version=++generation.current;if(!background)setLoading(true);setError('');
     try {
-      const response=await apiFetch(`${api}/conversations?view=${view}&offset=${offset}`);const data=await response.json();
+      const response=await apiFetch(`${api}/conversations?view=${view}&offset=${offset}${search?`&q=${encodeURIComponent(search)}`:''}`);const data=await response.json();
       if(!response.ok || !Array.isArray(data.conversations))throw new Error(data.error || 'Unable to load conversations');
       if(version!==generation.current || workspace.current!==workspaceId)return;
       const next = append || (background && data.next_offset!==null) ? mergeInboxRows(rowsRef.current,data.conversations).filter(row=>matchesInboxView(row,view,userId)) : sortInboxRows(data.conversations);
@@ -39,7 +39,7 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
       setNextOffset(data.next_offset===null?null:next.length);
     } catch(error) { if(version===generation.current)setError(error.message); }
     finally { if(version===generation.current)setLoading(false); }
-  },[apiFetch,api,workspaceId,view,userId]);
+  },[apiFetch,api,workspaceId,view,userId,search]);
   useEffect(()=>{setRows([]);setNextOffset(null);loadPage();return()=>{generation.current++};},[loadPage]);
   useEffect(()=>{
     let current=true;setCounts(null);setMembers([]);refreshCounts();
@@ -52,7 +52,7 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
     const version=++generation.current;
     const selected=new Map();let offset=0,pages=0;
     do {
-      const response=await apiFetch(`${api}/conversations?view=${view}&offset=${offset}`);
+      const response=await apiFetch(`${api}/conversations?view=${view}&offset=${offset}${search?`&q=${encodeURIComponent(search)}`:''}`);
       const data=await response.json();
       if(!response.ok || !Array.isArray(data.conversations))throw new Error(data.error || 'Unable to select this view');
       if(version!==generation.current || workspace.current!==workspaceId)return [];
@@ -61,9 +61,9 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
     }while(offset!==null && selected.size<200 && pages<4);
     const selectedRows=[...selected.values()];setRows(selectedRows);setNextOffset(offset);setLoading(false);
     return selectedRows;
-  },[apiFetch,api,workspaceId,view,userId]);
+  },[apiFetch,api,workspaceId,view,userId,search]);
   const patchRow=useCallback(row=>{
-    if(!row)return;
+    if(!row || search)return;
     const {view:currentView,userId:currentUser}=viewRef.current;
     // Partial activity events can update known rows; only joined API rows can add a new chat.
     const exists=rowsRef.current.some(item=>item.id===row.id);
@@ -72,7 +72,7 @@ export function useInboxQueue(apiFetch, api, workspaceId, view, userId) {
     rowsRef.current=next;setRows(next);
     if(!exists && next.some(item=>item.id===row.id))setNextOffset(offset=>offset===null?null:offset+1);
     if(exists && !next.some(item=>item.id===row.id))setNextOffset(offset=>offset===null?null:Math.max(0,offset-1));
-  },[]);
+  },[search]);
   const refresh=useCallback((background=false)=>Promise.all([loadPage(0,false,background),refreshCounts()]),[loadPage,refreshCounts]);
   return {rows,counts,members,loading,error,nextOffset,selectView,loadMore:()=>loadPage(nextOffset,true),refresh,refreshCounts,patchRow};
 }
