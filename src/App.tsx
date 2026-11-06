@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react"
 import { createClient } from "@supabase/supabase-js";
 import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
-import { campaignStatus } from "./lib/campaignStatus.js";
+import { campaignStatus, campaignDate } from "./lib/campaignStatus.js";
 import { useInboxQueue, INBOX_VIEWS } from "./useInboxQueue";
 import { useInboxLiveUpdates } from "./useInboxLiveUpdates";
 import { useInboxScroll, useInboxComposer } from "./useInboxScroll";
@@ -819,7 +819,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible') historyRefresh.current(); };
     const timer = window.setInterval(() => {
-      if ((historySnapshot.current || []).some(item => item.status === 'sending')) refresh();
+      if ((historySnapshot.current || []).some(item => ['sending','pending'].includes(item.status))) refresh();
     }, 10000);
     document.addEventListener('visibilitychange', refresh);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
@@ -836,8 +836,12 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState(storedDraft.templateId || "");
   const [broadcastHeaderFile, setBroadcastHeaderFile] = useState(null);
+  const [sendMode,setSendMode]=useState(storedDraft.sendMode || 'now');
+  const [scheduleLocal,setScheduleLocal]=useState(storedDraft.scheduleLocal || '');
+  const [scheduleRequestId,setScheduleRequestId]=useState(() => storedDraft.scheduleRequestId || crypto.randomUUID());
+
   const [mappings, setMappings] = useState(storedDraft.mappings || {});
-  useEffect(() => { setDraftSaved(writeDraft(draftKey, {numberId,audienceType,groupId,templateId,mappings})); }, [draftKey,numberId,audienceType,groupId,templateId,mappings]);
+  useEffect(() => { setDraftSaved(writeDraft(draftKey, {numberId,audienceType,groupId,templateId,mappings,sendMode,scheduleLocal,scheduleRequestId})); }, [draftKey,numberId,audienceType,groupId,templateId,mappings,sendMode,scheduleLocal,scheduleRequestId]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [review, setReview] = useState(null);
   const [sending, setSending] = useState(false);
@@ -863,7 +867,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
     finally { if(request===templateRequest.current)setLoadingTemplates(false); }
   };
   useEffect(() => { if (numberId) loadTemplates(); else { templateRequest.current++; setTemplates([]); setTemplateId(""); setLoadingTemplates(false); } return()=>{templateRequest.current++;}; }, [numberId]);
-  useEffect(() => { setReview(null); }, [groupId, templateId, mappings]);
+  useEffect(() => { setReview(null); }, [groupId, templateId, mappings, numberId, sendMode, scheduleLocal]);
   useEffect(() => { setBroadcastHeaderFile(null); }, [templateId, numberId]);
   const updateMapping = (number, source, value = "") => setMappings((current) => ({ ...current, [number]: { source, ...(source === "fixed" ? { value } : {}) } }));
   const reviewBroadcast = async () => {
@@ -876,6 +880,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
     finally { setSending(false); }
   };
   const send = async () => {
+    if(sendMode==='later' && (!scheduleLocal || !Number.isFinite(Date.parse(scheduleLocal+'+02:00')) || Date.parse(scheduleLocal+'+02:00') < Date.now()+60000 || Date.parse(scheduleLocal+'+02:00')>Date.now()+90*86400000)) return setNotice({ok:false,text:'Choose a Zambia date and time between one minute and 90 days from now.'});
     if (["image", "document"].includes(selectedTemplate?.header_media_type) && !broadcastHeaderFile) return setNotice({ok:false,text:"Select the template header file before sending."});
     if (sendInFlight.current) return;
     sendInFlight.current = true;
@@ -886,13 +891,16 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       if (audienceType === "contact_group") form.append("contact_group_id", groupId);
       form.append("template_id", templateId); form.append("variable_mappings", JSON.stringify(mappings));
       if (broadcastHeaderFile) form.append("header_media", broadcastHeaderFile);
+      if(sendMode==='later'){form.append('scheduled_at',new Date(scheduleLocal+'+02:00').toISOString());form.append('schedule_request_id',scheduleRequestId);}
       const response = await apiFetch(`${API}/broadcasts/send-template`, { method: "POST", headers: { Prefer: "respond-async" }, body: form });
       const result = await response.json();
+      const scheduled=result.status==='scheduled';
       const started = result.status === 'sending';
-      setSendResult(started ? null : result);
-      setNotice({ ok: true, text: started
+      setSendResult(started || scheduled ? null : result);
+      setNotice({ ok: true, text: scheduled ? `Campaign scheduled for ${new Date(result.scheduled_at).toLocaleString('en-GB',{timeZone:'Africa/Lusaka'})} CAT. You can close this page.` : started
         ? 'Broadcast started. You can follow its progress below and leave this page safely.'
         : `Broadcast submitted: ${result.accepted} accepted for sending · ${result.failed} submission failures. Delivery and read receipts update below.` });
+      setSendMode('now');setScheduleLocal('');setScheduleRequestId(crypto.randomUUID());
       setReview(null); setTemplateId(""); setMappings({}); setBroadcastHeaderFile(null);
       setNumberId(""); setAudienceType("contact_group"); setGroupId(""); writeDraft(draftKey, null);
       refetchHistory();
@@ -924,8 +932,13 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
           {selectedTemplate && <div style={{ padding: 12, border: "1px solid var(--wire)", background: "rgba(255,255,255,0.02)" }}><div className="mono" style={{ color: "var(--gold2)", fontSize: 10 }}>{selectedTemplate.category} · {selectedTemplate.language} · {selectedTemplate.status}</div><div style={{ color: "var(--mist)", fontSize: 13, marginTop: 7, whiteSpace: "pre-wrap" }}>{selectedTemplate.body_preview || "This template has no text body preview."}</div>{selectedTemplate.unavailable_reason && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 8 }}>{selectedTemplate.unavailable_reason}</div>}</div>}
           {["image", "document"].includes(selectedTemplate?.header_media_type) && <div><label className="label">Template header {selectedTemplate.header_media_type}</label><input className="input" type="file" accept={selectedTemplate.header_media_type === "image" ? "image/jpeg,image/png" : "application/pdf"} disabled={sending} onChange={event => {setBroadcastHeaderFile(event.target.files?.[0] || null); setReview(null);}}/><p style={{fontSize:13,color:"var(--mist)",marginTop:8}}>Select the image or PDF to include with this broadcast. The template approval sample is not automatically attached.</p></div>}
           {selectedTemplate?.sendable && selectedTemplate.variables.map(number => <div key={number}><label className="label">Template variable {"{{" + number + "}}" }</label><select className="input" value={mappings[number]?.source || ""} onChange={event => updateMapping(number, event.target.value)}><option value="">Choose a value…</option><option value="contact_name">Contact name</option><option value="contact_phone">Contact phone</option><option value="contact_email">Contact email</option><option value="fixed">Same text for every recipient</option></select>{mappings[number]?.source === "fixed" && <input className="input" style={{ marginTop: 8 }} value={mappings[number]?.value || ""} onChange={event => updateMapping(number, "fixed", event.target.value)} placeholder="Enter fixed text" />}</div>)}
+          <fieldset style={{border:'1px solid var(--wire)',borderRadius:16,padding:16,margin:0}}>
+            <legend style={{color:'var(--cream)',padding:'0 6px'}}>When to send</legend>
+            <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>{[['now','Send now'],['later','Schedule for later']].map(([value,label])=><label key={value} style={{display:'flex',gap:8,alignItems:'center',cursor:'pointer'}}><input type="radio" name="campaign-send-mode" value={value} checked={sendMode===value} disabled={sending} onChange={()=>setSendMode(value)}/>{label}</label>)}</div>
+            {sendMode==='later'&&<div style={{marginTop:14}}><label className="label" htmlFor="campaign-schedule">Date and time · Zambia (CAT, UTC+2)</label><input id="campaign-schedule" className="input" type="datetime-local" value={scheduleLocal} disabled={sending} onChange={e=>setScheduleLocal(e.target.value)} style={{width:'100%',minWidth:0}}/><p style={{fontSize:12,color:'var(--mist)',marginBottom:0}}>Schedule up to 90 days ahead. The reviewed audience is saved; opt-outs and template approval are checked again when sending. Message allowance is used at send time.</p></div>}
+          </fieldset>
           {notice && <div className="mono" style={{ fontSize: 11, color: notice.ok ? "var(--success-text)" : "var(--error-text)" }}>{notice.text}</div>}
-          {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><BroadcastReviewSummary review={review} /><div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? "Sending…" : "Send broadcast"}</button></div></div>}
+          {!review ? <button className="btn btn-gold" onClick={reviewBroadcast} disabled={sending || !selectedTemplate?.sendable} style={{ alignSelf: "flex-start", padding: "10px 22px" }}>{sending ? "Preparing…" : "Review broadcast"}</button> : <div style={{ padding: 14, border: "1px solid var(--gold)", background: "rgba(184,146,42,0.06)" }}><div style={{ color: "var(--cream)", fontWeight: 600 }}>Review before sending</div><BroadcastReviewSummary review={review} />{sendMode==='later'&&scheduleLocal&&<p style={{color:'var(--gold2)'}}>Scheduled: {new Date(scheduleLocal+'+02:00').toLocaleString('en-GB',{timeZone:'Africa/Lusaka'})} CAT</p>}<div style={{ color: "var(--mist)", fontSize: 12, marginTop: 4 }}>{review.template.name} · {review.template.language}</div>{review.skipped_recipients > 0 && <div className="mono" style={{ color: "var(--error-text)", fontSize: 10, marginTop: 7 }}>Resolve recipient data before sending.</div>}<div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-wire" onClick={() => setReview(null)}>Back</button><button className="btn btn-gold" onClick={send} disabled={sending || review.skipped_recipients > 0 || !review.eligible_recipients}>{sending ? (sendMode==='later'?"Scheduling…":"Sending…") : (sendMode==='later'?"Schedule campaign":"Send broadcast")}</button></div></div>}
         </div>
       </div>
       <aside className="work-surface campaign-preview"><header><h2>Campaign preview</h2></header><div className="campaign-preview-body"><span className="badge badge-cream">{selectedTemplate?.status||"Choose a template"}</span><p>{selectedTemplate?.body_preview||"Your approved template will appear here."}</p></div><div className="surface-footnote"><strong>Before you send</strong><p>Confirm the sending number, audience and template variables. The review step checks eligible recipients and marketing opt-outs.</p></div></aside></div>
@@ -933,18 +946,21 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       {!composing && <><div className="campaign-summary"><strong>Campaign activity</strong><span>Sent confirms submission. Delivery and read receipts are shown in Details.</span></div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <div className="mono" style={{ fontSize: 9, color: "var(--mist)", letterSpacing: 2, textTransform: "uppercase" }}>Campaign Activity</div>
-        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sending","Sending"],["processed","Sent"],["failed","Failed"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
+        <div style={{ display: "flex", gap: 6 }}>{[["all","All"],["scheduled","Scheduled"],["sending","Sending"],["processed","Sent"],["failed","Failed"],["cancelled","Cancelled"]].map(([id,label]) => <button key={id} className={activityFilter === id ? "btn btn-gold" : "btn btn-wire"} onClick={() => setActivityFilter(id)} style={{ padding: "5px 8px", fontSize: 9 }}>{label}</button>)}</div>
       </div>
-      <div className="card">
+      <div className="card campaign-activity-list">
         {historyLoading ? <Loader /> : historyError ? <div className="surface-message" role="alert">{historyError} <button className="btn btn-wire" onClick={refetchHistory}>Try again</button></div> : !activity.length ? <Empty msg="No broadcast activity yet" /> : activity.map(broadcast => {
           const status = statusFor(broadcast); if (!status) return null;
           return <div key={broadcast.id} className="row" style={{ gridTemplateColumns: "2fr 2fr 1fr 1fr 90px auto", gap: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--cream)" }}>{broadcast.broadcast_name || "Untitled Broadcast"}</div>
             <div style={{ fontSize: 12, color: "var(--mist)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{broadcast.message}</div>
             <div style={{ fontSize: 11, color: "var(--mist)" }}>{broadcast.recorded_recipients ?? (Array.isArray(broadcast.contacts) ? broadcast.contacts.length : "Unknown")} recipients</div>
-            <div style={{ fontSize: 11, color: "var(--mist)" }}>{new Date(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString("en-GB",{timeZone:"Africa/Lusaka"})} CAT</div>
+            <div style={{ fontSize: 11, color: "var(--mist)" }}>{campaignDate(broadcast.completed_at || broadcast.scheduled_at || broadcast.created_at).toLocaleString("en-GB",{timeZone:"Africa/Lusaka"})} CAT</div>
             <div className={"badge " + status.cls}>{status.label}</div>
-            <button className="btn btn-wire" onClick={() => setActivityId(broadcast.id)} aria-expanded={activityId === broadcast.id} aria-controls="broadcast-details">Details</button>
+            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {broadcast.status==='pending'&&<button className="btn btn-wire" disabled={sending} onClick={async()=>{setSending(true);try{await apiFetch(`${API}/broadcasts/scheduled/${broadcast.id}/cancel`,{method:'POST'});setNotice({ok:true,text:'Scheduled campaign cancelled.'});refetchHistory();}catch(error){setNotice({ok:false,text:error.message||'Could not cancel campaign.'});}finally{setSending(false);}}}>Cancel schedule</button>}
+            <button className="btn btn-wire" onClick={() => setActivityId(broadcast.id)} aria-expanded={activityId === broadcast.id} aria-controls="broadcast-details">Details</button></div>
+            {broadcast.failure_reason&&<span role="status" style={{gridColumn:'1 / -1',color:'var(--error-text)',fontSize:12}}>{broadcast.failure_reason}</span>}
           </div>;
         })}
       </div>

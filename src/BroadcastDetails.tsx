@@ -3,7 +3,7 @@ import { BroadcastSubmissionReceipt } from './BroadcastSubmissionReceipt';
 import { campaignReceipt, campaignStatus } from './lib/campaignStatus.js';
 
 type Activity = {
-  id: string; broadcast_name?: string; message?: string; status?: string;
+  id: string; broadcast_name?: string; message?: string; status?: string; failure_reason?: string;
   recorded_recipients?: number | null; sent_count?: number | null; failed_count?: number | null;
   created_at?: string; scheduled_at?: string; completed_at?: string;
   delivery?: {delivered:number;read:number;failed:number;sent_pending:number;accepted_pending:number;unconfirmed:number;submission_failures:number;failure_reasons:Record<string,number>} | null;
@@ -21,6 +21,7 @@ export function BroadcastHistoryFacts({ activity }: { activity: Activity }) {
     ["Broadcast name", activity.broadcast_name || "Untitled Broadcast"],
     ["Stored message / template", activity.message || "Not recorded"],
     ["Status", campaignStatus(activity).label],
+    ...(activity.failure_reason ? [["Scheduling issue", activity.failure_reason]] : []),
     ["Created", recordedTime(activity.created_at)],
     ["Scheduled / send started", recordedTime(activity.scheduled_at)],
     ["Sending completed", recordedTime(activity.completed_at)],

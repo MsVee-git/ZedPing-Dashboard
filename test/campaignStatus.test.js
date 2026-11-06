@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {campaignStatus,campaignReceipt} from '../src/lib/campaignStatus.js';
+import {campaignStatus,campaignReceipt,campaignDate} from '../src/lib/campaignStatus.js';
 
 test('saved completed campaign keeps its Sent receipt after reopening, regardless of delivery failures',()=>{
   const saved={status:'completed',sent_count:395,failed_count:0,delivery:{delivered:212,failed:139}};
@@ -20,4 +20,12 @@ test('mixed and failed submissions have accurate completion labels',()=>{
 test('historical missing counts are never presented as confirmed zero submissions',()=>{
   assert.equal(campaignReceipt({status:'completed'}),null);
   assert.equal(campaignReceipt({status:'completed',sent_count:null,failed_count:null}),null);
+});
+
+test('scheduled and cancelled campaigns never show a send receipt and UTC time is preserved',()=>{
+ assert.equal(campaignStatus({status:'pending'}).label,'Scheduled');
+ assert.equal(campaignStatus({status:'cancelled'}).label,'Cancelled');
+ assert.equal(campaignReceipt({status:'cancelled',sent_count:0,failed_count:0}),null);
+ assert.equal(campaignDate('2026-11-06T12:00:00').toISOString(),'2026-11-06T12:00:00.000Z');
+ assert.equal(campaignDate('2026-11-06T14:00:00+02:00').toISOString(),'2026-11-06T12:00:00.000Z');
 });

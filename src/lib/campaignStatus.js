@@ -4,6 +4,7 @@ export function campaignStatus(activity) {
     if (activity.sent_count === 0) return {label:'Not sent',cls:'badge-cream'};
     return {label:Number(activity.failed_count) > 0 ? 'Partially sent' : 'Sent',cls:'badge-green'};
   }
+  if (activity.status === 'cancelled') return {label:'Cancelled',cls:'badge-cream'};
   if (activity.status === 'failed') return {label:'Failed',cls:'badge-cream'};
   if (activity.status === 'pending') return {label:'Scheduled',cls:'badge-gold'};
   if (activity.status === 'sending') return {label:'Sending',cls:'badge-blue'};
@@ -14,4 +15,9 @@ export function campaignReceipt(activity) {
   // Missing historical counts must not become invented zeroes.
   if (!Number.isFinite(activity.sent_count) || !Number.isFinite(activity.failed_count)) return null;
   return {accepted:activity.sent_count,failed:activity.failed_count};
+}
+
+// History columns store UTC timestamps without offsets; browsers must not read them as local time.
+export function campaignDate(value) {
+  return new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value || '') ? value : String(value || '').replace(' ', 'T')+'Z');
 }
