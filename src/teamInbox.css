@@ -329,3 +329,39 @@
 .message-delivery{display:inline-flex;align-items:center;gap:4px;color:#718078;font-size:inherit;line-height:1.4;vertical-align:middle}
 .message-delivery svg{flex-shrink:0}
 .workspace .inbox-page .message-delivery.is-read{color:#1685b5}
+
+/* Desktop keeps the same contact cards and controls as mobile, with room for the thread. */
+@media(min-width:769px){
+ .main.workspace.inbox-workspace .inbox-route{flex:1 1 0;min-width:0;min-height:0}
+ .workspace .pad.inbox-page{width:100%;min-width:0;padding:18px 24px!important;gap:0}
+ .workspace .inbox-page .inbox-masthead{padding:0 0 16px}
+ .workspace .inbox-page .inbox-masthead>strong{font-size:25px;font-weight:600;letter-spacing:-.8px}
+ .workspace .inbox-page .inbox-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid #e4e4d9}
+ .workspace .inbox-page .inbox-toolbar .inbox-filters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0}
+ .workspace .inbox-page .inbox-toolbar .btn{min-height:40px;padding:8px 14px;border-radius:10px;font-size:13px!important}
+ .workspace .inbox-page .inbox-more-filters{font-size:0;margin-left:4px}
+ .workspace .inbox-page .inbox-more-filters .input{width:150px;min-height:40px;border-radius:10px;font-size:13px}
+ .workspace .inbox-page .team-inbox{grid-template-columns:minmax(320px,390px) minmax(0,1fr);grid-template-rows:minmax(0,1fr);border-radius:16px;border:1px solid #e4e4d9;background:#fffefb;min-height:0}
+ .workspace .inbox-page .team-inbox>.inbox-list{background:#fffefb;max-height:100%;overflow-y:auto;border-radius:0;scrollbar-gutter:stable}
+ .workspace .inbox-page .inbox-search{position:sticky;top:0;z-index:2;background:#fffefb;padding:16px 14px 10px;border-bottom:1px solid #eeece3}
+ .workspace .inbox-page .inbox-selection{padding:8px 14px}
+ .workspace .inbox-page .inbox-list-row{padding:0 12px}
+ .workspace .inbox-page .inbox-open{padding:17px 6px;gap:12px}
+ .workspace .inbox-page .inbox-open .inbox-avatar{flex-basis:42px;height:42px;font-size:14px;background:#dab65e;color:#193122}
+ .workspace .inbox-page .inbox-row-title strong{font-size:14px}
+ .workspace .inbox-page .inbox-row-title time{font-size:11px}
+ .workspace .inbox-page .inbox-open .inbox-preview{font-size:13px;line-height:1.5}
+ .workspace .inbox-page .inbox-row-meta .badge{font-size:9px!important}
+ .workspace .inbox-page .inbox-conversation{background:#fffefb;border-radius:0}
+ .workspace .inbox-page .inbox-conversation-header{padding:16px 20px;background:#fffefb;border-bottom:1px solid #e4e4d9}
+ .workspace .inbox-page .inbox-history{background:#f6f4ec;padding:24px;gap:14px}
+ .workspace .inbox-page .inbox-composer{padding:14px 18px;background:#fffefb;border-top:1px solid #e4e4d9}
+ .workspace .inbox-page .inbox-control{background:#f6f0dd;padding:14px 18px}
+ .workspace .inbox-page .message-delivery.is-read{color:#1685b5}
+}
+@media(min-width:769px) and (max-width:1150px){
+ .workspace .pad.inbox-page{padding:14px!important}
+ .workspace .inbox-page .team-inbox{grid-template-columns:minmax(260px,.9fr) minmax(0,1.2fr)}
+ .workspace .inbox-page .inbox-conversation-header{padding:12px}
+ .workspace .inbox-page .inbox-history{padding:14px}
+}

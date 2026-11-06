@@ -14,6 +14,7 @@ import {useInboxLiveUpdates} from './src/useInboxLiveUpdates';
 import {useQueryState,useReplyDraft} from './src/usePageState';
 import {ConversationHandlingStatus} from './src/ConversationHandlingStatus';
 import {MarketingOptOutBadge} from './src/MarketingConsent';
+import {MessageDeliveryStatus} from './src/MessageDeliveryStatus';
 import {InboxMessageBody} from './src/InboxMessageBody';
 import {InboxCopilot} from './src/InboxCopilot';
 import './src/index.css';import './src/teamInbox.css';
