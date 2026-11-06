@@ -365,3 +365,34 @@
  .workspace .inbox-page .inbox-conversation-header{padding:12px}
  .workspace .inbox-page .inbox-history{padding:14px}
 }
+
+/* One coordinated toolbar, with a clear distinction between views and actions. */
+.workspace .inbox-page .inbox-toolbar{justify-content:flex-start;align-items:center;gap:10px;padding:0 0 18px;margin-bottom:16px;border-bottom:1px solid #e4e4d9}
+.workspace .inbox-page .inbox-toolbar .inbox-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0}
+.workspace .inbox-page .inbox-tabs{display:flex;gap:3px;align-items:center;padding:4px;background:#edece3;border:1px solid #e5e2d5;border-radius:13px}
+.workspace .inbox-page .inbox-tabs>.btn[aria-pressed]{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:36px;padding:7px 16px;border-radius:9px;border:1px solid transparent;background:transparent;box-shadow:none;font-size:13px!important;font-weight:500;color:#596459;white-space:nowrap}
+.workspace .inbox-page .inbox-tabs>.btn[aria-pressed=true]{background:#dab65e;border-color:#d1ac52;color:#193122;box-shadow:0 1px 3px #81672c15}
+.workspace .inbox-page .inbox-tabs>.btn[aria-pressed=false]:hover{background:#fffefb;color:#193122}
+.workspace .inbox-page .inbox-tabs .inbox-tab-count{font-size:11px;padding:2px 6px;background:#19312208;color:inherit;border-radius:6px;font-variant-numeric:tabular-nums}
+.workspace .inbox-page .inbox-more-filters{margin-left:9px}
+.workspace .inbox-page .inbox-more-filters .input{border-color:#dedfd3;background:#fffefb;border-radius:10px;min-height:40px;font-size:13px;color:#435b50}
+.workspace .inbox-page .inbox-filters>.btn:last-child{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:40px;border-radius:10px;border-color:#dedfd3;background:#fffefb;font-size:13px!important;padding:8px 13px;color:#435b50}
+.workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;border-radius:10px;padding:8px 16px;background:#193122;border:1px solid #193122;color:#fffefb;font-size:13px!important;box-shadow:0 2px 5px #19312210;margin:0}
+.workspace .inbox-page .inbox-copilot-toggle svg{color:#dab65e;flex-shrink:0}
+.workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle:hover,.workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle[aria-expanded=true]{background:#28503b;border-color:#28503b;color:#fffefb}
+.workspace .inbox-page .inbox-toolbar button:focus-visible{outline:2px solid #826017;outline-offset:3px}
+@media(min-width:769px){
+ .workspace .inbox-page .inbox-toolbar{padding-left:0;flex-wrap:wrap}
+ .workspace .inbox-page .inbox-toolbar .inbox-more-filters .input{width:150px}
+}
+@media(max-width:768px){
+ .workspace .inbox-page .inbox-toolbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:'tabs tabs tabs' 'views assistant refresh';gap:8px;padding-bottom:12px;margin-bottom:10px}
+ .workspace .inbox-page .inbox-toolbar .inbox-filters{display:contents}
+ .workspace .inbox-page .inbox-tabs{grid-area:tabs;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px;min-width:0}
+ .workspace .inbox-page .inbox-tabs>.btn[aria-pressed]{min-width:0;width:100%;padding:7px 5px;font-size:12px!important;gap:5px;min-height:36px;height:36px}
+ .workspace .inbox-page .inbox-toolbar .inbox-more-filters{grid-area:views;margin:0}
+ .workspace .inbox-page .inbox-toolbar .inbox-more-filters .input{width:100%;min-width:0;font-size:12px;min-height:40px}
+ .workspace .inbox-page .inbox-toolbar .inbox-filters>.btn:last-child{grid-area:refresh;font-size:12px!important;padding:8px;gap:5px}
+ .workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle{grid-area:assistant;min-width:0;max-width:none;width:100%;font-size:12px!important;padding:8px 5px;gap:5px}
+ .workspace .inbox-page.inbox-thread-open>.inbox-toolbar{display:none}
+}
