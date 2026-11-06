@@ -3,6 +3,7 @@
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { createSessionRequest } from "./lib/sessionRequest.js";
 import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
 import { campaignStatus, campaignDate } from "./lib/campaignStatus.js";
@@ -66,17 +67,16 @@ function connectedWhatsAppNumberLabel(number) {
   return name ? `${name} — ${phone}` : phone;
 }
 
+const sessionRequest = createSessionRequest(supabase.auth, nativeRequest);
 const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(init.headers || {});
-  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
 
   // This local value is only a convenience hint. The backend independently
   // verifies that the signed-in user belongs to the requested workspace.
   const workspaceId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
   if (workspaceId) headers.set("x-zedping-workspace-id", workspaceId);
 
-  const response = await nativeRequest(input, { ...init, headers });
+  const response = await sessionRequest(input, { ...init, headers });
   if (!response.ok) {
     if (response.status === 403) window.dispatchEvent(new Event("zedping:workspace-forbidden"));
     const body = await response.json().catch(() => null);
