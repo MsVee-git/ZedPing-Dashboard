@@ -3,6 +3,7 @@
 // workspace-scoped Contacts surface; it does not introduce a parallel store.
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { uploadRequest } from "./lib/uploadRequest.js";
 import { createSessionRequest } from "./lib/sessionRequest.js";
 import { BroadcastSubmissionReceipt } from "./BroadcastSubmissionReceipt";
 import { BroadcastDetails } from "./BroadcastDetails";
@@ -68,6 +69,7 @@ function connectedWhatsAppNumberLabel(number) {
 }
 
 const sessionRequest = createSessionRequest(supabase.auth, nativeRequest);
+const sessionUploadRequest = createSessionRequest(supabase.auth, uploadRequest);
 const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const headers = new Headers(init.headers || {});
 
@@ -76,7 +78,7 @@ const apiFetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
   const workspaceId = window.localStorage.getItem(WORKSPACE_STORAGE_KEY);
   if (workspaceId) headers.set("x-zedping-workspace-id", workspaceId);
 
-  const response = await sessionRequest(input, { ...init, headers });
+  const response = await (init.onUploadProgress ? sessionUploadRequest : sessionRequest)(input, { ...init, headers });
   if (!response.ok) {
     if (response.status === 403) window.dispatchEvent(new Event("zedping:workspace-forbidden"));
     const body = await response.json().catch(() => null);
@@ -2064,6 +2066,11 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
   const [templates, setTemplates] = useState([]);
   const [templateError, setTemplateError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const [documentExtraction, setDocumentExtraction] = useState(null);
+  const [documentExtracting, setDocumentExtracting] = useState(false);
+  const documentExtractLock = useRef(false);
+  const uploadLock = useRef(false);
   const [actionError, setActionError] = useState("");
   const [form, setForm] = useState({ name: "", description: "", text_content: "", link_url: "", template_id: "" });
   const [file, setFile] = useState(null);
@@ -2134,13 +2141,13 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!type) return;
+    if (!type || uploadLock.current) return;
     if (type === "TEXT") {
       const saved = await persistNewText(form);
       if (saved) { setSelected(saved); onRouteOpen?.(saved.id); setCreating(false); setType(null); setCreatingTextDraft(null); setNewTextNotice(""); }
       return;
     }
-    setSaving(true); setActionError("");
+    uploadLock.current = true; setSaving(true); setUploadProgress(0); setActionError("");
     try {
       const body = new FormData();
       body.set("content_type", type);
@@ -2150,13 +2157,34 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
       if (type === "LINK") body.set("link_url", form.link_url);
       if (type === "WHATSAPP_TEMPLATE_REFERENCE") body.set("template_id", form.template_id);
       if (["DOCUMENT", "IMAGE"].includes(type) && file) body.set("file", file);
-      const response = await apiFetch(`${API}/content`, { method: "POST", body });
+      const response = await apiFetch(`${API}/content`, { method: "POST", body, ...(["DOCUMENT","IMAGE"].includes(type) ? { onUploadProgress: setUploadProgress } : {}) });
       const result = await response.json();
       setItems((current) => [result.item, ...current]);
-      setSelected(result.item); onRouteOpen?.(result.item.id); setCreating(false); setType(null);
+      setSelected(result.item); setFilter("ALL"); setSearch(""); setLifecycleFilter("active"); onRouteOpen?.(result.item.id); setCreating(false); setType(null);
     } catch (submitError) {
       setActionError(submitError?.message || "We could not save this content.");
-    } finally { setSaving(false); }
+    } finally { uploadLock.current = false; setSaving(false); setUploadProgress(null); }
+  };
+
+  const extractDocument = async (item) => {
+    if (documentExtractLock.current) return;
+    documentExtractLock.current=true; setDocumentExtracting(true); setActionError("");
+    try {
+      const response=await apiFetch(`${API}/content/${item.id}/extract-document`,{method:"POST"});
+      const result=await response.json();
+      setDocumentExtraction({ ...result, name:item.name + " — extracted information" });
+    } catch (error) { setActionError(error.message || "Could not extract this document. Your file is saved."); }
+    finally { documentExtractLock.current=false; setDocumentExtracting(false); }
+  };
+  const saveDocumentExtraction = async () => {
+    if (!documentExtraction || saving) return;
+    setSaving(true); setActionError("");
+    try {
+      const body=new FormData(); body.set("content_type","TEXT"); body.set("name",documentExtraction.name.slice(0,160)); body.set("text_content",documentExtraction.text);
+      const response=await apiFetch(`${API}/content`,{method:"POST",body}); const result=await response.json();
+      setItems(current=>[result.item,...current]);setSelected(result.item);setFilter("ALL");setSearch("");onRouteOpen?.(result.item.id);setDocumentExtraction(null);
+    } catch (error) { setActionError(error.message || "Could not save extracted information."); }
+    finally { setSaving(false); }
   };
 
   const archive = async (item) => {
@@ -2371,6 +2399,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         {selected.content_type === "TEXT" && <div style={{ whiteSpace: "pre-wrap", color: "var(--cream2)", fontSize: 12, lineHeight: 1.55, marginTop: 15 }}>{selected.text_content}</div>}
         {selected.content_type === "LINK" && <a href={selected.link_url} target="_blank" rel="noreferrer" style={{ color: "var(--gold2)", display: "block", fontSize: 12, marginTop: 15, wordBreak: "break-all" }}>{selected.link_url}</a>}
         {["DOCUMENT","IMAGE"].includes(selected.content_type) && <><button className="btn btn-wire" onClick={() => secureOpen(selected)} style={{ marginTop: 16 }}>{selected.content_type === "IMAGE" ? "Preview secure image" : "Open secure document"}</button>{selected.content_type === "IMAGE" && previewUrl && <img src={previewUrl} alt={selected.name} style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "contain", marginTop: 14, border: "1px solid var(--wire)" }} />}</>}
+        {canManage && selected.content_type === "DOCUMENT" && !selected.archived_at && <button className="btn btn-gold" disabled={documentExtracting} onClick={()=>extractDocument(selected)} style={{marginTop:16}}>{documentExtracting ? "Extracting information…" : "Extract information"}</button>}
         {selected.content_type === "IMAGE" && <div style={{marginTop:16}}>{(() => { const run=imageKnowledge[0]; const busy=knowledgeLoading || extractingKnowledge || ["pending","processing"].includes(run?.status); if(!run) return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Extract knowledge for ZedPing Ai</button>; if(["pending","processing"].includes(run.status)) return <button className="btn btn-wire" disabled>Extracting…</button>; if(run.status==="ready_for_review") return <><button className="btn btn-gold" disabled={busy} onClick={()=>openReview(run)}>Review ZedPing Ai knowledge</button><button className="btn btn-wire" onClick={()=>loadImageKnowledge(selected)} style={{marginLeft:8}}>Refresh</button></>; if(run.status==="approved") return <><button className="btn btn-wire" disabled={busy} onClick={()=>loadImageKnowledge(selected,true)}>View ZedPing Ai knowledge</button>{canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)} style={{marginLeft:8}}>{extractingKnowledge?"Extracting…":"Extract again"}</button>}</>; return canManage && <button className="btn btn-gold" disabled={busy} onClick={()=>extractKnowledge(selected)}>Retry extraction</button>; })()}</div>}
         {selected.content_type === "WHATSAPP_TEMPLATE_REFERENCE" && <><div style={{ color: "var(--cream2)", fontSize: 12, marginTop: 15 }}>{selected.template_name} · {selected.template_language || "language unavailable"} · {selected.template_status || "status unavailable"}</div>{canManage && <button className="btn btn-wire" onClick={() => refreshTemplate(selected)} style={{ marginTop: 13 }}>Refresh from Meta</button>}</>}
         {canManage && ["TEXT", "LINK"].includes(selected.content_type) && <button className="btn btn-wire" onClick={() => beginEdit(selected)} style={{ marginTop: 18 }}>Edit</button>}
@@ -2393,8 +2422,9 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
       </form>
     </div></div>}
     {reviewingKnowledge && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review image knowledge"><div className="modal knowledge-review-modal" style={{maxWidth:820,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",gap:12}}><div><div className="mono" style={{color:"var(--gold2)",fontSize:9,letterSpacing:2}}>ZedPing Ai KNOWLEDGE</div><h3 className="editorial" style={{color:"var(--cream)",fontSize:24,marginTop:7}}>{reviewingKnowledge.status==="approved"?"Approved knowledge":"Needs your confirmation"}</h3></div><button className="btn btn-wire" disabled={savingKnowledge} onClick={()=>setReviewingKnowledge(null)}>Close</button></div>{actionError&&<p role="alert" style={{color:"var(--error-text)"}}>{actionError}</p>}<div className="knowledge-review-columns" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:16,marginTop:16}}><div><div className="label">Original image</div>{previewUrl ? <img src={previewUrl} alt={selected?.name || "Original image"} style={{width:"100%",maxHeight:300,objectFit:"contain",border:"1px solid var(--wire)"}} /> : <button className="btn btn-wire" onClick={()=>secureOpen(selected)}>Preview secure image</button>}</div><div><label className="label">Information found</label><textarea readOnly={reviewingKnowledge.status!=="ready_for_review" || savingKnowledge} className="textarea" maxLength="20000" value={knowledgeForm.extracted_text} onChange={e=>setKnowledgeForm(current=>({...current,extracted_text:e.target.value}))}/><label className="label" style={{marginTop:12}}>Needs your confirmation</label><textarea readOnly={reviewingKnowledge.status!=="ready_for_review" || savingKnowledge} className="textarea" placeholder="One uncertainty per line" value={knowledgeForm.review_notes} onChange={e=>setKnowledgeForm(current=>({...current,review_notes:e.target.value}))}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}><label className="label">Valid from <input className="input" type="date" value={knowledgeForm.valid_from} onChange={e=>setKnowledgeForm(current=>({...current,valid_from:e.target.value}))}/></label><label className="label">Valid until <input className="input" type="date" value={knowledgeForm.valid_until} onChange={e=>setKnowledgeForm(current=>({...current,valid_until:e.target.value}))}/></label></div></div></div><div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:18}}><button className="btn btn-wire" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={rejectKnowledge}>Reject</button><button className="btn btn-wire" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={()=>saveReview(false)}>Save changes</button><button className="btn btn-gold" disabled={savingKnowledge || reviewingKnowledge.status!=="ready_for_review"} onClick={()=>saveReview(true)}>{savingKnowledge?"Saving…":"Approve for ZedPing Ai"}</button></div></div></div>}
+    {documentExtraction && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Review document information"><div className="modal" style={{maxWidth:900,maxHeight:"90vh",overflowY:"auto"}}><h3>Review extracted information</h3><p>Check prices, dates and details before saving. The original document stays saved.</p><label className="label">Name</label><input className="input" maxLength={160} value={documentExtraction.name} onChange={e=>setDocumentExtraction(current=>({...current,name:e.target.value}))}/><label className="label">Information found</label><textarea className="textarea" style={{minHeight:320}} maxLength={20000} value={documentExtraction.text} onChange={e=>setDocumentExtraction(current=>({...current,text:e.target.value}))}/>{documentExtraction.notes?.map((note,index)=><p key={index}>{note}</p>)}{actionError&&<p role="alert">{actionError}</p>}<div style={{display:"flex",gap:12,marginTop:16}}><button className="btn btn-wire" disabled={saving} onClick={()=>setDocumentExtraction(null)}>Close</button><button className="btn btn-gold" disabled={saving || !documentExtraction.text?.trim() || !documentExtraction.name?.trim()} onClick={saveDocumentExtraction}>{saving?"Saving…":"Save as reusable text"}</button></div></div></div>}
     {creating && <div className="modal-bg"><div className="modal" style={{ width: "calc(100vw - 32px)", maxWidth: 1100, maxHeight: "90vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}><div><div className="mono" style={{ color: "var(--gold2)", fontSize: 9, letterSpacing: 2 }}>CONTENT LIBRARY</div><h3 className="editorial" style={{ color: "var(--cream)", fontSize: 24, marginTop: 7 }}>{type ? "Add " + typeLabel(type) : "What would you like to save?"}</h3></div><button className="btn btn-wire" disabled={saving} onClick={() => { setCreating(false); setType(null); }}>Close</button></div>
       {!type ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginTop: 20 }}>{[["TEXT","Text"],["DOCUMENT","Document"],["IMAGE","Image"],["LINK","Link"],["WHATSAPP_TEMPLATE_REFERENCE","WhatsApp Template"]].map(([key,label]) => <button key={key} className="btn btn-wire" onClick={() => begin(key)} style={{ minHeight: 72, justifyContent: "center" }}>{label}</button>)}</div> :
       <form onSubmit={submit} style={{ marginTop: 20 }}>
         <label className="label">Name</label><input className="input" required maxLength="160" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Give this content a clear name" />
@@ -2404,7 +2434,7 @@ function ContentLibrary({ customer, routeContentId = null, onRouteOpen, onRouteU
         {["DOCUMENT","IMAGE"].includes(type) && <><label className="label" style={{ marginTop: 13 }}>{type === "IMAGE" ? "Image file" : "Document file"}</label><input className="input" type="file" required accept={type === "IMAGE" ? "image/jpeg,image/png,image/webp" : ".pdf,.doc,.docx,.xls,.xlsx,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"} onChange={(event) => setFile(event.target.files?.[0] || null)} /><div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>Allowed types only, up to 10 MB. Files stay private to this workspace.</div></>}
         {type === "WHATSAPP_TEMPLATE_REFERENCE" && <><label className="label" style={{ marginTop: 13 }}>Live WhatsApp template</label>{templateError ? <div role="alert" style={{ color: "var(--error-text)", fontSize: 12 }}>{templateError}</div> : <select className="input" required value={form.template_id} onChange={(event) => setForm((current) => ({ ...current, template_id: event.target.value }))}><option value="">Choose a template</option>{templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.status} · {template.language}</option>)}</select>}<div style={{ color: "var(--mist)", fontSize: 10, marginTop: 6 }}>This saves a validated reference, not a copy of the Meta template.</div></>}
         {actionError && <div role="alert" style={{ color: "var(--error-text)", fontSize: 12, marginTop: 13 }}>{actionError}</div>}
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" onClick={() => setType(null)}>Back</button><button type="submit" className="btn btn-gold" disabled={saving || newTextSaving || (type === "WHATSAPP_TEMPLATE_REFERENCE" && !!templateError)}>{saving || newTextSaving ? (["DOCUMENT","IMAGE"].includes(type) ? "Uploading…" : "Saving…") : "Save content"}</button></div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20, gap: 10 }}><button type="button" className="btn btn-wire" disabled={saving} onClick={() => setType(null)}>Back</button><button type="submit" className="btn btn-gold" disabled={saving || newTextSaving || (type === "WHATSAPP_TEMPLATE_REFERENCE" && !!templateError)}>{saving || newTextSaving ? (["DOCUMENT","IMAGE"].includes(type) ? (uploadProgress === 100 ? "Saving file…" : `Uploading ${uploadProgress || 0}%…`) : "Saving…") : "Save content"}</button></div>
       </form>}
     </div></div>}
   </div>
