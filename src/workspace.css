@@ -200,6 +200,16 @@ body {font-weight:400;}
 .workspace .usage-snapshot-body .surface-footnote { font-size:15px; line-height:1.6; }
 .workspace .usage-snapshot-body .btn { font-size:14px; }
 
+/* Let each filter group wrap across the full card on phones. */
+.workspace .content-library-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px;margin-bottom:16px}
+.workspace .content-library-filter-group{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.workspace .content-library-type-filters{flex:1 1 240px}
+.workspace .content-library-toolbar .content-library-search{flex:0 1 210px;width:210px;min-width:0;max-width:100%;box-sizing:border-box}
+@media(max-width:768px){
+ .workspace .content-library-toolbar{display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
+ .workspace .content-library-toolbar .content-library-search{width:100%}
+}
+
 /* Content review remains usable on narrow phones. */
 .content-library-layout>*,.knowledge-review-columns>*{min-width:0}
 .content-library-layout button{max-width:100%;overflow-wrap:anywhere}
