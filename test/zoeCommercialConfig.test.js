@@ -118,3 +118,23 @@ test('the existing Update Live divergence workflow remains present for saved act
   assert.match(source, /Update Live Agent/)
   assert.match(source, /\/ai-agents\/"\+agentId\+"\/update-live/)
 })
+
+test('appointment settings save independently of the quotation action', async () => {
+  const ui = app({ initialDraft: { ...draft(), booking_enabled: false } })
+  ui.input('Handle appointments and reservations').props.onChange({ target: { checked: true } })
+  assert.equal(ui.input('Handle appointments and reservations').props.checked, true)
+  assert.equal(ui.input('Handle quotation requests').props.checked, false)
+  await ui.button('Save draft').props.onClick()
+  const call = ui.calls.find(item => item.url === '/ai-agents/draft-agent/draft')
+  assert.equal(JSON.parse(call.init.body).booking_enabled, true)
+})
+
+test('starting from the appointment library template preselects booking', () => {
+  const ui = app()
+  ui.states[0].push({ key: 'appointment_reservations', title: 'Appointments and reservations', booking_enabled: true })
+  const card = nodes(ui.render()).find(node => node.type === 'article' && node.props.className === 'work-surface' &&
+    nodes(node).some(child => child.type === 'h2' && child.props.children === 'Appointments and reservations'))
+  nodes(card).find(node => node.type === 'button').props.onClick()
+  assert.equal(ui.states[4].template_key, 'appointment_reservations')
+  assert.equal(ui.input('Handle appointments and reservations').props.checked, true)
+})
