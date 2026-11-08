@@ -22,6 +22,119 @@ function quotationAction(value) {
   };
 }
 
+function DocumentKnowledgePicker({ apiFetch, knowledge, refreshKnowledge }) {
+  const [documents, setDocuments] = useState([]);
+  const [catalogError, setCatalogError] = useState("");
+  const [review, setReview] = useState(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const requestLock = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadDocuments() {
+      try {
+        const response = await apiFetch("/content");
+        const { items = [] } = await response.json();
+        if (active) setDocuments(items.filter(item => item.content_type === "DOCUMENT" && !item.archived_at));
+      } catch {
+        if (active) setCatalogError("Could not load Content Library documents. Reopen this draft to try again.");
+      }
+    }
+    loadDocuments();
+    return () => { active = false; };
+  }, [apiFetch]);
+
+  async function prepare(item) {
+    if (requestLock.current) return;
+    requestLock.current = true;
+    setBusy(item.id);
+    setFeedback(null);
+    try {
+      const path = "/content/" + item.id;
+      const history = await apiFetch(path + "/knowledge-ingestions");
+      const { ingestions = [] } = await history.json();
+      const latest = ingestions[0];
+      if (["pending", "processing"].includes(latest?.status)) {
+        setFeedback({ id: item.id, text: "Extraction is still running. Check again in a moment." });
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      if (latest?.status === "approved" && latest.revision &&
+          (!latest.revision.valid_from || latest.revision.valid_from <= today) &&
+          (!latest.revision.valid_until || latest.revision.valid_until >= today)) {
+        await refreshKnowledge();
+        return;
+      }
+      let run = latest;
+      if (run?.status !== "ready_for_review") {
+        const response = await apiFetch(path + "/extract-knowledge", { method: "POST" });
+        run = (await response.json()).ingestion;
+      }
+      setText(run.extracted_text || "");
+      setReview({ item, run });
+    } catch (error) {
+      setFeedback({ id: item.id, text: error?.message || "Could not prepare this document. Try again." });
+    } finally {
+      requestLock.current = false;
+      setBusy("");
+    }
+  }
+
+  async function approve() {
+    if (!review || !text.trim() || requestLock.current) return;
+    const { item, run } = review;
+    requestLock.current = true;
+    setBusy(item.id);
+    setFeedback(null);
+    try {
+      await apiFetch("/content/knowledge-ingestions/" + run.id + "/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extracted_text: text })
+      });
+      setReview(null);
+      await refreshKnowledge();
+    } catch (error) {
+      setFeedback({ id: item.id, text: error?.message || "Could not finish preparing this document. Try again." });
+    } finally {
+      requestLock.current = false;
+      setBusy("");
+    }
+  }
+
+  const approved = new Set(knowledge.map(item => item.id));
+  return <>
+    {catalogError && <p role="alert">{catalogError}</p>}
+    {documents.filter(item => !approved.has(item.id)).map(item => (
+      <div key={item.id} style={{ marginTop: 10, padding: 12, border: "1px solid var(--wire)", overflowWrap: "anywhere" }}>
+        <p><strong>{item.name}</strong> · Document</p>
+        {review?.item.id === item.id ? (
+          <div>
+            <p>Review the text the agent will use to answer questions.</p>
+            {review.run.review_notes?.map((note, index) => <p key={index}>{note}</p>)}
+            <label className="label" htmlFor="agent-document-review">Extracted text</label>
+            <textarea id="agent-document-review" className="textarea" value={text} maxLength={20000}
+              rows={8} disabled={!!busy} onChange={event => setText(event.target.value)} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <button type="button" className="btn btn-gold" disabled={!!busy || !text.trim()} onClick={approve}>
+                {busy ? "Approving…" : "Approve as knowledge"}
+              </button>
+              <button type="button" className="btn btn-wire" disabled={!!busy} onClick={() => { setReview(null); setFeedback(null); }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="btn btn-wire" disabled={!!busy || !!review} onClick={() => prepare(item)}>
+            {busy === item.id ? "Preparing…" : "Prepare for AI"}
+          </button>
+        )}
+        {feedback?.id === item.id && <p role="status">{feedback.text}</p>}
+      </div>
+    ))}
+  </>;
+}
+
 export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRouteOpen, onRouteUnavailable }) {
   const canManage = ["owner", "admin"].includes(String(customer?.role || "").toLowerCase());
   const [templates,setTemplates]=useState([]);
@@ -51,6 +164,11 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
   const [updateLiveReview,setUpdateLiveReview]=useState(false);
   const [updateLiveError,setUpdateLiveError]=useState("");
   const [shareableFiles,setShareableFiles]=useState([]);
+
+  async function refreshKnowledge() {
+    const response = await apiFetch("/ai-agents/knowledge-items");
+    setKnowledge((await response.json()).items || []);
+  }
 
   async function load() {
     try {
@@ -272,7 +390,8 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
       <label className="label" style={{marginTop:16}}>What should customers call your assistant?</label><input className="input" value={draft.assistant_name} onChange={e=>setDraft({...draft,assistant_name:e.target.value})} placeholder="For example: Customer Support Assistant"/>
       <label className="label" style={{marginTop:16}}>Communication style</label><select className="input" value={draft.communication_style} onChange={e=>setDraft({...draft,communication_style:e.target.value})}>{styles.map(value=><option key={value}>{value}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Future connected WhatsApp number</label><select className="input" value={draft.whatsapp_number_id} onChange={e=>setDraft({...draft,whatsapp_number_id:e.target.value})}>{numbers.map(item=><option key={item.id} value={item.id}>{item.phone_number}</option>)}</select>
-      <label className="label" style={{marginTop:16}}>Approved knowledge (up to 10)</label><p style={{color:"var(--mist)",fontSize:12}}>Choose the Content Library sources your agent can use to answer questions. For a document, extract and approve its text in Content Library first. File sharing is set separately.</p>{knowledge.length ? knowledge.map(item=><label key={item.id} style={{display:"block",padding:"7px 0"}}><input type="checkbox" checked={draft.knowledge_item_ids.includes(item.id)} onChange={()=>toggleKnowledge(item.id)}/> {item.name} · {item.source_type === "image" ? "Image" : item.source_type === "template" ? "WhatsApp template" : item.source_type === "document" ? "Document" : "Text"}</label>) : <p style={{color:"var(--mist)"}}>No eligible knowledge yet. Add text, an approved WhatsApp template, or approved knowledge from an image or document in Content Library.</p>}
+      <label className="label" style={{marginTop:16}}>Approved knowledge (up to 10)</label><p style={{color:"var(--mist)",fontSize:12}}>Choose the sources your agent can use to answer questions. Prepare an uploaded document here, then tick it once approved. File sharing is set separately.</p>{knowledge.length ? knowledge.map(item=><label key={item.id} style={{display:"block",padding:"7px 0"}}><input type="checkbox" checked={draft.knowledge_item_ids.includes(item.id)} onChange={()=>toggleKnowledge(item.id)}/> {item.name} · {item.source_type === "image" ? "Image" : item.source_type === "template" ? "WhatsApp template" : item.source_type === "document" ? "Document" : "Text"}</label>) : <p style={{color:"var(--mist)"}}>No approved sources yet.</p>}
+      {canManage && <DocumentKnowledgePicker key={customer?.id} apiFetch={apiFetch} knowledge={knowledge} refreshKnowledge={refreshKnowledge} />}
       <section aria-label="Files this agent can share" style={{marginTop:20,padding:14,border:"1px solid var(--wire)",background:"var(--panel2)"}}><label className="label">Files this agent can share</label><p style={{margin:"6px 0 10px",color:"var(--cream2)"}}>Select approved images or PDFs this agent may send when a customer clearly asks for them. If several files could match, the agent will ask which one they mean.</p>{shareableFiles.length ? shareableFiles.map(item=><label key={item.id} style={{display:"block",padding:"5px 0"}}><input aria-label={`Share file: ${item.name}`} type="checkbox" checked={(draft.shareable_content_item_ids || []).includes(item.id)} onChange={()=>toggleShareableFile(item.id)}/> {item.name} · {item.source_type === 'image' ? 'Image' : 'PDF'}</label>) : <p style={{color:"var(--mist)"}}>No active images or PDFs are available in Content Library.</p>}</section>
       <label className="label" style={{marginTop:16}}>Handoff behaviour</label>{[["person","Customer asks for a person"],["unknown","No approved answer"]].map(([key,label])=><label key={key} style={{display:"block",padding:"5px 0"}}><input type="checkbox" checked={draft.handoff[key]!==false} onChange={e=>setDraft({...draft,handoff:{...draft.handoff,[key]:e.target.checked}})}/> {label}</label>)}
       <label className="label" htmlFor="handoff-business-name" style={{marginTop:12}}>Business name shown in handoffs</label>
