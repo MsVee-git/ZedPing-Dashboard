@@ -91,6 +91,21 @@ test('saving sends commercial_action with unrelated draft configuration and does
   assert.match(source, /Saving changes updates the draft\. It does not change the Live agent until Update Live Agent is used\./)
 })
 
+test('saved agent instructions reopen in the draft editor and can be updated without publishing', async () => {
+  const active = { id:'live-agent', name:'Sales Assistant', lifecycle_status:'active', deployment_mode:'live',
+    template_key:'sales_interest', whatsapp_number_id:'number-1', configuration:{ agent_instructions:'Answer campaign enquiries.' } }
+  const ui = app({ initialSelected:active })
+  ui.button('Edit draft').props.onClick()
+  const field = nodes(ui.render()).find(node => node.type === 'textarea' && node.props.id === 'agent-instructions')
+  assert.equal(field.props.value, 'Answer campaign enquiries.')
+  assert.equal(field.props.maxLength, 2000)
+  field.props.onChange({ target:{ value:'Ask which service the customer needs.' } })
+  await ui.button('Save draft').props.onClick()
+  const request = ui.calls.find(call => call.url === '/ai-agents/live-agent/draft' && call.init?.method === 'PATCH')
+  assert.equal(JSON.parse(request.init.body).agent_instructions, 'Ask which service the customer needs.')
+  assert.equal(ui.calls.some(call => call.url.endsWith('/update-live')), false)
+})
+
 test('an active agent opens a draft editor and retains its immutable Live version until Update Live', () => {
   const active = { id: 'live-agent', name: 'Sales Assistant', lifecycle_status: 'active', deployment_mode: 'live', activated_configuration_version: 8, template_key: 'sales_interest', whatsapp_number_id: 'number-1', knowledge: [{ id: 'knowledge-1' }], configuration: { communication_style: 'friendly', handoff: { person: true, unknown: true }, commercial_action: { type: 'quotation', qualification_fields: ['product_or_service'] } } }
   const ui = app({ initialSelected: active })
