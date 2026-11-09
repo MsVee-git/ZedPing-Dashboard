@@ -20,7 +20,7 @@ async function setup(width=390,height=760){
  const page=await browser.newPage({viewport:{width,height}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${server.address().port}`);
- await page.getByRole('button',{name:'All (2)',exact:true}).waitFor();
+ await page.getByRole('button',{name:/^All\s*2$/}).waitFor();
  return {page,errors,close:async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));}};
 }
 test('mobile separates list and thread, preserves drafts, and pins composer inside viewport',options,async()=>{
@@ -75,7 +75,7 @@ test('desktop retains independent list and conversation; background and native q
 
 test('Resolve is visible in the chat header and closes the handoff without sending a message',options,async()=>{
  const {page,errors,close}=await setup(1366,900);try{
-  await page.getByRole('button',{name:'My Chats (1)',exact:true}).waitFor();
+  await page.getByRole('button',{name:/^My Chats\s*1$/}).waitFor();
   await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
   const resolve=page.getByRole('button',{name:'Resolve & return to AI',exact:true});
   assert.equal(await resolve.isVisible(),true);
