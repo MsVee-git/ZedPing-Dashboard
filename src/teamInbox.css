@@ -396,3 +396,16 @@
  .workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle{grid-area:assistant;min-width:0;max-width:none;width:100%;font-size:12px!important;padding:8px 5px;gap:5px}
  .workspace .inbox-page.inbox-thread-open>.inbox-toolbar{display:none}
 }
+
+.inbox-attention-reasons { display:flex; flex-wrap:wrap; gap:4px; }
+.inbox-attention-reasons > span { border:1px solid #d8bf81; border-radius:6px; background:#f7edcf; color:#5c4316; font-size:11px; padding:2px 5px; }
+.inbox-workflow { border-top:1px solid var(--wire); margin-top:18px; padding-top:14px; }
+.inbox-workflow form, .inbox-workflow-outcomes { display:grid; gap:8px; margin-top:10px; }
+.inbox-workflow form > label, .inbox-workflow-outcomes label { font-size:13px; }
+.inbox-workflow-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.inbox-workflow-outcomes label { display:flex; align-items:center; gap:6px; }
+.inbox-workflow-outcomes small { color:var(--mist); }
+@media(max-width:768px) {
+  .workspace .inbox-page .inbox-tabs { grid-template-columns:1fr 1.7fr 1fr 1.2fr; }
+  .workspace .inbox-page .inbox-tabs > .btn[aria-pressed] { white-space:normal; line-height:1.1; height:auto; }
+}

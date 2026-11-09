@@ -20,7 +20,7 @@ async function setup(width=390,height=760){
  const page=await browser.newPage({viewport:{width,height}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`http://127.0.0.1:${server.address().port}`);
- await page.getByRole('button',{name:'All (2)',exact:true}).waitFor();
+ await page.getByRole('button',{name:/^All\s*2$/}).waitFor();
  return {page,errors,close:async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));}};
 }
 test('mobile separates list and thread, preserves drafts, and pins composer inside viewport',options,async()=>{
@@ -75,7 +75,7 @@ test('desktop retains independent list and conversation; background and native q
 
 test('Resolve is visible in the chat header and closes the handoff without sending a message',options,async()=>{
  const {page,errors,close}=await setup(1366,900);try{
-  await page.getByRole('button',{name:'My conversations (1)',exact:true}).waitFor();
+  await page.getByRole('button',{name:/^My Chats\s*1$/}).waitFor();
   await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
   const resolve=page.getByRole('button',{name:'Resolve & return to AI',exact:true});
   assert.equal(await resolve.isVisible(),true);
@@ -140,6 +140,27 @@ test('staff follow-ups and customer replies move chats to the top without refres
   await page.evaluate(()=>window.receiveFixtureMessage('human','Please send the fee schedule'));
   await page.locator('.inbox-history').getByText('Please send the fee schedule',{exact:true}).waitFor();
   assert.equal(await page.getByRole('textbox',{name:'Reply or caption'}).inputValue(),'Unsent draft to keep');
+  assert.deepEqual(errors,[]);
+ }finally{await close();}
+});
+
+test('mobile attention queue supports callbacks and recording outcomes from chat details',options,async()=>{
+ const {page,errors,close}=await setup();
+ try {
+  await page.getByRole('button',{name:/^Needs attention/}).click();
+  await page.getByText('Awaiting reply',{exact:true}).waitFor();
+  assert.equal(await page.locator('.inbox-open').count(),1);
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  await page.getByRole('button',{name:'Details',exact:true}).click();
+  await page.getByLabel('Callback time (your local time)').fill('2026-10-20T10:30');
+  await page.getByRole('button',{name:'Set callback',exact:true}).click();
+  await page.getByRole('button',{name:'Clear callback',exact:true}).waitFor();
+  await page.getByRole('checkbox',{name:'Booked'}).check();
+  await page.getByRole('checkbox',{name:'Paid'}).check();
+  await page.getByRole('button',{name:'Back to chat',exact:true}).click();
+  await page.getByRole('button',{name:'← Chats',exact:true}).click();
+  await page.getByText('Callback due',{exact:true}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method==='PATCH').map(r=>r.data.field)),['callback_due_at','booked_at','paid_at']);
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });
