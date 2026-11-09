@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { PageTitle, AgentBadge, Surface } from "./WorkspaceUI";
 
 const styles = ["professional", "friendly", "warm", "concise"];
+const maxAgentInstructions = 2000;
 const quotationFields = [
   { key: "product_or_service", label: "Product / service", required: true },
   { key: "quantity", label: "Quantity" },
@@ -212,7 +213,7 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
     if (!canManage) return;
     const source=agent || {};
     setMessages([]); setTest(null); setNotice("");
-    setDraft({id:source.id || null,template_key:source.template_key || template.key,assistant_name:source.name || template.title || "",communication_style:source.configuration?.communication_style || "professional",whatsapp_number_id:source.whatsapp_number_id || numbers[0]?.id || "",knowledge_item_ids:(source.knowledge || []).map(item=>item.id),shareable_content_item_ids:(source.configuration?.shareable_content_item_ids || source.configuration?.shareable_attachments || []).map(item=>typeof item === 'string' ? item : item.id).filter(Boolean),handoff:{person:true,unknown:true,quote_or_buy:true,phrases:[],...(source.configuration?.handoff || {})},commercial_action:quotationAction(source.configuration?.commercial_action),booking_enabled:agent ? source.configuration?.booking_enabled !== false : template.booking_enabled === true});
+    setDraft({id:source.id || null,template_key:source.template_key || template.key,assistant_name:source.name || template.title || "",communication_style:source.configuration?.communication_style || "professional",agent_instructions:source.configuration?.agent_instructions || "",whatsapp_number_id:source.whatsapp_number_id || numbers[0]?.id || "",knowledge_item_ids:(source.knowledge || []).map(item=>item.id),shareable_content_item_ids:(source.configuration?.shareable_content_item_ids || source.configuration?.shareable_attachments || []).map(item=>typeof item === 'string' ? item : item.id).filter(Boolean),handoff:{person:true,unknown:true,quote_or_buy:true,phrases:[],...(source.configuration?.handoff || {})},commercial_action:quotationAction(source.configuration?.commercial_action),booking_enabled:agent ? source.configuration?.booking_enabled !== false : template.booking_enabled === true});
   }
   function toggleKnowledge(id) {
     const ids=draft.knowledge_item_ids || [];
@@ -389,6 +390,13 @@ export function ZoeAI({ customer, userId, apiFetch, routeAgentId = null, onRoute
       }}>{templates.map(item=><option key={item.key} value={item.key}>{item.title}</option>)}</select>
       <label className="label" style={{marginTop:16}}>What should customers call your assistant?</label><input className="input" value={draft.assistant_name} onChange={e=>setDraft({...draft,assistant_name:e.target.value})} placeholder="For example: Customer Support Assistant"/>
       <label className="label" style={{marginTop:16}}>Communication style</label><select className="input" value={draft.communication_style} onChange={e=>setDraft({...draft,communication_style:e.target.value})}>{styles.map(value=><option key={value}>{value}</option>)}</select>
+      <label className="label" htmlFor="agent-instructions" style={{marginTop:16}}>Agent instructions (optional)</label>
+      <p id="agent-instructions-help" style={{color:"var(--mist)",fontSize:12}}>Describe the agent’s role, which enquiries it should handle, and what it should ask customers. Add business facts under Approved knowledge and enable booking and quotation workflows under Commercial actions.</p>
+      <textarea id="agent-instructions" className="textarea" aria-describedby="agent-instructions-help"
+        rows={6} maxLength={maxAgentInstructions} value={draft.agent_instructions || ""}
+        onChange={e=>setDraft({...draft,agent_instructions:e.target.value})}
+        placeholder="You are our sales assistant. Answer campaign enquiries, ask what service the customer needs, and help them request an appointment."/>
+      <p style={{color:"var(--mist)",fontSize:12}}>{(draft.agent_instructions || "").length} / {maxAgentInstructions}</p>
       <label className="label" style={{marginTop:16}}>Future connected WhatsApp number</label><select className="input" value={draft.whatsapp_number_id} onChange={e=>setDraft({...draft,whatsapp_number_id:e.target.value})}>{numbers.map(item=><option key={item.id} value={item.id}>{item.phone_number}</option>)}</select>
       <label className="label" style={{marginTop:16}}>Approved knowledge (up to 10)</label><p style={{color:"var(--mist)",fontSize:12}}>Choose the sources your agent can use to answer questions. Prepare an uploaded document here, then tick it once approved. File sharing is set separately.</p>{knowledge.length ? knowledge.map(item=><label key={item.id} style={{display:"block",padding:"7px 0"}}><input type="checkbox" checked={draft.knowledge_item_ids.includes(item.id)} onChange={()=>toggleKnowledge(item.id)}/> {item.name} · {item.source_type === "image" ? "Image" : item.source_type === "template" ? "WhatsApp template" : item.source_type === "document" ? "Document" : "Text"}</label>) : <p style={{color:"var(--mist)"}}>No approved sources yet.</p>}
       {canManage && <DocumentKnowledgePicker key={customer?.id} apiFetch={apiFetch} knowledge={knowledge} refreshKnowledge={refreshKnowledge} />}
