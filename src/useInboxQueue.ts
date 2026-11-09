@@ -1,10 +1,11 @@
+import { inboxAttentionReasons } from './lib/inboxAttention';
 import { mergeInboxRows, sortInboxRows } from './lib/inboxActivity';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export const INBOX_VIEWS = [['needs_attention','Needs Attention'],['zoe','AI handling'],['assigned_to_me','My conversations'],['unassigned_human','Unassigned'],['unread','Unread'],['resolved','Resolved'],['all','All']];
 
 export function matchesInboxView(row,view,userId) {
-  if(view==='needs_attention')return row.status==='needs_attention' && row.control_mode==='needs_attention';
+  if(view==='needs_attention')return inboxAttentionReasons(row).length>0;
   if(view==='zoe')return row.status==='open' && row.control_mode==='automation';
   if(view==='assigned_to_me')return row.assigned_user_id===userId && row.status!=='resolved' && ['needs_attention','human'].includes(row.control_mode);
   if(view==='unassigned_human')return !row.assigned_user_id && row.status==='needs_attention' && row.control_mode==='needs_attention';
