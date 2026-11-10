@@ -79,7 +79,7 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
       const response = await apiFetch(`${apiBase}/broadcasts/scheduled/${encodeURIComponent(id)}/retry-failed`, { method: 'POST' });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || 'Could not retry the failed numbers.');
-      setRetryNotice({ text: `Retry requested for ${body.queued} ${body.queued === 1 ? 'number' : 'numbers'}.${body.skipped ? ` Skipped ${body.skipped} because the contact, sending number or original template is unavailable for retry.` : ''} Check delivery below.` });
+      setRetryNotice({ text: `Retry requested for ${body.queued} ${body.queued === 1 ? 'number' : 'numbers'}.${body.skipped ? ` Skipped ${body.skipped} because the contact, sending number or original template is unavailable for retry.` : ''}` });
     } catch (error) {
       setRetryNotice({ text: error instanceof Error ? error.message : 'Could not retry the failed numbers.', error: true });
     } finally {
@@ -124,7 +124,8 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
     </div>
     <p style={{fontSize:12}}>Status updates every 10 seconds while this page is visible.</p>
     {refreshError && current?.activity && <p role="alert">{refreshError} Showing the last saved activity.</p>}
-    {(failedRecipients.length > 0 || retryNotice) && <div style={{ marginBottom: 20 }}>
+    {!current ? <p role="status">Loading broadcast details…</p> : current.error ? <p role="alert" style={{ color: "var(--error-text)" }}>{current.error}</p> : current.activity ? <BroadcastHistoryFacts activity={current.activity} /> : null}
+    {(failedRecipients.length > 0 || retryNotice) && <div style={{ marginTop: 20, marginBottom: 20 }}>
       <h3>Failed recipients</h3>
       {retryableCount > 0 && <button className="btn btn-gold" type="button" disabled={retrying} onClick={retryFailed}>
         {retrying ? 'Requesting retry…' : `Retry failed numbers (${retryableCount})`}
@@ -136,7 +137,7 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
         </li>)}
       </ul>
     </div>}
-    {!!current?.activity?.pending_recipients?.length && <details style={{ marginBottom: 20 }}>
+    {!!current?.activity?.pending_recipients?.length && <details style={{ marginTop: 20, marginBottom: 20 }}>
       <summary>Awaiting confirmation ({current.activity.pending_recipients.length})</summary>
       <ul style={{ maxHeight: 240, overflowY: 'auto', paddingLeft: 20 }}>
         {current.activity.pending_recipients.map(recipient => <li key={recipient.id}>
@@ -144,6 +145,5 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
         </li>)}
       </ul>
     </details>}
-    {!current ? <p role="status">Loading broadcast details…</p> : current.error ? <p role="alert" style={{ color: "var(--error-text)" }}>{current.error}</p> : current.activity ? <BroadcastHistoryFacts activity={current.activity} /> : null}
   </section>;
 }
