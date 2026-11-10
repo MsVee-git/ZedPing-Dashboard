@@ -400,7 +400,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
       ) : (
         <>
           <p style={{ color: "var(--mist)", fontSize: 13, lineHeight: 1.6, marginTop: 14, maxWidth: 570 }}>
-            Start here in ZedPing. Sign in to Meta to authorize your business and select your WhatsApp number. ZedPing handles the partner setup and connection checks automatically; a separate partner-portal login is not required.
+            Start here in ZedPing. Sign in to Meta to authorize your business and select your WhatsApp number.
           </p>
 
           {!profileComplete && <div role="status" style={{ marginTop: 14, color: "var(--gold2)", fontSize: 14 }}><p style={{ margin: "0 0 10px" }}>Complete and save your business profile before connecting WhatsApp.</p><a className="btn btn-wire" href="/settings/business">Complete business profile →</a></div>}
