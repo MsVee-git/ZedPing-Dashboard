@@ -18,6 +18,7 @@ import { ConversationHandlingStatus } from "./ConversationHandlingStatus";
 import { MarketingOptOutBadge, BroadcastReviewSummary } from "./MarketingConsent";
 import { WhatsAppConnection } from "./WhatsAppConnection";
 import { canReuseAuthenticatedWorkspace } from "./lib/authWorkspaceLifecycle";
+import { proposedPlans } from "./lib/planUsage";
 import { ChatbotFlows } from "./ChatbotFlows";
 import { CustomAutomationBuilder } from "./CustomAutomationBuilder";
 import { ZoeAI } from "./ZoeAI";
@@ -500,12 +501,6 @@ function SignUp({ onSwitch, onAuth, invitation }) {
     finally { setLoading(false); }
   };
 
-  const plans = [
-    { id: "starter", label: "Starter", price: "K850" },
-    { id: "business", label: "Business", price: "K1,500", popular: true },
-    { id: "pro", label: "Pro", price: "K2,500" },
-  ];
-
   return (
     <AuthWrap>
       <div className="auth-card">
@@ -530,13 +525,13 @@ function SignUp({ onSwitch, onAuth, invitation }) {
             </div>
           </div>
           {!invited && <div>
-            <label className="label">Choose Plan</label>
+            <label className="label">Choose a monthly plan</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-              {plans.map(p => (
+              {proposedPlans.map(p => (
                 <div key={p.id} className={`plan-sel ${plan===p.id?"on":""}`} onClick={()=>setPlan(p.id)} style={{ position: "relative" }}>
-                  {p.popular && <div className="mono" style={{ position: "absolute", top: -8, left: "50%", transform: "translateX(-50%)", background: "var(--gold)", color: "var(--ink)", fontSize: 7, padding: "2px 8px", whiteSpace: "nowrap", letterSpacing: 1 }}>POPULAR</div>}
-                  <div className="mono" style={{ fontSize: 9, color: plan===p.id ? "var(--gold2)" : "var(--mist)", letterSpacing: 1 }}>{p.label}</div>
-                  <div style={{ fontSize: 13, color: plan===p.id ? "var(--cream)" : "var(--mist)", marginTop: 3, fontWeight: 600 }}>{p.price}</div>
+                  {p.id === "business" && <div className="mono" style={{ position: "absolute", top: -8, left: "50%", transform: "translateX(-50%)", background: "var(--gold)", color: "var(--ink)", fontSize: 7, padding: "2px 8px", whiteSpace: "nowrap", letterSpacing: 1 }}>POPULAR</div>}
+                  <div className="mono" style={{ fontSize: 9, color: plan===p.id ? "var(--gold2)" : "var(--mist)", letterSpacing: 1 }}>{p.name}</div>
+                  <div style={{ fontSize: 13, color: plan===p.id ? "var(--cream)" : "var(--mist)", marginTop: 3, fontWeight: 600 }}>K{p.price.toLocaleString("en-US")}</div>
                 </div>
               ))}
             </div>
