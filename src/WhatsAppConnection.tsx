@@ -328,7 +328,36 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
     }
   };
 
-  const busy = ["preparing", "meta", "validating", "in_progress"].includes(phase);
+  const busy = ["preparing", "meta", "validating", "in_progress", "disconnecting"].includes(phase);
+
+  const disconnect = async () => {
+    if (!canManage || busy || !connection?.id || connection.status !== "connected") return;
+    if (!window.confirm(`Disconnect ${connection.phone_number || "this number"} from ZedPing? ZedPing messaging will stop for this number while it is disconnected. Your history and WhatsApp Business account are kept.`)) return;
+
+    const workspace = customer?.id;
+    setPhase("disconnecting");
+    setMessage("");
+    try {
+      const response = await apiFetch(`${API}/whatsapp-connections/${encodeURIComponent(connection.id)}/disconnect`, { method: "POST" });
+      if (!response.ok) throw new Error("Unable to disconnect WhatsApp. Please try again.");
+      if (!mounted.current || workspaceRef.current !== workspace) return;
+      refreshSequence.current++;
+      pending.current = emptyEmbeddedSignupPending();
+      persistPending();
+      completionStarted.current = false;
+      setContext(previous => previous?.whatsapp_connection?.id === connection.id
+        ? { ...previous, whatsapp_connection: { ...previous.whatsapp_connection, status: "disconnected" } }
+        : previous);
+      await refresh();
+      if (!mounted.current || workspaceRef.current !== workspace) return;
+      setPhase("idle");
+      setMessage("WhatsApp number disconnected from ZedPing.");
+    } catch (error) {
+      if (!mounted.current || workspaceRef.current !== workspace) return;
+      setPhase("disconnect_error");
+      setMessage(error?.message || "Unable to disconnect WhatsApp. Please try again.");
+    }
+  };
 
   const retryProvisioning = async () => {
     if (!canManage || !connection?.id || connection?.provisioning_state !== "failed") return;
@@ -366,6 +395,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
               : "This number is linked to your workspace."}
           </div>
           {connection.provisioning_state === "failed" && canManage && <button type="button" className="btn btn-wire" onClick={retryProvisioning} disabled={busy} style={{ marginTop: 12 }}>{busy ? "Retrying…" : "Retry activation"}</button>}
+          {connection.status === "connected" && canManage && <button type="button" className="btn btn-wire" onClick={disconnect} disabled={busy} style={{ marginTop: 12 }}>{phase === "disconnecting" ? "Disconnecting…" : "Disconnect number"}</button>}
         </div>
       ) : (
         <>
@@ -386,7 +416,7 @@ export function WhatsAppConnection({ apiFetch, API, user, customer, onWorkspaceU
         </>
       )}
 
-      {message && <div role={phase === "error" ? "alert" : "status"} aria-live="polite" style={{ marginTop: 14, color: phase === "error" ? "var(--error-text)" : phase === "complete" ? "var(--success-text)" : "var(--cream2)", fontSize: 12, lineHeight: 1.5 }}>{message}</div>}
+      {message && <div role={["error", "disconnect_error"].includes(phase) ? "alert" : "status"} aria-live="polite" style={{ marginTop: 14, color: ["error", "disconnect_error"].includes(phase) ? "var(--error-text)" : phase === "complete" ? "var(--success-text)" : "var(--cream2)", fontSize: 12, lineHeight: 1.5 }}>{message}</div>}
       {["in_progress", "confirmation_required", "error"].includes(phase) && canManage && <button type="button" className="btn btn-wire" onClick={refresh} disabled={loading} style={{ marginTop: 12 }}>{loading ? "Checking connection…" : "Check connection"}</button>}
       {phase === "error" && pending.current.session && pending.current.phoneNumberId && canManage && !connection && <button type="button" className="btn btn-wire" onClick={finishConnection} style={{ marginTop: 12 }}>Resume secure setup</button>}
       {phase === "error" && !pending.current.session && !connection && canManage && emailVerified && profileComplete && configured && <button type="button" className="btn btn-wire" onClick={start} style={{ marginTop: 12 }}>Try again</button>}
