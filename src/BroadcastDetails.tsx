@@ -2,10 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { BroadcastSubmissionReceipt } from './BroadcastSubmissionReceipt';
 import { campaignReceipt, campaignStatus } from './lib/campaignStatus.js';
 
+type FailedRecipient = { id: string; phone: string | null; code: number | null; reason: string; can_retry: boolean };
+
 type Activity = {
   id: string; broadcast_name?: string; message?: string; status?: string; failure_reason?: string;
   recorded_recipients?: number | null; sent_count?: number | null; failed_count?: number | null;
   created_at?: string; scheduled_at?: string; completed_at?: string;
+  failed_recipients?: FailedRecipient[];
+  pending_recipients?: Pick<FailedRecipient, "id" | "phone" | "reason">[];
   delivery?: {delivered:number;read:number;failed:number;sent_pending:number;accepted_pending:number;unconfirmed:number;submission_failures:number;failure_reasons:Record<string,number>} | null;
 };
 
@@ -63,6 +67,27 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
   const [revision,setRevision] = useState(0);
   const [refreshing,setRefreshing] = useState(false);
   const [refreshError,setRefreshError] = useState('');
+  const [retrying, setRetrying] = useState(false);
+  const [retryNotice, setRetryNotice] = useState<{ text: string; error?: boolean } | null>(null);
+  const retryGuard = useRef(false);
+  async function retryFailed() {
+    if (retryGuard.current) return;
+    retryGuard.current = true;
+    setRetrying(true);
+    setRetryNotice(null);
+    try {
+      const response = await apiFetch(`${apiBase}/broadcasts/scheduled/${encodeURIComponent(id)}/retry-failed`, { method: 'POST' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Could not retry the failed numbers.');
+      setRetryNotice({ text: `Retry requested for ${body.queued} ${body.queued === 1 ? 'number' : 'numbers'}.${body.skipped ? ` Skipped ${body.skipped} because the contact, sending number or original template is unavailable for retry.` : ''} Check delivery below.` });
+    } catch (error) {
+      setRetryNotice({ text: error instanceof Error ? error.message : 'Could not retry the failed numbers.', error: true });
+    } finally {
+      retryGuard.current = false;
+      setRetrying(false);
+      setRevision(value => value + 1);
+    }
+  }
   useEffect(()=>{heading.current?.focus();},[id]);
   useEffect(() => {
     let active = true, busy = false;
@@ -90,6 +115,8 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
     return () => {active=false;controller.abort();window.clearInterval(timer);document.removeEventListener('visibilitychange',onVisible);};
   }, [id, apiBase, apiFetch, revision]);
   const current = result?.id === id ? result : null;
+  const failedRecipients = current?.activity?.failed_recipients || [];
+  const retryableCount = failedRecipients.filter(recipient => recipient.can_retry).length;
   return <section id="broadcast-details" className="card" aria-labelledby="broadcast-details-title" style={{ padding: 24, marginTop: 18 }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 18 }}>
       <h2 ref={heading} tabIndex={-1} id="broadcast-details-title" className="editorial" style={{ color: "var(--cream)", fontSize: 26 }}>Broadcast details</h2>
@@ -97,6 +124,26 @@ export function BroadcastDetails({ id, apiBase, apiFetch, onClose }: { id: strin
     </div>
     <p style={{fontSize:12}}>Status updates every 10 seconds while this page is visible.</p>
     {refreshError && current?.activity && <p role="alert">{refreshError} Showing the last saved activity.</p>}
+    {(failedRecipients.length > 0 || retryNotice) && <div style={{ marginBottom: 20 }}>
+      <h3>Failed recipients</h3>
+      {retryableCount > 0 && <button className="btn btn-gold" type="button" disabled={retrying} onClick={retryFailed}>
+        {retrying ? 'Requesting retry…' : `Retry failed numbers (${retryableCount})`}
+      </button>}
+      {retryNotice && <p role={retryNotice.error ? 'alert' : 'status'}>{retryNotice.text}</p>}
+      <ul style={{ maxHeight: 240, overflowY: 'auto', paddingLeft: 20 }}>
+        {failedRecipients.map(recipient => <li key={recipient.id} style={{ marginTop: 8 }}>
+          <strong>{recipient.phone || 'Number unavailable'}</strong>{' · '}{recipient.reason}{recipient.code ? ` (${recipient.code})` : ''}
+        </li>)}
+      </ul>
+    </div>}
+    {!!current?.activity?.pending_recipients?.length && <details style={{ marginBottom: 20 }}>
+      <summary>Awaiting confirmation ({current.activity.pending_recipients.length})</summary>
+      <ul style={{ maxHeight: 240, overflowY: 'auto', paddingLeft: 20 }}>
+        {current.activity.pending_recipients.map(recipient => <li key={recipient.id}>
+          <strong>{recipient.phone}</strong>{' · '}{recipient.reason}
+        </li>)}
+      </ul>
+    </details>}
     {!current ? <p role="status">Loading broadcast details…</p> : current.error ? <p role="alert" style={{ color: "var(--error-text)" }}>{current.error}</p> : current.activity ? <BroadcastHistoryFacts activity={current.activity} /> : null}
   </section>;
 }
