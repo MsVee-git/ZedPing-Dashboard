@@ -14,7 +14,7 @@ test('Team Inbox renders inbound image media through the authenticated message p
 })
 
 test('Team Inbox preserves captions and presents a safe unavailable state', () => {
-  assert.match(inbox, /message\.message_body\?<InboxMessageBody message=\{message\}/)
+  assert.match(inbox, /message\.message_body\|\|\(message\.direction==='inbound'&&message\.ad_referral\?\.source_type==='ad'\)\?<InboxMessageBody message=\{message\}/)
   assert.match(source, /Loading image…/)
   assert.match(source, /Image unavailable/)
   assert.doesNotMatch(inbox, /message\.message_body\|\|'Unsupported message type'/)
