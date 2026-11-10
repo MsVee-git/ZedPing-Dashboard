@@ -39,11 +39,13 @@ async function apiFetch(url,init={}){
  if(u.pathname==='/inbox-copilot/access')return response({enabled:true,monthly_limit:100});
  if(u.pathname==='/inbox-copilot')return response({mode:'summary',overview:'Review these chats',reviewed:2,items:[{conversation_id:'human',name:'School enquiries',summary:'Needs school fees follow-up'}]});
  if(parts[2]==='counts')return response({all:2,unread:0,assigned_to_me:1,zoe:1,needs_attention:0,resolved:0,unassigned_human:0});
- if(parts[2]==='members')return response([{id:'staff',name:'Test teammate'}]);
+ if(parts[2]==='members')return response([{id:'staff',name:'Test teammate'},{id:'colleague',name:'Demo teammate'}]);
  if(!parts[2])return response({conversations:Object.values(threads).map(t=>t.conversation).sort((a,b)=>Date.parse(b.last_message_at)-Date.parse(a.last_message_at)).filter(r=>u.searchParams.get('view')!=='zoe'||r.control_mode==='automation'),next_offset:null});
  if(parts[2]==='bulk')return response({results:data.items.map(item=>({id:item.id,outcome:'applied',conversation:threads[item.id].conversation}))});
  const t=threads[parts[2]];
  if(parts[3]==='reply'){t.messages.push({id:'sent',direction:'outbound',message_body:data.message,status:'sent'});Object.assign(t.conversation,{last_message_at:new Date().toISOString(),updated_at:new Date().toISOString()});}
+ if(parts[3]==='assignment')t.conversation.assigned_user_id=data.assigned_user_id;
+ if(parts[3]==='handoff')Object.assign(t.conversation,{assigned_user_id:data.assigned_user_id,control_mode:'needs_attention',status:'needs_attention'});
  if(parts[3]==='take')Object.assign(t.conversation,{control_mode:'human',status:'open'});
  if(parts[3]==='resolve')t.conversation.status='resolved';
  return response(t);

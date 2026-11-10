@@ -1219,12 +1219,16 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const [reply,setReply]=useReplyDraft(customer?.id,user?.id,selectedId);
   const [replying,setReplying]=useState(false),[replyTarget,setReplyTarget]=useState(null),[attachment,setAttachment]=useState(null),[locationDraft,setLocationDraft]=useState(null),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
   const [selection,setSelection]=useState(new Set()),[assignee,setAssignee]=useState(''),[confirmation,setConfirmation]=useState(null),[bulkResult,setBulkResult]=useState(null);
+  const [assignment,setAssignment]=useState(null);
   const [selectionMode,setSelectionMode]=useState(false),[detailsOpen,setDetailsOpen]=useState(false),[copilotOpen,setCopilotOpen]=useState(false);
   const requestRef=useRef(0),actionLock=useRef(false),workspaceRef=useRef(customer?.id),attachmentInputRef=useRef(null);
   workspaceRef.current=customer?.id;
   const {historyRef,onHistoryScroll,scrollToLatest}=useInboxScroll(selectedId,thread?.messages,threadLoading);
   const active=thread?.conversation;
   const canManageAssignment=['owner','admin'].includes(customer?.role);
+  const canAssign=canManageAssignment && active?.status!=='resolved' && ['automation','needs_attention','human'].includes(active?.control_mode);
+  const assigning=canAssign && assignment?.id===selectedId && assignment.workspace===customer?.id;
+  const assigningFromAutomation=active?.control_mode==='automation';
   const isHuman=active?.status==='open' && active?.control_mode==='human';
   const isAssignedToMe=active?.assigned_user_id===user?.id;
   const canReply=isHuman && (isAssignedToMe || canManageAssignment);
@@ -1232,6 +1236,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
   const composerRef=useInboxComposer(reply,selectedId,threadLoading,canReply);
   const canTake=active?.status!=='resolved' && ['automation','needs_attention'].includes(active?.control_mode) && (!active?.assigned_user_id || isAssignedToMe);
   const assigneeName=row=>members.find(member=>member.id===row?.assigned_user_id)?.name || members.find(member=>member.id===row?.assigned_user_id)?.email || 'another team member';
+  useEffect(()=>{setAssignment(null);},[selectedId,customer?.id]);
   useEffect(()=>{requestRef.current++;setSelectedId('');setThread(null);setReplyTarget(null);setAttachment(null);setLocationDraft(null);setConfirmation(null);setBulkResult(null);setActionError('');},[customer?.id]);
   useEffect(()=>{setSelection(new Set());setSelectionMode(false);setDetailsOpen(false);setConfirmation(null);setBulkResult(null);},[customer?.id,filter]);
   useEffect(()=>{setSelection(old=>new Set([...old].filter(id=>rows.some(row=>row.id===id))));},[rows]);
@@ -1282,8 +1287,19 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
       if(workspace!==workspaceRef.current)return;
       if(request===requestRef.current && payload.conversation)setThread(old=>old?{...old,conversation:payload.conversation}:old);
       await queue.refresh();
-    }catch(failure){if(workspace===workspaceRef.current)setActionError(failure.message);}
+      return request===requestRef.current;
+    }catch(failure){if(request===requestRef.current && workspace===workspaceRef.current)setActionError(failure.message);}
     finally{actionLock.current=false;setBusy(false);}
+  };
+  const saveAssignment=async event=>{
+    event.preventDefault();
+    if(!assigning || busy || replying)return;
+    if(assigningFromAutomation && !assignment.assignee)return;
+    const saved=await runAction(assigningFromAutomation?'/handoff':'/assignment',{
+      method:assigningFromAutomation?'POST':'PATCH',
+      body:{assigned_user_id:assignment.assignee||null}
+    });
+    if(saved)setAssignment(null);
   };
   const sendReply=async event=>{
     event.preventDefault();if(actionLock.current || !canReply || !reply.trim())return;
@@ -1364,7 +1380,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
       <button className="btn btn-wire" disabled={busy} onClick={()=>prepareBulk('reopen')}>Reopen selected</button>
       <button className="btn btn-wire" disabled={busy} onClick={()=>setSelection(new Set())}>Clear selection</button>
     </div>}
-    {actionError && <div className="inbox-notice" role="alert">{actionError}</div>}
+    {actionError && !assigning && <div className="inbox-notice" role="alert">{actionError}</div>}
     <div className="team-inbox">
       <div className="card inbox-list">
         <form className="inbox-search" role="search" onSubmit={event=>{event.preventDefault();if(inboxSearch.trim().length>=2)setAppliedSearch(inboxSearch.trim());else if(!inboxSearch.trim())setAppliedSearch('');}}><label><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" minLength={2} maxLength={120} aria-label="Search all inbox messages, contact names or phone numbers" placeholder="Search messages, names or numbers" value={inboxSearch} onChange={event=>{setInboxSearch(event.target.value);if(!event.target.value)setAppliedSearch('');}}/></label><button className="btn btn-gold" type="submit" disabled={loading||inboxSearch.trim().length<2}>Search</button>{appliedSearch&&<button className="text-button" type="button" onClick={()=>{setInboxSearch('');setAppliedSearch('');}}>Clear</button>}</form>
@@ -1389,7 +1405,7 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
       <div className="card inbox-conversation">
         {selectedId&&<div className="inbox-thread-nav"><button className="btn btn-wire inbox-back" disabled={replying||busy} onClick={closeConversation}>← Chats</button><span>Conversation</span><button className="btn btn-wire inbox-thread-assistant" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>Ai assistant</button></div>}
         {!selectedId?<Empty msg="Select a conversation to read and reply"/>:threadLoading?<Loader/>:threadError?<div role="alert" className="inbox-notice">{threadError}</div>:!active?<Empty msg="Conversation unavailable"/>:<>
-          <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||active.contacts?.phone_number||'Customer'}</strong>{active.contacts?.name&&active.contacts.name!==active.contacts?.phone_number&&<small>{active.contacts?.phone_number}</small>}<small>{active.assigned_user_id?`Assigned to ${assigneeName(active)}`:'Unassigned'}</small></div><div className="inbox-conversation-actions"><button className="btn btn-wire" aria-expanded={detailsOpen} aria-controls="inbox-contact-details" onClick={()=>setDetailsOpen(!detailsOpen)}>{detailsOpen?'Hide details':'Details'}</button><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/>{canResolve && <button type="button" className="btn btn-gold" disabled={busy||replying} title="Resolve this chat; the next customer message returns to your configured AI and automations." onClick={()=>runAction('/resolve')}>Resolve &amp; return to AI</button>}</div></div>
+          <div className="inbox-conversation-header"><div><strong>{active.contacts?.name||active.contacts?.phone_number||'Customer'}</strong>{active.contacts?.name&&active.contacts.name!==active.contacts?.phone_number&&<small>{active.contacts?.phone_number}</small>}<small>{active.assigned_user_id?`Assigned to ${assigneeName(active)}`:'Unassigned'}</small></div><div className="inbox-conversation-actions">{canAssign && <button type="button" className="btn btn-wire" disabled={busy||replying} onClick={()=>{setActionError('');setAssignment({id:active.id,workspace:customer?.id,assignee:assigningFromAutomation?'':active.assigned_user_id||''});}}>Assign chat</button>}<button className="btn btn-wire" aria-expanded={detailsOpen} aria-controls="inbox-contact-details" onClick={()=>setDetailsOpen(!detailsOpen)}>{detailsOpen?'Hide details':'Details'}</button><ConversationHandlingStatus conversation={active}/><MarketingOptOutBadge contact={active.contacts}/>{canResolve && <button type="button" className="btn btn-gold" disabled={busy||replying} title="Resolve this chat; the next customer message returns to your configured AI and automations." onClick={()=>runAction('/resolve')}>Resolve &amp; return to AI</button>}</div></div>
           {active.status==='resolved' && <p className="inbox-resolution-help" role="status">Conversation resolved. The next customer message returns to your configured AI and automations.</p>}
           <div ref={historyRef} onScroll={onHistoryScroll} className="inbox-history" aria-label="Message history" tabIndex={0}>
             {(thread.messages||[]).map(message=>{const media=message.inbound_media||message.outbound_media;return <div className={'inbox-message '+(message.direction==='outbound'?'is-outbound':'is-inbound')} id={`message-${message.id}`} key={message.id}>{message.reply_to?<QuotedMessage message={message.reply_to}/>:null}{media?<InboxMedia conversationId={active.id} messageId={message.id} media={media} direction={message.direction} apiFetch={apiFetch}/>:null}{message.message_body?<InboxMessageBody message={message}/>:!media?<div className="inbox-message-body">Unsupported message type</div>:null}<div className="inbox-message-meta"><div>{message.direction==='outbound'?<MessageDeliveryStatus message={message}/>:'Received'} · {message.created_at?new Date(message.created_at).toLocaleString():'—'}</div>{canReply&&<button type="button" className="text-button" disabled={replying||busy} onClick={()=>{setReplyTarget(message);setLocationDraft(null);}}>Reply</button>}</div></div>})}
@@ -1410,10 +1426,26 @@ function TeamInbox({ customer, user, routeConversationId, onRouteOpen }) {
           <p className="inbox-note">{active.assigned_user_id?`Assigned to ${assigneeName(active)}`:'No assigned team member'}</p>
           {active.status==='needs_attention' && active.assigned_user_id && <p className="inbox-note">Assignment reserves this chat. The assignee still needs to take it before replying.</p>}
 
-          {canManageAssignment && ['needs_attention','human'].includes(active.control_mode)&&active.status!=='resolved' && <><label className="label" htmlFor="conversation-assignee">Assign to</label><select id="conversation-assignee" className="input" disabled={busy} value={active.assigned_user_id||''} onChange={e=>runAction('/assignment',{method:'PATCH',body:{assigned_user_id:e.target.value||null}})}><option value="">No assigned team member</option>{members.map(member=><option key={member.id} value={member.id}>{member.name||member.email||member.id}</option>)}</select></>}
         </>}
       </div>
     </div>
+    {assigning && <div className="modal-bg" role="dialog" aria-modal="true" aria-label="Assign chat">
+      <form className="modal" onSubmit={saveAssignment}>
+        <h3>Assign chat</h3>
+        {assigningFromAutomation && <p>Assigning this chat pauses AI and moves it to the team queue. The assignee can then take the conversation and reply.</p>}
+        <label className="label" htmlFor="conversation-assignee">Team member</label>
+        <select id="conversation-assignee" className="input" value={assignment.assignee} disabled={busy||!members.length} autoFocus onChange={e=>setAssignment({...assignment,assignee:e.target.value})}>
+          <option value="" disabled={assigningFromAutomation}>{assigningFromAutomation?'Choose a team member':'No assigned team member'}</option>
+          {members.map(member=><option key={member.id} value={member.id}>{member.name||member.email||member.id}</option>)}
+        </select>
+        {!members.length && <p role="status">Team members are unavailable. Reopen Team Inbox to reload the list.</p>}
+        {actionError && <p role="alert">{actionError}</p>}
+        <div style={{display:'flex',gap:8,marginTop:16}}>
+          <button type="button" className="btn btn-wire" disabled={busy} onClick={()=>{setAssignment(null);setActionError('');}}>Cancel</button>
+          <button type="submit" className="btn btn-gold" disabled={busy||!members.length||(assigningFromAutomation?!assignment.assignee:assignment.assignee===(active.assigned_user_id||''))}>{busy?'Saving…':assigningFromAutomation?'Assign & pause AI':'Save assignment'}</button>
+        </div>
+      </form>
+    </div>}
     {locationDraft&&<div className="modal-bg" role="dialog" aria-modal="true" aria-label="Send location"><form className="modal" onSubmit={sendLocation}><h3>Send location</h3><p>Share a precise location with this customer.</p><label className="label">Latitude<input required className="input" inputMode="decimal" value={locationDraft.latitude} onChange={e=>setLocationDraft(old=>({...old,latitude:e.target.value}))}/></label><label className="label">Longitude<input required className="input" inputMode="decimal" value={locationDraft.longitude} onChange={e=>setLocationDraft(old=>({...old,longitude:e.target.value}))}/></label><label className="label">Place name (optional)<input className="input" value={locationDraft.name} onChange={e=>setLocationDraft(old=>({...old,name:e.target.value}))}/></label><label className="label">Address (optional)<input className="input" value={locationDraft.address} onChange={e=>setLocationDraft(old=>({...old,address:e.target.value}))}/></label><div style={{display:'flex',gap:8,marginTop:16}}><button className="btn btn-wire" type="button" disabled={replying} onClick={()=>setLocationDraft(null)}>Cancel</button><button className="btn btn-gold" disabled={replying}>{replying?'Sending…':'Send location'}</button></div></form></div>}
     {(confirmation||bulkResult) && <div className="modal-bg" role="dialog" aria-modal="true" aria-label={bulkResult?'Conversation action results':'Confirm conversation action'}><div className="modal">
       {bulkResult?<><h3>Conversation action results</h3><p>{bulkResult.filter(result=>result.outcome==='applied').length} applied · {bulkResult.filter(result=>result.outcome!=='applied').length} not changed</p><ul>{bulkResult.map(result=><li key={result.id}>{result.name}: {result.outcome}{result.reason?` — ${result.reason}`:''}{result.warning?` — ${result.warning}`:''}</li>)}</ul><button className="btn btn-wire" onClick={()=>setBulkResult(null)}>Close results</button></>:<>

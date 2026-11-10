@@ -143,3 +143,27 @@ test('staff follow-ups and customer replies move chats to the top without refres
   assert.deepEqual(errors,[]);
  }finally{await close();}
 });
+
+test('assign chat is visible in the thread and AI handoff requires confirmation', options, async () => {
+ for (const [width, chat, action, method, saveLabel] of [
+  [1366, 'School enquiries', 'human/assignment', 'PATCH', 'Save assignment'],
+  [390, 'Product enquiry', 'auto/handoff', 'POST', 'Assign & pause AI']
+ ]) {
+  const {page, errors, close} = await setup(width, 768);
+  try {
+   await page.locator('.inbox-open').filter({hasText:chat}).click();
+   await page.locator('.inbox-conversation-header').getByRole('button',{name:'Assign chat',exact:true}).click();
+   const dialog=page.getByRole('dialog',{name:'Assign chat',exact:true});
+   if(method==='POST')await dialog.getByText('Assigning this chat pauses AI', {exact:false}).waitFor();
+   await dialog.getByLabel('Team member').selectOption('colleague');
+   assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method!=='GET').length),0);
+   await dialog.getByRole('button',{name:saveLabel,exact:true}).click();
+   await page.locator('.inbox-conversation-header').getByText('Assigned to Demo teammate',{exact:true}).waitFor();
+   assert.deepEqual(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method!=='GET')),[
+    {path:'/conversations/'+action,method,data:{assigned_user_id:'colleague'}}
+   ]);
+   assert.equal(await dialog.count(),0);
+   assert.deepEqual(errors,[]);
+  } finally { await close(); }
+ }
+});
