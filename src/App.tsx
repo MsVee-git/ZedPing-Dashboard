@@ -920,7 +920,7 @@ function Broadcasts({ customer, user, routeCampaignId = null, onRouteOpen }) {
       <PageHead title={composing ? "New campaign" : "Campaigns"} sub="Create broadcasts, review your audience and follow campaign activity." action={<button className={"btn "+(composing?"btn-wire":"btn-gold")} onClick={()=>onRouteOpen(composing?null:"new")}>{composing?"Back to campaigns":"New campaign"}</button>} />
       {!composing && sendResult && !activityId && <BroadcastSubmissionReceipt result={sendResult} />}
       {!composing && notice && !sendResult && <p className="draft-notice" role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
-      {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} onClose={() => setActivityId(null)} />}
+      {activityId && <BroadcastDetails id={activityId} apiBase={API} apiFetch={apiFetch} key={activityId} onClose={() => setActivityId(null)} />}
       {composing && <><p className="draft-notice" role="status">{draftSaved ? "Draft saved in this browser tab. Review your audience before sending." : "Draft could not be saved on this device. Keep this page open."}</p>
       <div className="campaign-compose-grid"><div className="card" style={{ padding: 24, marginBottom: 20, position: "relative" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg, transparent, var(--gold), transparent)", opacity: 0.4 }} />
