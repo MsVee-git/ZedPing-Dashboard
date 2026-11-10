@@ -111,6 +111,7 @@
 .inbox-message.is-outbound { align-self:flex-end; background:#eaf2e4; border-color:#dbe6d3; }
 .inbox-message-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:15px; line-height:1.55; }
 .inbox-image + .inbox-message-body { margin-top:8px; }
+.inbox-ad-source { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-bottom:6px; font-size:12px; overflow-wrap:anywhere; }
 .inbox-message-meta { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; color:var(--mist); font-size:11px; line-height:1.4; }
 .inbox-message-meta .text-button { min-height:30px; }
 .inbox-campaign-context summary { cursor:pointer; font-size:14px; font-weight:600; padding:4px 0; }

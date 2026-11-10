@@ -23,3 +23,14 @@ test('ordinary messages and inbound text remain visible and HTML escaped',()=>{
  }
 });
 test('empty message bodies remain safe',()=>assert.equal(render({}),'<div class="inbox-message-body"></div>'));
+
+test('only incoming ad referrals are labelled and ad headlines are escaped',()=>{
+ const ad_referral={source_type:'ad',headline:'<script>Example ad</script>'};
+ const inbound=render({direction:'inbound',message_body:'More info on this?',ad_referral});
+ assert.match(inbound,/From an ad/);
+ assert.match(inbound,/&lt;script&gt;Example ad&lt;\/script&gt;/);
+ assert.match(inbound,/More info on this/);
+ assert.match(render({direction:'inbound',ad_referral:{source_type:'ad'}}),/From an ad/);
+ assert.doesNotMatch(render({direction:'outbound',ad_referral}),/From an ad/);
+ assert.doesNotMatch(render({direction:'inbound',ad_referral:{source_type:'post'}}),/From an ad/);
+});
