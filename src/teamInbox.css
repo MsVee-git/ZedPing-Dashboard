@@ -90,11 +90,13 @@
 .inbox-thread-assistant { display:none; }
 .workspace .inbox-page .inbox-selection { align-items:center; font-size:14px; padding:14px; }
 .inbox-list-count { display:block; font-size:12px; color:var(--mist); font-weight:400; margin-top:3px; }
-.inbox-selection-options { display:flex; flex-wrap:wrap; gap:10px; width:100%; padding-top:10px; }
+.inbox-selection-options { display:flex; flex-wrap:wrap; align-items:center; gap:10px; width:100%; padding-top:10px; }
+.workspace .inbox-page .inbox-selection .inbox-select-toggle { min-height:40px; padding:8px 12px; font-size:13px; border-radius:8px; }
+.inbox-select-all { display:inline-flex; align-items:center; gap:8px; min-height:40px; cursor:pointer; }
 .inbox-selection-options > span { flex-basis:100%; color:var(--mist); font-size:13px; line-height:1.5; }
 .workspace .inbox-page .inbox-list-row { display:grid; grid-template-columns:minmax(0,1fr); padding:5px 8px; }
 .workspace .inbox-page .inbox-list-row.is-selecting { grid-template-columns:24px minmax(0,1fr); }
-.inbox-list-row input[type=checkbox] { width:20px; height:20px; accent-color:#28634d; }
+.inbox-list-row input[type=checkbox],.inbox-select-all input[type=checkbox] { width:20px; height:20px; accent-color:#28634d; }
 .workspace .inbox-page .inbox-open { padding:12px; gap:5px; border-radius:8px; }
 .inbox-open > strong { font-size:15px; font-weight:650; overflow-wrap:anywhere; }
 .workspace .inbox-page .inbox-open > span:not(.badge) { font-size:13px; line-height:1.4; }

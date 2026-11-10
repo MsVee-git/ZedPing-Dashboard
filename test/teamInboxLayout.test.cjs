@@ -48,13 +48,19 @@ test('mobile separates list and thread, preserves drafts, and pins composer insi
 });
 test('selection is opt-in and cannot mark chats read or send bulk writes before confirmation',options,async()=>{
  const {page,errors,close}=await setup();try{
-  await page.getByRole('button',{name:'Select',exact:true}).click();
-  await page.getByRole('button',{name:'Select shown chats',exact:true}).click();
+  await page.getByRole('button',{name:'Select multiple',exact:true}).click();
+  await page.locator('.inbox-open').filter({hasText:'School enquiries'}).click();
+  await page.getByText('1 chat selected',{exact:true}).waitFor();
+  const selectAll=page.getByRole('checkbox',{name:'Select all shown chats',exact:true});
+  assert.equal(await selectAll.evaluate(el=>el.indeterminate),true);
+  await selectAll.check();
   await page.getByText('2 chats selected',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.method!=='GET').length),0);
   await page.getByRole('button',{name:'Resolve selected',exact:true}).click();
   assert.equal(await page.evaluate(()=>window.fixtureRequests.filter(r=>r.path.endsWith('/bulk')).length),0);
   await page.getByRole('button',{name:'Cancel',exact:true}).click();
+  await selectAll.uncheck();
+  assert.equal(await page.getByRole('group',{name:'Selected conversation actions'}).count(),0);
   await page.getByRole('button',{name:'Done selecting',exact:true}).click();
   assert.equal(await page.getByRole('checkbox').count(),0);assert.deepEqual(errors,[]);
  }finally{await close();}
