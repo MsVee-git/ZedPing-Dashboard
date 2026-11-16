@@ -1,6 +1,6 @@
 export const proposedPlans = Object.freeze([
   { id: 'starter', name: 'Starter', price: 1200, templates: 1000, agents: 0, aiReplies: null },
-  { id: 'business', name: 'Business', price: 2500, templates: 3000, agents: 1, aiReplies: 1000 },
+  { id: 'business', name: 'Business', price: 2500, templates: 3000, agents: 2, aiReplies: 1000 },
   { id: 'pro', name: 'Pro', price: 5000, templates: 5000, agents: 3, aiReplies: 3000 },
 ]);
 
@@ -27,3 +27,4 @@ export function messagingUsageView(data) {
   if (!balance) return { balance: null, message: messages.unavailable };
   return { balance, warning: balance.exhausted ? 'Allowance used. Additional template sending is paused. Request extra messages to continue.' : balance.percent >= 80 ? 'You have used at least 80% of your allowance. Arrange a top-up before your balance runs out.' : null };
 }
+

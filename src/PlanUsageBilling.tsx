@@ -30,7 +30,7 @@ export function PlanUsageBilling({ customer, request }: any) {
         <tr><th scope="row">Monthly subscription</th>{proposedPlans.map(plan => <td key={plan.id}>K{number(plan.price)}</td>)}</tr>
         <tr><th scope="row">Included template messages</th>{proposedPlans.map(plan => <td key={plan.id}>{number(plan.templates)}</td>)}</tr>
         <tr><th scope="row">Chatflows & automations</th>{proposedPlans.map(plan => <td key={plan.id}>Included</td>)}</tr>
-        <tr><th scope="row">ZedPing Ai agents</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.agents ? (plan.agents === 1 ? '1 agent' : 'Up to 3 agents') : 'Not included'}</td>)}</tr>
+        <tr><th scope="row">ZedPing Ai agents</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.agents ? `Up to ${plan.agents} ${plan.agents === 1 ? 'agent' : 'agents'}` : 'Not included'}</td>)}</tr>
         <tr><th scope="row">AI replies / month · provisional</th>{proposedPlans.map(plan => <td key={plan.id}>{plan.aiReplies ? number(plan.aiReplies) + ' shared across agents' : 'Not included'}</td>)}</tr>
         <tr><th scope="row">Knowledge answers & staff handoff</th><td>Rule-based flows</td><td>AI answers & basic handoff</td><td>AI answers & advanced routing*</td></tr>
         <tr><th scope="row">Connected-system AI actions*</th><td>Not included</td><td>Not included</td><td>Approved integrations</td></tr>
@@ -44,3 +44,4 @@ export function PlanUsageBilling({ customer, request }: any) {
     </Surface>
   </div>;
 }
+
