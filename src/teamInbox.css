@@ -410,3 +410,56 @@
   .workspace .inbox-page .inbox-history { flex: 1 1 auto; min-height: 0; padding: 12px 18px; }
   .workspace .inbox-page .inbox-composer { padding: 6px 10px; }
 }
+
+
+/* Inbox space correction: fill the available workspace height without clipping
+   the conversation or reserving empty space around the reading pane. */
+.main.workspace.inbox-workspace {
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.main.workspace.inbox-workspace > .inbox-route {
+  flex:1 1 0;
+  min-height:0;
+  min-width:0;
+}
+.workspace .inbox-page .team-inbox {
+  min-width:0;
+  min-height:0;
+}
+.workspace .inbox-page .inbox-conversation,
+.workspace .inbox-page .inbox-list {
+  min-height:0;
+}
+@media (min-width:769px) {
+  .main.workspace.inbox-workspace { height:100dvh; }
+  .workspace .pad.inbox-page {
+    max-width:none;
+    flex:1 1 0;
+    min-height:0;
+    padding:8px 12px !important;
+  }
+  .workspace .inbox-page .inbox-masthead { padding-bottom:4px; }
+  .workspace .inbox-page .inbox-toolbar { margin-bottom:6px; padding:2px 0 6px; }
+  .workspace .inbox-page .team-inbox {
+    flex:1 1 0;
+    grid-template-columns:clamp(250px,26%,360px) minmax(0,1fr);
+    gap:0;
+    min-height:0;
+  }
+  .workspace .inbox-page .inbox-list { border-right:1px solid #e4e4d9; }
+  .workspace .inbox-page .inbox-history { min-height:0; overflow-y:auto; }
+}
+@media (max-width:768px) {
+  .main.workspace.inbox-workspace { height:100dvh; }
+  .workspace .pad.inbox-page { flex:1 1 0; min-height:0; }
+  .workspace .inbox-page .team-inbox { flex:1 1 0; min-height:0; gap:0; }
+  .workspace .inbox-page.inbox-thread-open .team-inbox > .inbox-conversation {
+    flex:1 1 0;
+    min-height:0;
+    height:100%;
+    max-height:100%;
+  }
+  .workspace .inbox-page .inbox-history { flex:1 1 0; min-height:0; }
+}
