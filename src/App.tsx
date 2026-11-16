@@ -231,7 +231,7 @@ function MessagingAccessNotice({ customer, navigate }) {
   const notices = {
     renewal_required: ["Renewal required — template messaging paused", "Your messaging period has ended. Contact ZedPing to renew your plan and restore broadcasts and automated template messages."],
     allowance_exhausted: ["Message allowance used — template messaging paused", "You have used your included template messages. Request a usage top-up or renew when your next period begins."],
-    activation_required: ["Messaging activation required", "Your template messaging allowance has not been activated. Contact ZedPing for assistance."],
+    activation_required: ["Template messaging allowance not activated", "Broadcasts and automated template messages need an active allowance. Replies within a customer conversation are separate. If replies fail, check the message delivery error and WhatsApp account status."],
     unavailable: ["Messaging balance unavailable", "We could not confirm your template messaging allowance. Contact ZedPing if you cannot send."]
   };
   const notice = notices[access?.state];
