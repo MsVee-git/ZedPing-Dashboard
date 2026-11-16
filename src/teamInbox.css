@@ -399,3 +399,14 @@
  .workspace .inbox-page .inbox-toolbar .inbox-copilot-toggle{grid-area:assistant;min-width:0;max-width:none;width:100%;font-size:12px!important;padding:8px 5px;gap:5px}
  .workspace .inbox-page.inbox-thread-open>.inbox-toolbar{display:none}
 }
+
+/* Give the reading pane priority on desktop while keeping contacts accessible. */
+@media (min-width: 769px) {
+  .workspace .pad.inbox-page { padding-top: 6px !important; padding-bottom: 6px !important; }
+  .workspace .inbox-page .inbox-masthead { padding-bottom: 6px; }
+  .workspace .inbox-page .inbox-toolbar { margin-bottom: 6px; padding-top: 4px; padding-bottom: 4px; }
+  .workspace .inbox-page .team-inbox { grid-template-columns: minmax(235px, .62fr) minmax(0, 2.2fr); gap: 10px; }
+  .workspace .inbox-page .inbox-conversation-header { min-height: 52px; padding: 6px 12px; }
+  .workspace .inbox-page .inbox-history { flex: 1 1 auto; min-height: 0; padding: 12px 18px; }
+  .workspace .inbox-page .inbox-composer { padding: 6px 10px; }
+}
