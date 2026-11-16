@@ -246,6 +246,14 @@ export function ChatbotFlows({ customer, userId, apiFetch, routeFlowId = null, o
     } catch (err) { setError(err.message || "Unable to test this flow") }
     finally { setSaving(false) }
   }
+  const prepareWhatsAppTest = async (phone) => {
+    const response = await apiFetch(`/chatbot-flows/${selected.id}/whatsapp-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone })
+    })
+    return response.json()
+  }
   const publish = async () => {
     if (draftDirty && !(await saveDraft())) return
     setSaving(true)
@@ -264,7 +272,7 @@ export function ChatbotFlows({ customer, userId, apiFetch, routeFlowId = null, o
   }
 
   if (loading) return <div className="pad" style={{ padding: 32 }}><div className="spin" /></div>
-  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack: () => { onRouteOpen?.(null); setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
+  if (mode === "builder" && selected && draft) return <FlowBuilder {...{ selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, prepareWhatsAppTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack: () => { onRouteOpen?.(null); setMode("home"); setSelected(null); setDraft(null); setTestResult(null); load() } }} />
 
   return <div className="pad" style={{ padding: 32, maxWidth: 1280, margin: "0 auto" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 26 }}>
@@ -293,6 +301,7 @@ function Section({ title, subtitle, children }) { return <section style={{ margi
 function RecipeCard({ recipe, canManage, onPreview, onUse }) { return <div className="card" style={{ padding: 18, minHeight: 175, display: "flex", flexDirection: "column", alignItems: "flex-start" }}><span className="badge badge-gold">Ready-made</span><h3 style={{ color: "var(--cream)", marginTop: 14, fontSize: 16 }}>{recipe.title}</h3><p style={{ color: "var(--mist)", fontSize: 13, lineHeight: 1.5, marginTop: 8, flex: 1 }}>{recipe.description}</p><div style={{ display: "flex", gap: 8, marginTop: 16 }}><button className="btn btn-wire" onClick={onPreview}>Preview</button>{canManage && <button className="btn btn-gold" onClick={onUse}>Use template</button>}</div></div> }
 
 function FlowBuilder(props) {
+  const { prepareWhatsAppTest } = props
   const { selected, draft, setSelected, updateStep, addStep, moveStep, removeStep, changeDraft, saveDraft, draftDirty, saving, runTest, testResult, setTestInputs, testInputs, publish, reviewOpen, setReviewOpen, lifecycle, content, canManage, useTemplate, error, setup, selectedNumberId, setSelectedNumberId, onBack } = props
   const steps = draft.steps || []
   const isTemplate = !selected.id
@@ -310,9 +319,49 @@ function FlowBuilder(props) {
     {steps.map((step, index) => <div key={step.id} style={{ marginBottom: 12 }}><StepCard {...{ step, index, steps, updateStep, moveStep, removeStep, addStep, canEdit, content, stepOptions, updateChoice }} /></div>)}
     {canEdit && <AddStep onAdd={addStep} />}
     {canEdit && <TestPanel {...{ testInputs, setTestInputs, runTest, testResult, saving }} />}
+    {canEdit && selected.lifecycle_status !== "archived" && <WhatsAppTestPanel key={selected.id} prepare={prepareWhatsAppTest} saving={saving} draftDirty={draftDirty} />}
     {reviewOpen && <ReviewModal draft={draft} selected={selected} close={() => setReviewOpen(false)} publish={publish} saving={saving} />}
     {!isTemplate && canManage && <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>{selected.lifecycle_status === "published" && <button className="btn btn-wire" onClick={() => lifecycle("pause")}>Pause new starts</button>}{selected.lifecycle_status === "paused" && <button className="btn btn-gold" onClick={() => lifecycle("resume")}>Resume</button>}{selected.lifecycle_status !== "archived" && <button className="btn btn-danger" onClick={() => lifecycle("archive")}>Archive</button>}</div>}
   </div>
+}
+
+function WhatsAppTestPanel({ prepare, saving, draftDirty }) {
+  const [phone, setPhone] = useState("")
+  const [test, setTest] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+
+  async function submit(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError("")
+    setTest(null)
+    try {
+      setTest({ ...await prepare(phone.trim()), sender: phone.trim() })
+    } catch (err) {
+      setError(err.message || "Unable to prepare the WhatsApp test.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <section className="card" style={{ padding: 18, marginTop: 18 }}>
+    <h3>Test on WhatsApp</h3>
+    <p>Run the saved draft from a test phone. The live assistant keeps serving other numbers. Handoffs and Content Library shares are simulated.</p>
+    <form onSubmit={submit} style={{ display: "flex", alignItems: "end", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+      <label className="label" style={{ margin: 0 }}>Test sender phone
+        <input className="input" type="tel" placeholder="+260…" maxLength={40} required value={phone} disabled={busy} onChange={event => setPhone(event.target.value)} />
+      </label>
+      <button className="btn btn-wire" disabled={busy || saving || draftDirty || !phone.trim()}>{busy ? "Preparing…" : "Get test code"}</button>
+    </form>
+    {draftDirty && <p>Save the draft to test your latest changes.</p>}
+    {error && <p role="alert" style={{ color: "var(--error-text)", marginTop: 12 }}>{error}</p>}
+    {test && <div role="status" style={{ marginTop: 12 }}>
+      <p>From <strong>{test.sender}</strong>, send this code to {test.business_phone || "the business WhatsApp number linked to this flow"}:</p>
+      <p><code>{test.command}</code></p>
+      <p>The test expires at {new Date(test.expires_at).toLocaleTimeString()}. Send <strong>END TEST</strong> to stop early.</p>
+    </div>}
+  </section>
 }
 
 function StepCard({ step, index, steps, updateStep, moveStep, removeStep, canEdit, content, stepOptions, updateChoice }) {
